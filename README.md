@@ -232,3 +232,13 @@ CALL_METHOD
     Decimal("<BUY_SELL_FEE_PERCENTAGE>")
 ;
 ```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
+`<CREATION_FEE_PERCENTAGE>` is the new percentage (expressed as a number from o to 100) of base coins paid by the token creators.  
+`<BUY_SELL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from o to 100) of base coins paid by buyers and sellers.  
+
+## Copyright
+
+See LICENSE

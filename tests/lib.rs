@@ -1,6 +1,6 @@
 use scrypto_test::prelude::*;
 
-use radix_pump::radix_pump_test::*;
+use radix_pump::radix_pump::radix_pump_test::*;
 
 #[test]
 fn test_radix_pump() -> Result<(), RuntimeError> {

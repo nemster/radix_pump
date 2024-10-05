@@ -17,7 +17,6 @@ CALL_FUNCTION
     Address("<BASE_COIN_ADDRESS>")
     Decimal("<MINIMUM_DEPOSIT>")
     Decimal("<COINS_SUPPLY>")
-    Decimal("<CREATOR_COINS_AMOUNT>")
     Decimal("<CREATION_FEE_PERCENTAGE>")
     Decimal("<BUY_SELL_FEE_PERCENTAGE>")
 ;
@@ -27,7 +26,6 @@ CALL_FUNCTION
 `<BASE_COIN_ADDRESS>` is the resource address of the coin (probably XRD) that will be used to buy coins from the component.  
 `<MINIMUM_DEPOSIT>` is the minimum amount of base coins that a new coin creator must deposit.  
 `<COINS_SUPPLY>` is the fixed supply of all of the coins that will be created.  
-`<CREATOR_COINS_AMOUNT>` how many coins are released to the creator when he creates a new coin.  
 `<CREATION_FEE_PERCENTAGE>` is the percentage (expressed as a number from o to 100) of base coins paid by the token creators.  
 `<BUY_SELL_FEE_PERCENTAGE>` is the percentage (expressed as a number from o to 100) of base coins paid by buyers and sellers.  
 
@@ -121,6 +119,8 @@ The coin creator receives a creator badge that can be later used to:
 - lock coin metadata  
 - burn his coins  
 - allow third parties to burn their coins  
+
+The coin creator also receives a number of coins as if he bought them from the pool with his initial deposit. The price is comparable to the one that will be paid by the first buyers.  
 
 A `NewCoinEvent` event is issued. It contains the resource address of the new coin, the initial coin price and the number of coins currently in the pool.  
 

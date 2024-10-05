@@ -46,7 +46,6 @@ mod radix_pump {
         forbidden_symbols: KeyValueStore<String, u64>,
         forbidden_names: KeyValueStore<String, u64>,
         coins_supply: Decimal,
-        creator_coins_amount: Decimal,
         pools: KeyValueStore<ResourceAddress, Pool>,
         creation_fee_percentage: Decimal,
         buy_sell_fee_percentage: Decimal,
@@ -60,7 +59,6 @@ mod radix_pump {
             base_coin_address: ResourceAddress,
             minimum_deposit: Decimal,
             coins_supply: Decimal,
-            creator_coins_amount: Decimal,
             creation_fee_percentage: Decimal,
             buy_sell_fee_percentage: Decimal,
         ) -> Global<RadixPump> {
@@ -70,12 +68,8 @@ mod radix_pump {
                 "Minimum deposit can't be zero or less",
             );
             assert!(
-                creator_coins_amount >= Decimal::ZERO,
-                "Coins creator amount can't be less than zero",
-            );
-            assert!(
-                creator_coins_amount < coins_supply,
-                "Coins creator amount must be smaller than coin supply",
+                coins_supply > Decimal::ZERO,
+                "Coins supply can't be zero or less",
             );
             assert!(
                 creation_fee_percentage >= Decimal::ZERO && creation_fee_percentage < dec!(100),
@@ -127,7 +121,6 @@ mod radix_pump {
                 forbidden_symbols: KeyValueStore::new(),
                 forbidden_names: KeyValueStore::new(),
                 coins_supply: coins_supply,
-                creator_coins_amount: creator_coins_amount,
                 pools: KeyValueStore::new(),
                 creation_fee_percentage: creation_fee_percentage,
                 buy_sell_fee_percentage: buy_sell_fee_percentage,
@@ -213,7 +206,7 @@ mod radix_pump {
                 )
             );
 
-            let mut coin_bucket: Bucket = ResourceBuilder::new_fungible(OwnerRole::Fixed(coin_creator_badge_rule.clone()))
+            let coin_bucket: Bucket = ResourceBuilder::new_fungible(OwnerRole::Fixed(coin_creator_badge_rule.clone()))
             .metadata(metadata!(
                 roles {
                     metadata_setter => coin_creator_badge_rule.clone();
@@ -240,8 +233,6 @@ mod radix_pump {
             .mint_initial_supply(self.coins_supply)
             .into();
 
-            let coin_creator_coin_bucket = coin_bucket.take(self.creator_coins_amount);
-
             self.fee_vault.put(
                 base_coin_bucket.take_advanced(
                     self.creation_fee_percentage * base_coin_bucket.amount() / 100,
@@ -257,12 +248,13 @@ mod radix_pump {
                 }
             );
 
+            let (pool, coin_creator_coin_bucket) = Pool::new(
+                base_coin_bucket, 
+                coin_bucket,
+            );
             self.pools.insert(
-                coin_bucket.resource_address(),
-                Pool::new(
-                    base_coin_bucket, 
-                    coin_bucket,
-                ),
+                coin_creator_coin_bucket.resource_address(),
+                pool,
             );
 
             (coin_creator_badge_bucket, coin_creator_coin_bucket)

@@ -24,7 +24,6 @@ fn test_radix_pump() -> Result<(), RuntimeError> {
         base_coin_address,
         dec!(100),
         dec!(1000000),
-        dec!(100),
         dec!(1),
         dec!("0.3"),
         package_address,

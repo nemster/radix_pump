@@ -10,7 +10,7 @@ Use this function to create a RadixPump component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("package_tdx_2_1p5nuq8rud5h3dw6gae8qmg4asftg8tsyrg75sa7hn8c93y7ep6ld90")
+    Address("package_tdx_2_1phv8pm2vs35c48fxgq29k6akh5as9ckrrg4m8kw7cehdxskgr0scay")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")

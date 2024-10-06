@@ -4,15 +4,22 @@ use crate::pool::*;
 // Metadata for the coin creator badge
 static COIN_CREATOR_BADGE_NAME: &str = "Coin creator badge";
 
+// Maximum allwed supply
+// Although the math should be safe thans to the use of PreciseDecimal and properly optimized
+// formulas, for additional security it's safer to limit the number of coins to less than
+// the square root of Decimal::MAX
+static MAX_SUPPLY: Decimal = dec!("100000000000000000000000000000000000000");
+
+// Coin creator badge NFT data
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
-struct CoinOwnerData {
+struct CoinCreatorData {
     coin_resource_address: ResourceAddress,
     creation_date: Instant,
 }
 
 #[blueprint]
-#[events(NewCoinEvent, BuyEvent, SellEvent)]
-#[types(u64, CoinOwnerData)]
+#[events(NewCoinEvent, BuyEvent, SellEvent, LiquidationEvent)]
+#[types(u64, CoinCreatorData)]
 mod radix_pump {
 
     enable_method_auth! {
@@ -24,6 +31,8 @@ mod radix_pump {
             sell => PUBLIC;
             get_fees => restrict_to: [OWNER];
             update_fees => restrict_to: [OWNER];
+            owner_set_liquidation_mode => restrict_to: [OWNER];
+            creator_set_liquidation_mode => PUBLIC;
         }
     }
 
@@ -36,6 +45,8 @@ mod radix_pump {
         sell => Usd(dec!("0.005"));
         get_fees => Free;
         update_fees => Free;
+        owner_set_liquidation_mode => Free;
+        creator_set_liquidation_mode => Free;
     }
 
     struct RadixPump {
@@ -45,8 +56,6 @@ mod radix_pump {
         last_coin_creator_badge_id: u64,
         forbidden_symbols: KeyValueStore<String, u64>,
         forbidden_names: KeyValueStore<String, u64>,
-        coins_supply: Decimal,
-        creator_coins_amount: Decimal,
         pools: KeyValueStore<ResourceAddress, Pool>,
         creation_fee_percentage: Decimal,
         buy_sell_fee_percentage: Decimal,
@@ -55,12 +64,11 @@ mod radix_pump {
 
     impl RadixPump {
 
+        // Component inteantiation
         pub fn new(
             owner_badge_address: ResourceAddress,
             base_coin_address: ResourceAddress,
             minimum_deposit: Decimal,
-            coins_supply: Decimal,
-            creator_coins_amount: Decimal,
             creation_fee_percentage: Decimal,
             buy_sell_fee_percentage: Decimal,
         ) -> Global<RadixPump> {
@@ -68,14 +76,6 @@ mod radix_pump {
             assert!(
                 minimum_deposit > Decimal::ZERO,
                 "Minimum deposit can't be zero or less",
-            );
-            assert!(
-                creator_coins_amount >= Decimal::ZERO,
-                "Coins creator amount can't be less than zero",
-            );
-            assert!(
-                creator_coins_amount < coins_supply,
-                "Coins creator amount must be smaller than coin supply",
             );
             assert!(
                 creation_fee_percentage >= Decimal::ZERO && creation_fee_percentage < dec!(100),
@@ -89,8 +89,8 @@ mod radix_pump {
             // Reserve a ComponentAddress for setting rules on resources
             let (address_reservation, component_address) = Runtime::allocate_component_address(RadixPump::blueprint_id());
 
-            // Create a ResourceManager for minting coin_creator badges
-            let coin_creator_badge_resource_manager = ResourceBuilder::new_integer_non_fungible_with_registered_type::<CoinOwnerData>(
+            // Create a ResourceManager for minting coin creator badges
+            let coin_creator_badge_resource_manager = ResourceBuilder::new_integer_non_fungible_with_registered_type::<CoinCreatorData>(
                 OwnerRole::Updatable(rule!(require(owner_badge_address)))
             )
             .metadata(metadata!(
@@ -126,8 +126,6 @@ mod radix_pump {
                 last_coin_creator_badge_id: 0,
                 forbidden_symbols: KeyValueStore::new(),
                 forbidden_names: KeyValueStore::new(),
-                coins_supply: coins_supply,
-                creator_coins_amount: creator_coins_amount,
                 pools: KeyValueStore::new(),
                 creation_fee_percentage: creation_fee_percentage,
                 buy_sell_fee_percentage: buy_sell_fee_percentage,
@@ -139,6 +137,7 @@ mod radix_pump {
             .globalize()
         }
 
+        // The component owner can prevent users to create coins with well known symbols
         pub fn forbid_symbols(
             &mut self,
             symbols: Vec<String>,
@@ -148,6 +147,7 @@ mod radix_pump {
             }
         }
 
+        // The component owner can prevent users to create coins with well known name
         pub fn forbid_names(
             &mut self,
             names: Vec<String>,
@@ -157,6 +157,8 @@ mod radix_pump {
             }
         }
 
+        // A user can create a new coin depositing enough base coins.
+        // He gets a fair share of coins and a badge to manage the metadata
         pub fn create_new_coin(
             &mut self,
             mut base_coin_bucket: Bucket,
@@ -164,6 +166,7 @@ mod radix_pump {
             mut coin_name: String,
             coin_icon_url: String,
             coin_description: String,
+            coin_supply: Decimal,
         ) -> (Bucket, Bucket) {
 
             assert!(
@@ -173,6 +176,10 @@ mod radix_pump {
             assert!(
                 base_coin_bucket.amount() >= self.minimum_deposit,
                 "Insufficient base coin deposit",
+            );
+            assert!(
+                coin_supply <= MAX_SUPPLY,
+                "Coin supply is too big",
             );
 
             self.last_coin_creator_badge_id += 1;
@@ -200,6 +207,8 @@ mod radix_pump {
             );
             self.forbidden_names.insert(uppercase_coin_name, self.last_coin_creator_badge_id);
 
+            // Each coin can be managed by one single NFT of the collection, a NonFungibleGlobalId
+            // is needed for this
             let coin_creator_badge_rule = AccessRule::Protected(
                 AccessRuleNode::ProofRule(
                     ProofRule::Require (
@@ -213,7 +222,7 @@ mod radix_pump {
                 )
             );
 
-            let mut coin_bucket: Bucket = ResourceBuilder::new_fungible(OwnerRole::Fixed(coin_creator_badge_rule.clone()))
+            let coin_bucket: Bucket = ResourceBuilder::new_fungible(OwnerRole::Fixed(coin_creator_badge_rule.clone()))
             .metadata(metadata!(
                 roles {
                     metadata_setter => coin_creator_badge_rule.clone();
@@ -237,10 +246,8 @@ mod radix_pump {
                 burner_updater => coin_creator_badge_rule;
             ))
             .divisibility(DIVISIBILITY_MAXIMUM)
-            .mint_initial_supply(self.coins_supply)
+            .mint_initial_supply(coin_supply)
             .into();
-
-            let coin_creator_coin_bucket = coin_bucket.take(self.creator_coins_amount);
 
             self.fee_vault.put(
                 base_coin_bucket.take_advanced(
@@ -251,18 +258,19 @@ mod radix_pump {
 
             let coin_creator_badge_bucket = self.coin_creator_badge_resource_manager.mint_non_fungible(
                 &NonFungibleLocalId::integer(self.last_coin_creator_badge_id.into()),
-                CoinOwnerData {
+                CoinCreatorData {
                     coin_resource_address: coin_bucket.resource_address(),
                     creation_date: Clock::current_time_rounded_to_seconds(),
                 }
             );
 
+            let (pool, coin_creator_coin_bucket) = Pool::new(
+                base_coin_bucket, 
+                coin_bucket,
+            );
             self.pools.insert(
-                coin_bucket.resource_address(),
-                Pool::new(
-                    base_coin_bucket, 
-                    coin_bucket,
-                ),
+                coin_creator_coin_bucket.resource_address(),
+                pool,
             );
 
             (coin_creator_badge_bucket, coin_creator_coin_bucket)
@@ -330,6 +338,26 @@ mod radix_pump {
 
             self.creation_fee_percentage = creation_fee_percentage;
             self.buy_sell_fee_percentage = buy_sell_fee_percentage;
+        }
+
+        pub fn owner_set_liquidation_mode(
+            &mut self,
+            coin_address: ResourceAddress,
+        ) {
+            self.pools.get_mut(&coin_address).expect("Coin not found").set_liquidation_mode();
+        }
+
+        pub fn creator_set_liquidation_mode(
+            &mut self,
+            proof: Proof,
+        ) {
+            let checked_proof = proof.check_with_message(
+                self.coin_creator_badge_resource_manager.address(),
+                "Wrong badge",
+            ).as_non_fungible();
+            let coin_creator_data = checked_proof.non_fungible::<CoinCreatorData>().data();
+
+            self.pools.get_mut(&coin_creator_data.coin_resource_address).unwrap().set_liquidation_mode();
         }
     }
 }

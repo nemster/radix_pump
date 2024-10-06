@@ -325,7 +325,7 @@ CALL_METHOD
 
 `<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
 `<CREATOR_BADGE_ADDRESS>` is the badge receaved when creating the coin.  
-`<CREATOR_BADGE_ID>` is the numeric ID visible in the badge receaved when creating the coin.  
+`<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
 `<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
 
 A `LiquidationEvent` containing the resource address of the liquidating coin is issued.  

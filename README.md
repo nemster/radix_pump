@@ -21,7 +21,7 @@ The liquidation mode is a guarantee that a partial reimbursement is possible for
 Please note: the creator of a coin has no way to withdraw the liquidity out of the pool, he can only sell his coins, just like anyone else. So a partial reimbursement will always be possible for all of the holders.  
 
 Both the creator of a coin and the component owner can turn a coin into liquidation mode, when this happens:
-- is no longer possible to buy the coin  
+- it's no longer possible to buy the coin  
 - the base coins in the pool are divided pro-rata among the coin holders  
 
 There's no going back from the liquidation mode.  
@@ -29,6 +29,14 @@ There's no going back from the liquidation mode.
 ## Known limitations
 
 To avoid math overflows the supply of the created coins can't be bigger than 10^20.  
+
+## Verifiable Scrypto build
+
+Compiled with `radixdlt/scrypto-builder:v1.2.0`  
+
+This is the sha256sum of the package files:  
+`04c27d2746e36cc476d64c43cb198d0ebd634d172afd6c4642927458160db7ee  target/wasm32-unknown-unknown/release/radix_pump.wasm`  
+`1a9b5348872ef7afffe84b6a57c48f342061825bc47d1e46f1cb52e0e7d775c7  target/wasm32-unknown-unknown/release/radix_pump.rpd`  
 
 ## Transaction manifests
 
@@ -38,7 +46,7 @@ Use this function to create a RadixPump component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("<PACKAGE_ADDRESS>")
+    Address("package_tdx_2_1pkr6necxgn6zh36ss7gxeqesdecuc7ev6qhe50hdls700pg6lxn0qp")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")

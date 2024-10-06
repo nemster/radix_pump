@@ -60,8 +60,8 @@ CALL_FUNCTION
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that can be later used to withdraw fees and other reserved operations.  
 `<BASE_COIN_ADDRESS>` is the resource address of the coin (probably XRD) that will be used to buy coins from the component.  
 `<MINIMUM_DEPOSIT>` is the minimum amount of base coins that a new coin creator must deposit.  
-`<CREATION_FEE_PERCENTAGE>` is the percentage (expressed as a number from o to 100) of base coins paid by the token creators.  
-`<BUY_SELL_FEE_PERCENTAGE>` is the percentage (expressed as a number from o to 100) of base coins paid by buyers and sellers.  
+`<CREATION_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by the token creators.  
+`<BUY_SELL_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers.  
 
 ### Forbid symbols
 
@@ -274,8 +274,8 @@ CALL_METHOD
 `<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
 `<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
-`<CREATION_FEE_PERCENTAGE>` is the new percentage (expressed as a number from o to 100) of base coins paid by the token creators.  
-`<BUY_SELL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from o to 100) of base coins paid by buyers and sellers.  
+`<CREATION_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by the token creators.  
+`<BUY_SELL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers.  
 
 ### Owner initiated liquidation mode
 

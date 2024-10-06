@@ -28,7 +28,7 @@ There's no going back from the liquidation mode.
 
 ## Known limitations
 
-To avoid math overflows the supply of the created coins can't be bigger than 10^39.  
+To avoid math overflows the supply of the created coins can't be bigger than 10^20.  
 
 ## Transaction manifests
 

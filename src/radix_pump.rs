@@ -8,7 +8,7 @@ static COIN_CREATOR_BADGE_NAME: &str = "Coin creator badge";
 // Although the math should be safe thans to the use of PreciseDecimal and properly optimized
 // formulas, for additional security it's safer to limit the number of coins to less than
 // the square root of Decimal::MAX
-static MAX_SUPPLY: Decimal = dec!("100000000000000000000000000000000000000");
+static MAX_SUPPLY: Decimal = dec!("100000000000000000000");
 
 // Coin creator badge NFT data
 #[derive(Debug, ScryptoSbor, NonFungibleData)]

@@ -1,6 +1,12 @@
 use scrypto::prelude::*;
 use scrypto_math::*;
 
+#[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
+pub enum PoolMode {
+    Normal,
+    Liquidation,
+}
+
 #[derive(ScryptoSbor, ScryptoEvent)]
 pub struct NewCoinEvent {
     resource_address: ResourceAddress,
@@ -23,13 +29,19 @@ pub struct SellEvent {
     amount: Decimal,
     price: Decimal,
     coins_in_pool: Decimal,
+    mode: PoolMode,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct LiquidationEvent {
+    resource_address: ResourceAddress,
 }
 
 #[derive(ScryptoSbor)]
 pub struct Pool {
     base_coin_vault: Vault,
     coin_vault: Vault,
-    creator_allocation: Decimal,
+    mode: PoolMode,
 }
 
 impl Pool {
@@ -69,7 +81,7 @@ impl Pool {
         let pool = Pool {
             base_coin_vault: Vault::with_bucket(base_coin_bucket),
             coin_vault: Vault::with_bucket(coin_bucket),
-            creator_allocation: coin_amount_bought,
+            mode: PoolMode::Normal,
         };
 
         (pool, creator_coin_bucket)
@@ -100,6 +112,11 @@ impl Pool {
         &mut self,
         base_coin_bucket: Bucket,
     ) -> Bucket {
+        assert!(
+            self.mode == PoolMode::Normal,
+            "You can't buy a coin in liquidation mode",
+        );
+
         let (constant_product, exponent) = Pool::compute_costant_product(
             PreciseDecimal::from(self.base_coin_vault.amount()),
             PreciseDecimal::from(self.coin_vault.amount()),
@@ -131,21 +148,39 @@ impl Pool {
         &mut self,
         coin_bucket: Bucket,
     ) -> Bucket {
-        let (constant_product, exponent) = Pool::compute_costant_product(
-            PreciseDecimal::from(self.base_coin_vault.amount()),
-            PreciseDecimal::from(self.coin_vault.amount()),
-        );
 
-        let new_base_coin_amount = (constant_product / PreciseDecimal::from(coin_bucket.amount() + self.coin_vault.amount()))
-        // This number is smaller than base_coin_amount.pow(exponent) so it's safe to do .pow(PreciseDecimal::ONE / exponent)
-        .pow(PreciseDecimal::ONE / exponent)
-        .unwrap()
-        .checked_truncate(RoundingMode::ToZero)
-        .unwrap();
-        let base_coin_bucket = self.base_coin_vault.take_advanced(
-            self.base_coin_vault.amount() - new_base_coin_amount,
-            WithdrawStrategy::Rounded(RoundingMode::ToZero),
-        );
+        let base_coin_bucket = match self.mode {
+            PoolMode::Normal => {
+                let (constant_product, exponent) = Pool::compute_costant_product(
+                    PreciseDecimal::from(self.base_coin_vault.amount()),
+                    PreciseDecimal::from(self.coin_vault.amount()),
+                );
+
+                let new_base_coin_amount = (constant_product / PreciseDecimal::from(coin_bucket.amount() + self.coin_vault.amount()))
+                // This number is smaller than base_coin_amount.pow(exponent) so it's safe to do .pow(PreciseDecimal::ONE / exponent)
+                .pow(PreciseDecimal::ONE / exponent)
+                .unwrap()
+                .checked_truncate(RoundingMode::ToZero)
+                .unwrap();
+
+                self.base_coin_vault.take_advanced(
+                    self.base_coin_vault.amount() - new_base_coin_amount,
+                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                )
+            },
+            PoolMode::Liquidation => {
+                let coin_supply = ResourceManager::from_address(
+                    self.coin_vault.resource_address()
+                ).total_supply().unwrap();
+
+                let user_share = coin_bucket.amount() / (coin_supply - self.coin_vault.amount());
+
+                self.base_coin_vault.take_advanced(
+                    self.base_coin_vault.amount() * user_share,
+                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                )
+            }
+        };
 
         Runtime::emit_event(
             SellEvent {
@@ -153,11 +188,27 @@ impl Pool {
                 amount: coin_bucket.amount(),
                 price: base_coin_bucket.amount() / coin_bucket.amount(),
                 coins_in_pool: self.coin_vault.amount() + coin_bucket.amount(),
+                mode: self.mode,
             }
         );
 
         self.coin_vault.put(coin_bucket);
 
         base_coin_bucket
+    }
+
+    pub fn set_liquidation_mode(&mut self) {
+        assert!(
+            self.mode == PoolMode::Normal,
+            "Already in Liquidation mode",
+        );
+
+        Runtime::emit_event(
+            LiquidationEvent {
+                resource_address: self.coin_vault.resource_address(),
+            }
+        );
+
+        self.mode = PoolMode::Liquidation;
     }
 }

@@ -2,6 +2,34 @@
 
 This blueprint implements a marketplace where people can create, buy and sell coins.
 
+## Fair launch
+
+To create a new coin you have to deposit an amount of a base coin. It's up to the component owner, during instatiation, to decide which base coin to use (XRD or another one) and the minimum deposit amount needed to crate a new coin.  
+When a new coin is created the creator gets a share of it at about the same price as the earliest buyers of the coin.  
+
+## Modified constant product formula
+
+When a new coin is created most of its supply goes into a pool.  
+The classic constant product formula isn't very suited for handling an unbalanced pool containing the whole supply of a coin and a small amount of the base coin. A user could easily buy great part of the supply for few base coins.  
+This is why a modified version of the constant product formula is used. This modified version progressively approaches the classic one as the pool gets more balanced.  
+
+## Liquidation mode
+
+It may happen that a project fails or is rugged by its creator.
+The liquidation mode is a guarantee that a partial reimbursement is possible for the holders of a failed project or a rugged coin.  
+
+Please note: the creator of a coin has no way to withdraw the liquidity out of the pool, he can only sell his coins, just like anyone else. So a partial reimbursement will always be possible for all of the holders.  
+
+Both the creator of a coin and the component owner can turn a coin into liquidation mode, when this happens:
+- is no longer possible to buy the coin  
+- the base coins in the pool are divided pro-rata among the coin holders  
+
+There's no going back from the liquidation mode.  
+
+## Known limitations
+
+To avoid math overflows the supply of the created coins can't be bigger than 10^39.  
+
 ## Transaction manifests
 
 ### Instantiate (Stokenet)
@@ -113,16 +141,18 @@ CALL_METHOD
 `<COIN_DESCRIPTION>` is a descriptive text that is added to the coin metadata (can be empty).  
 `<COIN_SUPPLY>` is the initial supply of the new coin. It is not be possible to incease the supply later but it can be reduced by burning coins.  
 
-The coin creator receives a creator badge that can be later used to:  
+The coin creator receives a creator badge NFT that shows in the wallet a numeric ID and the resource address of the new created coin.  
+This badge can be later used to:  
 - add new metadata to the coin  
 - change existing coin metadata (symbol and name excluded)  
 - lock coin metadata  
-- burn his coins  
-- allow third parties to burn their coins  
+- burn the coins he holds  
+- allow third parties to burn the coins they hold  
+- start liquidation mode for the pool  
 
 The coin creator also receives a number of coins as if he bought them from the pool with his initial deposit. The price is comparable to the one that will be paid by the first buyers.  
 
-A `NewCoinEvent` event is issued. It contains the resource address of the new coin, the initial coin price and the number of coins currently in the pool.  
+A `NewCoinEvent` event is issued. It contains the resource address of the new coin, the initial coin price, the amount held by the creator and the number of coins currently in the pool.  
 
 ### Buy coins
 
@@ -238,6 +268,59 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
 `<CREATION_FEE_PERCENTAGE>` is the new percentage (expressed as a number from o to 100) of base coins paid by the token creators.  
 `<BUY_SELL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from o to 100) of base coins paid by buyers and sellers.  
+
+### Owner initiated liquidation mode
+
+The component owner can set liquidation mode for any coin.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "owner_set_liquidation_mode"
+    Address("<COIN_ADDRESS>")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
+`<COIN_ADDRESS>` is the coin the component owner wants to put in liquidation mode.  
+
+A `LiquidationEvent` containing the resource address of the liquidating coin is issued.  
+
+### Creator initiated liquidation mode
+
+The creator of a coin can set liquidation mode for it.
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_non_fungibles"
+    Address("<CREATOR_BADGE_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<CREATOR_BADGE_ID>#"))
+;
+POP_FROM_AUTH_ZONE
+    Proof("proof")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "creator_set_liquidation_mode"
+    Proof("proof")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<CREATOR_BADGE_ADDRESS>` is the badge receaved when creating the coin.  
+`<CREATOR_BADGE_ID>` is the numeric ID visible in the badge receaved when creating the coin.  
+`<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
+
+A `LiquidationEvent` containing the resource address of the liquidating coin is issued.  
 
 ## Copyright
 

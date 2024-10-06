@@ -6,6 +6,7 @@ pub struct NewCoinEvent {
     resource_address: ResourceAddress,
     price: Decimal,
     coins_in_pool: Decimal,
+    creator_allocation: Decimal,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
@@ -28,6 +29,7 @@ pub struct SellEvent {
 pub struct Pool {
     base_coin_vault: Vault,
     coin_vault: Vault,
+    creator_allocation: Decimal,
 }
 
 impl Pool {
@@ -60,12 +62,14 @@ impl Pool {
                 resource_address: coin_bucket.resource_address(),
                 price: base_coin_bucket.amount() / coin_amount_bought,
                 coins_in_pool: coin_bucket.amount(),
+                creator_allocation: coin_amount_bought,
             }
         );
 
         let pool = Pool {
             base_coin_vault: Vault::with_bucket(base_coin_bucket),
             coin_vault: Vault::with_bucket(coin_bucket),
+            creator_allocation: coin_amount_bought,
         };
 
         (pool, creator_coin_bucket)
@@ -133,7 +137,7 @@ impl Pool {
         );
 
         let new_base_coin_amount = (constant_product / PreciseDecimal::from(coin_bucket.amount() + self.coin_vault.amount()))
-        // This number is smaller than base_coin_amount.pow(exponent).unwrap() so it's safe to do .pow(PreciseDecimal::ONE / exponent)
+        // This number is smaller than base_coin_amount.pow(exponent) so it's safe to do .pow(PreciseDecimal::ONE / exponent)
         .pow(PreciseDecimal::ONE / exponent)
         .unwrap()
         .checked_truncate(RoundingMode::ToZero)

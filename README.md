@@ -10,13 +10,12 @@ Use this function to create a RadixPump component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("package_tdx_2_1phv8pm2vs35c48fxgq29k6akh5as9ckrrg4m8kw7cehdxskgr0scay")
+    Address("<PACKAGE_ADDRESS>")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
     Address("<BASE_COIN_ADDRESS>")
     Decimal("<MINIMUM_DEPOSIT>")
-    Decimal("<COINS_SUPPLY>")
     Decimal("<CREATION_FEE_PERCENTAGE>")
     Decimal("<BUY_SELL_FEE_PERCENTAGE>")
 ;
@@ -25,7 +24,6 @@ CALL_FUNCTION
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that can be later used to withdraw fees and other reserved operations.  
 `<BASE_COIN_ADDRESS>` is the resource address of the coin (probably XRD) that will be used to buy coins from the component.  
 `<MINIMUM_DEPOSIT>` is the minimum amount of base coins that a new coin creator must deposit.  
-`<COINS_SUPPLY>` is the fixed supply of all of the coins that will be created.  
 `<CREATION_FEE_PERCENTAGE>` is the percentage (expressed as a number from o to 100) of base coins paid by the token creators.  
 `<BUY_SELL_FEE_PERCENTAGE>` is the percentage (expressed as a number from o to 100) of base coins paid by buyers and sellers.  
 
@@ -101,6 +99,7 @@ CALL_METHOD
     "<COIN_NAME>"
     "<COIN_ICON_URL>"
     "<COIN_DESCRIPTION>"
+    Decimal("<COIN_SUPPLY>")
 ;
 ```
 
@@ -112,6 +111,7 @@ CALL_METHOD
 `<COIN_NAME>` is the name to assign to the new coin. This is checked against all of the previously created coins' names and all of the names forbidden by the component owner.  
 `<COIN_ICON_URL>` is the URL of the image to assign as icon to the new coin; it must be a valid URL.  
 `<COIN_DESCRIPTION>` is a descriptive text that is added to the coin metadata (can be empty).  
+`<COIN_SUPPLY>` is the initial supply of the new coin. It is not be possible to incease the supply later but it can be reduced by burning coins.  
 
 The coin creator receives a creator badge that can be later used to:  
 - add new metadata to the coin  

@@ -45,7 +45,6 @@ mod radix_pump {
         last_coin_creator_badge_id: u64,
         forbidden_symbols: KeyValueStore<String, u64>,
         forbidden_names: KeyValueStore<String, u64>,
-        coins_supply: Decimal,
         pools: KeyValueStore<ResourceAddress, Pool>,
         creation_fee_percentage: Decimal,
         buy_sell_fee_percentage: Decimal,
@@ -58,7 +57,6 @@ mod radix_pump {
             owner_badge_address: ResourceAddress,
             base_coin_address: ResourceAddress,
             minimum_deposit: Decimal,
-            coins_supply: Decimal,
             creation_fee_percentage: Decimal,
             buy_sell_fee_percentage: Decimal,
         ) -> Global<RadixPump> {
@@ -66,10 +64,6 @@ mod radix_pump {
             assert!(
                 minimum_deposit > Decimal::ZERO,
                 "Minimum deposit can't be zero or less",
-            );
-            assert!(
-                coins_supply > Decimal::ZERO,
-                "Coins supply can't be zero or less",
             );
             assert!(
                 creation_fee_percentage >= Decimal::ZERO && creation_fee_percentage < dec!(100),
@@ -120,7 +114,6 @@ mod radix_pump {
                 last_coin_creator_badge_id: 0,
                 forbidden_symbols: KeyValueStore::new(),
                 forbidden_names: KeyValueStore::new(),
-                coins_supply: coins_supply,
                 pools: KeyValueStore::new(),
                 creation_fee_percentage: creation_fee_percentage,
                 buy_sell_fee_percentage: buy_sell_fee_percentage,
@@ -157,6 +150,7 @@ mod radix_pump {
             mut coin_name: String,
             coin_icon_url: String,
             coin_description: String,
+            coin_supply: Decimal,
         ) -> (Bucket, Bucket) {
 
             assert!(
@@ -230,7 +224,7 @@ mod radix_pump {
                 burner_updater => coin_creator_badge_rule;
             ))
             .divisibility(DIVISIBILITY_MAXIMUM)
-            .mint_initial_supply(self.coins_supply)
+            .mint_initial_supply(coin_supply)
             .into();
 
             self.fee_vault.put(

@@ -23,7 +23,6 @@ fn test_radix_pump() -> Result<(), RuntimeError> {
         badge_address,
         base_coin_address,
         dec!(100),
-        dec!(1000000),
         dec!(1),
         dec!("0.3"),
         package_address,
@@ -39,6 +38,7 @@ fn test_radix_pump() -> Result<(), RuntimeError> {
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        dec!(1000000),
         &mut env
     )?;
 

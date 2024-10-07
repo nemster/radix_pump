@@ -137,6 +137,11 @@ CALL_METHOD
     "<COIN_DESCRIPTION>"
     Decimal("<COIN_SUPPLY>")
 ;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
 ```
 
 `<ACCOUNT_ADDRESS>` is the account of the user creating the new coin.  
@@ -184,6 +189,11 @@ CALL_METHOD
     Address("<COIN_ADDRESS>")
     Bucket("base_coin_bucket")
 ;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
 ```
 
 `<ACCOUNT_ADDRESS>` is the account of the user buying the coin.  
@@ -217,6 +227,11 @@ CALL_METHOD
     "sell"
     Bucket("coin_bucket")
 ;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
 ```
 
 `<ACCOUNT_ADDRESS>` is the account of the user selling the coin.  
@@ -243,6 +258,11 @@ CALL_METHOD
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "get_fees"
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
 ;
 ```
 

@@ -1,5 +1,6 @@
 use scrypto::prelude::*;
 use scrypto_math::*;
+use scrypto::prelude::rust::cmp::min;
 
 #[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
 pub enum PoolMode {
@@ -13,6 +14,7 @@ pub struct NewCoinEvent {
     price: Decimal,
     coins_in_pool: Decimal,
     creator_allocation: Decimal,
+    buy_sell_pool_fee_percentage: Decimal,
     flash_loan_pool_fee_percentage: Decimal,
 }
 
@@ -22,6 +24,7 @@ pub struct BuyEvent {
     amount: Decimal,
     price: Decimal,
     coins_in_pool: Decimal,
+    fee_paid_to_the_pool: Decimal,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
@@ -31,6 +34,7 @@ pub struct SellEvent {
     price: Decimal,
     coins_in_pool: Decimal,
     mode: PoolMode,
+    fee_paid_to_the_pool: Decimal,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
@@ -51,6 +55,7 @@ pub struct Pool {
     coin_vault: Vault,
     mode: PoolMode,
     last_price: Decimal,
+    buy_sell_pool_fee_percentage: Decimal,
     flash_loan_pool_fee_percentage: Decimal,
 }
 
@@ -61,6 +66,7 @@ impl Pool {
     pub fn new(
         base_coin_bucket: Bucket,
         mut coin_bucket: Bucket,
+        buy_sell_pool_fee_percentage: Decimal,
         flash_loan_pool_fee_percentage: Decimal,
     ) -> (Pool, Bucket) {
         let base_coin_bucket_amount = PreciseDecimal::from(base_coin_bucket.amount());
@@ -88,6 +94,7 @@ impl Pool {
                 price: price,
                 coins_in_pool: coin_bucket.amount(),
                 creator_allocation: coin_amount_bought,
+                buy_sell_pool_fee_percentage: buy_sell_pool_fee_percentage,
                 flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
             }
         );
@@ -97,6 +104,7 @@ impl Pool {
             coin_vault: Vault::with_bucket(coin_bucket),
             mode: PoolMode::Normal,
             last_price: price,
+            buy_sell_pool_fee_percentage: buy_sell_pool_fee_percentage,
             flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
         };
 
@@ -126,11 +134,21 @@ impl Pool {
 
     pub fn buy(
         &mut self,
-        base_coin_bucket: Bucket,
+        mut base_coin_bucket: Bucket,
+        max_buy_sell_pool_fee_percentage: Decimal,
     ) -> Bucket {
         assert!(
             self.mode == PoolMode::Normal,
             "You can't buy a coin in liquidation mode",
+        );
+
+        // Check if the component owner lowered max_buy_sell_pool_fee_percentage after the creator 
+        // set a higher buy_sell_pool_fee_percentage
+        let fee_percentage = min(max_buy_sell_pool_fee_percentage, self.buy_sell_pool_fee_percentage);
+
+        let fee_bucket = base_coin_bucket.take_advanced(
+            base_coin_bucket.amount() * fee_percentage / dec!(100),
+            WithdrawStrategy::Rounded(RoundingMode::ToZero),
         );
 
         let (constant_product, exponent) = Pool::compute_costant_product(
@@ -154,20 +172,22 @@ impl Pool {
                 amount: coin_amount_bought,
                 price: self.last_price,
                 coins_in_pool: new_coin_amount,
+                fee_paid_to_the_pool: fee_bucket.amount(),
             }
         );
 
         self.base_coin_vault.put(base_coin_bucket);
-
+        self.base_coin_vault.put(fee_bucket);
         self.coin_vault.take(coin_amount_bought)
     }
 
     pub fn sell(
         &mut self,
         coin_bucket: Bucket,
+        max_buy_sell_pool_fee_percentage: Decimal,
     ) -> Bucket {
 
-        let base_coin_bucket = match self.mode {
+        let (base_coin_bucket, fee_amount) = match self.mode {
             PoolMode::Normal => {
                 let (constant_product, exponent) = Pool::compute_costant_product(
                     PreciseDecimal::from(self.base_coin_vault.amount()),
@@ -181,10 +201,23 @@ impl Pool {
                 .checked_truncate(RoundingMode::ToZero)
                 .unwrap();
 
-                self.base_coin_vault.take_advanced(
+                let mut base_coin_bucket = self.base_coin_vault.take_advanced(
                     self.base_coin_vault.amount() - new_base_coin_amount,
                     WithdrawStrategy::Rounded(RoundingMode::ToZero),
-                )
+                );
+
+                // Check if the component owner lowered max_buy_sell_pool_fee_percentage after the creator 
+                // set a higher buy_sell_pool_fee_percentage
+                let fee_percentage = min(max_buy_sell_pool_fee_percentage, self.buy_sell_pool_fee_percentage);
+
+                let fee_bucket = base_coin_bucket.take_advanced(
+                    base_coin_bucket.amount() * fee_percentage / dec!(100),
+                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                );
+                let fee_amount = fee_bucket.amount();
+                self.base_coin_vault.put(fee_bucket);
+
+                (base_coin_bucket, fee_amount)
             },
             PoolMode::Liquidation => {
                 let coin_supply = ResourceManager::from_address(
@@ -193,11 +226,14 @@ impl Pool {
 
                 let user_share = coin_bucket.amount() / (coin_supply - self.coin_vault.amount());
 
-                self.base_coin_vault.take_advanced(
-                    self.base_coin_vault.amount() * user_share,
-                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                (
+                    self.base_coin_vault.take_advanced(
+                        self.base_coin_vault.amount() * user_share,
+                        WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                    ),
+                    Decimal::ZERO,
                 )
-            }
+            },
         };
 
         self.last_price = base_coin_bucket.amount() / coin_bucket.amount();
@@ -209,6 +245,7 @@ impl Pool {
                 price: self.last_price,
                 coins_in_pool: self.coin_vault.amount() + coin_bucket.amount(),
                 mode: self.mode,
+                fee_paid_to_the_pool: fee_amount,
             }
         );
 
@@ -249,9 +286,13 @@ impl Pool {
         base_coin_bucket: Bucket,
         coin_bucket: Bucket,
         price: Decimal,
+        max_flash_loan_pool_fee_percentage: Decimal,
     ) {
+        // Check if the component owner lowered max_flash_loan_pool_fee_percentage after the creator 
+        // set a higher falsh_loan_pool_fee_percentage
+        let fee_percentage = min(max_flash_loan_pool_fee_percentage, self.flash_loan_pool_fee_percentage);
         assert!(
-            base_coin_bucket.amount() >= coin_bucket.amount() * price * self.flash_loan_pool_fee_percentage / dec!(100),
+            base_coin_bucket.amount() >= coin_bucket.amount() * price * fee_percentage / dec!(100),
             "Insufficient fee paid to the pool",
         );
 
@@ -267,20 +308,23 @@ impl Pool {
         self.coin_vault.put(coin_bucket);
     }
 
-    pub fn get_pool_info(&self) -> (Decimal, Decimal, Decimal, Decimal, PoolMode) {
+    pub fn get_pool_info(&self) -> (Decimal, Decimal, Decimal, Decimal, Decimal, PoolMode) {
         (
             self.base_coin_vault.amount(),
             self.coin_vault.amount(),
             self.last_price,
+            self.buy_sell_pool_fee_percentage,
             self.flash_loan_pool_fee_percentage,
             self.mode,
         )
     }
 
-    pub fn update_flash_loan_pool_fee_percentage(
+    pub fn update_pool_fee_percentage(
         &mut self,
-        flash_loan_pool_fee_percentage: Decimal
+        buy_sell_pool_fee_percentage: Decimal,
+        flash_loan_pool_fee_percentage: Decimal,
     ) {
+        self.buy_sell_pool_fee_percentage = buy_sell_pool_fee_percentage;
         self.flash_loan_pool_fee_percentage = flash_loan_pool_fee_percentage;
     }
 }

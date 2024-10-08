@@ -1,5 +1,5 @@
 use scrypto::prelude::*;
-use scrypto::prelude::rust::cmp::max;
+use scrypto::prelude::rust::cmp::*;
 use crate::pool::*;
 
 // Metadata for the coin creator badge
@@ -57,7 +57,7 @@ mod radix_pump {
             creator_set_liquidation_mode => PUBLIC;
             get_flash_loan => PUBLIC;
             return_flash_loan => PUBLIC;
-            update_flash_loan_pool_fee_percentage => PUBLIC;
+            update_pool_fee_percentage => PUBLIC;
             get_pool_info => PUBLIC;
         }
     }
@@ -75,7 +75,7 @@ mod radix_pump {
         creator_set_liquidation_mode => Free;
         get_flash_loan => Usd(dec!("0.001"));
         return_flash_loan => Free;
-        update_flash_loan_pool_fee_percentage => Free;
+        update_pool_fee_percentage => Free;
         get_pool_info => Free;
     }
 
@@ -92,6 +92,8 @@ mod radix_pump {
         buy_sell_fee_percentage: Decimal,
         flash_loan_fee_percentage: Decimal,
         fee_vault: Vault,
+        max_buy_sell_pool_fee_percentage: Decimal,
+        max_flash_loan_pool_fee_percentage: Decimal,
     }
 
     impl RadixPump {
@@ -202,6 +204,8 @@ mod radix_pump {
                 buy_sell_fee_percentage: buy_sell_fee_percentage,
                 flash_loan_fee_percentage: flash_loan_fee_percentage,
                 fee_vault: Vault::new(base_coin_address),
+                max_buy_sell_pool_fee_percentage: dec!(100),
+                max_flash_loan_pool_fee_percentage: dec!(100),
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
@@ -239,6 +243,7 @@ mod radix_pump {
             coin_icon_url: String,
             coin_description: String,
             coin_supply: Decimal,
+            buy_sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee_percentage: Decimal,
         ) -> (Bucket, Bucket) {
             assert!(
@@ -254,8 +259,14 @@ mod radix_pump {
                 "Coin supply is too big",
             );
             assert!(
-                flash_loan_pool_fee_percentage >= Decimal::ZERO && flash_loan_pool_fee_percentage < dec!(100),
-                "Flash loan pool fee percentage can go from 0 (included) to 100 (excluded)",
+                buy_sell_pool_fee_percentage >= Decimal::ZERO && buy_sell_pool_fee_percentage < self.max_buy_sell_pool_fee_percentage,
+                "Buy sell pool fee percentage can go from 0 (included) to {} (excluded)",
+                self.max_buy_sell_pool_fee_percentage,
+            );
+            assert!(
+                flash_loan_pool_fee_percentage >= Decimal::ZERO && flash_loan_pool_fee_percentage < self.max_flash_loan_pool_fee_percentage,
+                "Flash loan pool fee percentage can go from 0 (included) to {} (excluded)",
+                self.max_flash_loan_pool_fee_percentage,
             );
 
             self.last_coin_creator_badge_id += 1;
@@ -343,6 +354,7 @@ mod radix_pump {
             let (pool, coin_creator_coin_bucket) = Pool::new(
                 base_coin_bucket, 
                 coin_bucket,
+                buy_sell_pool_fee_percentage,
                 flash_loan_pool_fee_percentage,
             );
             self.pools.insert(
@@ -372,7 +384,10 @@ mod radix_pump {
 
             self.pools.get_mut(&coin_address)
             .expect("Coin not found")
-            .buy(base_coin_bucket)
+            .buy(
+                base_coin_bucket,
+                self.max_buy_sell_pool_fee_percentage,
+            )
         }
 
         pub fn sell(
@@ -381,7 +396,10 @@ mod radix_pump {
         ) -> Bucket {
             let mut base_coin_bucket = self.pools.get_mut(&coin_bucket.resource_address())
             .expect("Coin not found")
-            .sell(coin_bucket);
+            .sell(
+                coin_bucket,
+                self.max_buy_sell_pool_fee_percentage,
+            );
 
             self.fee_vault.put(
                 base_coin_bucket.take_advanced(
@@ -404,6 +422,8 @@ mod radix_pump {
             creation_fee_percentage: Decimal,
             buy_sell_fee_percentage: Decimal,
             flash_loan_fee_percentage: Decimal,
+            max_buy_sell_pool_fee_percentage: Decimal,
+            max_flash_loan_pool_fee_percentage: Decimal,
         ) {
             assert!(
                 creation_fee_percentage >= Decimal::ZERO && creation_fee_percentage < dec!(100),
@@ -417,10 +437,20 @@ mod radix_pump {
                 flash_loan_fee_percentage >= Decimal::ZERO && flash_loan_fee_percentage < dec!(100),
                 "Flash loan fee percentage can go from 0 (included) to 100 (excluded)",
             );
+            assert!(
+                max_buy_sell_pool_fee_percentage >= Decimal::ZERO && max_buy_sell_pool_fee_percentage <= dec!(100),
+                "Max buy sell pool fee percentage can go from 0 (included) to 100 (included)",
+            );
+            assert!(
+                max_flash_loan_pool_fee_percentage >= Decimal::ZERO && max_flash_loan_pool_fee_percentage <= dec!(100),
+                "Max flash loan pool fee percentage can go from 0 (included) to 100 (included)",
+            );
 
             self.creation_fee_percentage = creation_fee_percentage;
             self.buy_sell_fee_percentage = buy_sell_fee_percentage;
             self.flash_loan_fee_percentage = flash_loan_fee_percentage;
+            self.max_buy_sell_pool_fee_percentage = max_buy_sell_pool_fee_percentage;
+            self.max_flash_loan_pool_fee_percentage = max_flash_loan_pool_fee_percentage;
         }
 
         pub fn owner_set_liquidation_mode(
@@ -447,7 +477,7 @@ mod radix_pump {
             let (coin_bucket, price) = self.pools.get_mut(&coin_address).expect("Coin not found").get_flash_loan(amount);
 
             let transient_nft_bucket = self.flash_loan_nft_resource_manager.mint_non_fungible(
-                &NonFungibleLocalId::integer(1),
+                &NonFungibleLocalId::integer(1), //TODO: do not use always 1
                 FlashLoanData {
                     coin_resource_address: coin_address,
                     coin_amount: amount,
@@ -489,7 +519,7 @@ mod radix_pump {
 
             // In order to avoid price manipulation affecting the fees, consider the maximum among the
             // price at the moment the flash loan was granted and the current price.
-            let (_, _, mut price, _, _) = pool.get_pool_info();
+            let (_, _, mut price, _, _, _) = pool.get_pool_info();
             price = max(price, flash_loan_data.price);
 
             self.fee_vault.put(
@@ -503,37 +533,59 @@ mod radix_pump {
                 base_coin_bucket,
                 coin_bucket,
                 price,
+                self.max_flash_loan_pool_fee_percentage,
             );
         }
 
-        pub fn update_flash_loan_pool_fee_percentage(
+        pub fn update_pool_fee_percentage(
             &mut self,
             creator_proof: Proof,
+            buy_sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee_percentage: Decimal,
         ) {
+            assert!(
+                buy_sell_pool_fee_percentage >= Decimal::ZERO && buy_sell_pool_fee_percentage < self.max_buy_sell_pool_fee_percentage,
+                "Buy sell pool fee percentage can go from 0 (included) to {} (excluded)",
+                self.max_buy_sell_pool_fee_percentage,
+            );
+            assert!(
+                flash_loan_pool_fee_percentage >= Decimal::ZERO && flash_loan_pool_fee_percentage < self.max_flash_loan_pool_fee_percentage,
+                "Flash loan pool fee percentage can go from 0 (included) to {} (excluded)",
+                self.max_flash_loan_pool_fee_percentage,
+            );
+
             let coin_creator_data = self.get_creator_data(creator_proof);
 
             self.pools.get_mut(&coin_creator_data.coin_resource_address).unwrap()
-            .update_flash_loan_pool_fee_percentage(flash_loan_pool_fee_percentage);
+            .update_pool_fee_percentage(
+                buy_sell_pool_fee_percentage,
+                flash_loan_pool_fee_percentage,
+            );
         }
 
         pub fn get_pool_info(
             &self,
             coin_address: ResourceAddress,
-        ) -> (Decimal, Decimal, Decimal, Decimal, Decimal, PoolMode, ResourceAddress) {
+        ) -> (Decimal, Decimal, Decimal, Decimal, Decimal, Decimal, PoolMode, ResourceAddress) {
             let (
                 base_coin_amount,
                 coin_amount,
                 last_price,
-                flash_loan_pool_fee_percentage,
+                mut buy_sell_pool_fee_percentage,
+                mut flash_loan_pool_fee_percentage,
                 pool_mode,
             ) = self.pools.get(&coin_address).expect("Coin not found").get_pool_info();
+
+            // Check if the component owner has lowered max pool fees after pool fees have been set
+            buy_sell_pool_fee_percentage = min(buy_sell_pool_fee_percentage, self.max_buy_sell_pool_fee_percentage);
+            flash_loan_pool_fee_percentage = min(flash_loan_pool_fee_percentage, self.max_flash_loan_pool_fee_percentage);
 
             (
                 base_coin_amount,
                 coin_amount,
                 last_price,
-                self.buy_sell_fee_percentage,
+                buy_sell_pool_fee_percentage + self.buy_sell_fee_percentage * (100 + buy_sell_pool_fee_percentage) / dec!(100),
+                self.buy_sell_fee_percentage + buy_sell_pool_fee_percentage * (100 + self.buy_sell_fee_percentage) / dec!(100),
                 flash_loan_pool_fee_percentage + self.flash_loan_fee_percentage * (100 + flash_loan_pool_fee_percentage) / dec!(100),
                 pool_mode,
                 self.flash_loan_nft_resource_manager.address(),

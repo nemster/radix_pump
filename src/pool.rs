@@ -13,6 +13,7 @@ pub struct NewCoinEvent {
     price: Decimal,
     coins_in_pool: Decimal,
     creator_allocation: Decimal,
+    flash_loan_pool_fee_percentage: Decimal,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
@@ -37,12 +38,20 @@ pub struct LiquidationEvent {
     resource_address: ResourceAddress,
 }
 
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct FlashLoanEvent {
+    resource_address: ResourceAddress,
+    amount: Decimal,
+    fee_paid_to_the_pool: Decimal,
+}
+
 #[derive(ScryptoSbor)]
 pub struct Pool {
     base_coin_vault: Vault,
     coin_vault: Vault,
     mode: PoolMode,
     last_price: Decimal,
+    flash_loan_pool_fee_percentage: Decimal,
 }
 
 impl Pool {
@@ -52,6 +61,7 @@ impl Pool {
     pub fn new(
         base_coin_bucket: Bucket,
         mut coin_bucket: Bucket,
+        flash_loan_pool_fee_percentage: Decimal,
     ) -> (Pool, Bucket) {
         let base_coin_bucket_amount = PreciseDecimal::from(base_coin_bucket.amount());
         let coin_bucket_amount = PreciseDecimal::from(coin_bucket.amount());
@@ -78,6 +88,7 @@ impl Pool {
                 price: price,
                 coins_in_pool: coin_bucket.amount(),
                 creator_allocation: coin_amount_bought,
+                flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
             }
         );
 
@@ -86,6 +97,7 @@ impl Pool {
             coin_vault: Vault::with_bucket(coin_bucket),
             mode: PoolMode::Normal,
             last_price: price,
+            flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
         };
 
         (pool, creator_coin_bucket)
@@ -218,5 +230,57 @@ impl Pool {
         );
 
         self.mode = PoolMode::Liquidation;
+    }
+
+    pub fn get_flash_loan(
+        &mut self,
+        amount: Decimal,
+    ) -> (Bucket, Decimal) {
+        assert!(
+            self.mode == PoolMode::Normal,
+            "You can't get a flash loan in liquidation mode",
+        );
+
+        (self.coin_vault.take(amount), self.last_price)
+    }
+
+    pub fn return_flash_loan(
+        &mut self,
+        base_coin_bucket: Bucket,
+        coin_bucket: Bucket,
+        price: Decimal,
+    ) {
+        assert!(
+            base_coin_bucket.amount() >= coin_bucket.amount() * price * self.flash_loan_pool_fee_percentage / dec!(100),
+            "Insufficient fee paid to the pool",
+        );
+
+        Runtime::emit_event(
+            FlashLoanEvent {
+                resource_address: coin_bucket.resource_address(),
+                amount: coin_bucket.amount(),
+                fee_paid_to_the_pool: base_coin_bucket.amount(),
+            }
+        );
+
+        self.base_coin_vault.put(base_coin_bucket);
+        self.coin_vault.put(coin_bucket);
+    }
+
+    pub fn get_pool_info(&self) -> (Decimal, Decimal, Decimal, Decimal, PoolMode) {
+        (
+            self.base_coin_vault.amount(),
+            self.coin_vault.amount(),
+            self.last_price,
+            self.flash_loan_pool_fee_percentage,
+            self.mode,
+        )
+    }
+
+    pub fn update_flash_loan_pool_fee_percentage(
+        &mut self,
+        flash_loan_pool_fee_percentage: Decimal
+    ) {
+        self.flash_loan_pool_fee_percentage = flash_loan_pool_fee_percentage;
     }
 }

@@ -29,6 +29,7 @@ fn test_insufficient_deposit() {
         minimum_deposit,
         dec!(1),
         dec!("0.3"),
+        dec!("0.1"),
         package_address,
         &mut env
     ).unwrap();
@@ -40,6 +41,7 @@ fn test_insufficient_deposit() {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     ).unwrap();
 }
@@ -71,6 +73,7 @@ fn test_empty_name() {
         minimum_deposit,
         dec!(1),
         dec!("0.3"),
+        dec!("0.1"),
         package_address,
         &mut env
     ).unwrap();
@@ -82,6 +85,7 @@ fn test_empty_name() {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "A test coin with only spaces in the name".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     ).unwrap();
 }
@@ -113,6 +117,7 @@ fn test_empty_symbol() {
         minimum_deposit,
         dec!(1),
         dec!("0.3"),
+        dec!("0.1"),
         package_address,
         &mut env
     ).unwrap();
@@ -124,6 +129,7 @@ fn test_empty_symbol() {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "A test coin wih only spaces in the symbol".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     ).unwrap();
 }
@@ -155,6 +161,7 @@ fn test_same_symbol() {
         minimum_deposit,
         dec!(1),
         dec!("0.3"),
+        dec!("0.1"),
         package_address,
         &mut env
     ).unwrap();
@@ -166,6 +173,7 @@ fn test_same_symbol() {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     ).unwrap();
 
@@ -176,6 +184,7 @@ fn test_same_symbol() {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Another coin with a very similar symbol".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     ).unwrap();
 }
@@ -207,6 +216,7 @@ fn test_same_name() {
         minimum_deposit,
         dec!(1),
         dec!("0.3"),
+        dec!("0.1"),
         package_address,
         &mut env
     ).unwrap();
@@ -218,6 +228,7 @@ fn test_same_name() {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     ).unwrap();
 
@@ -228,6 +239,7 @@ fn test_same_name() {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Another coin with a very similar name".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     ).unwrap();
 }
@@ -258,6 +270,7 @@ fn test_forbid_symbols() {
         dec!(100),
         dec!(1),
         dec!("0.3"),
+        dec!("0.1"),
         package_address,
         &mut env
     ).unwrap();
@@ -271,6 +284,7 @@ fn test_forbid_symbols() {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "A coin with the same name and symbol as XRD".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     ).unwrap();
 }
@@ -301,6 +315,7 @@ fn test_forbid_names() {
         dec!(100),
         dec!(1),
         dec!("0.3"),
+        dec!("0.1"),
         package_address,
         &mut env
     ).unwrap();
@@ -314,6 +329,7 @@ fn test_forbid_names() {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "A coin with the same name and symbol as XRD".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     ).unwrap();
 }
@@ -341,6 +357,7 @@ fn test_buy() -> Result<(), RuntimeError> {
         dec!(100),
         dec!(1),
         dec!("0.3"),
+        dec!("0.1"),
         package_address,
         &mut env
     )?;
@@ -355,6 +372,7 @@ fn test_buy() -> Result<(), RuntimeError> {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     )?;
     let coin_address = coin_bucket1.resource_address(&mut env)?;
@@ -408,6 +426,7 @@ fn test_buy_wrong_coin() {
         dec!(100),
         dec!(1),
         dec!("0.3"),
+        dec!("0.1"),
         package_address,
         &mut env
     ).unwrap();
@@ -419,6 +438,7 @@ fn test_buy_wrong_coin() {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     ).unwrap();
 
@@ -452,6 +472,7 @@ fn test_sell() -> Result<(), RuntimeError> {
         dec!(100),
         dec!(1),
         dec!("0.3"),
+        dec!("0.1"),
         package_address,
         &mut env
     )?;
@@ -466,6 +487,7 @@ fn test_sell() -> Result<(), RuntimeError> {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     )?;
 
@@ -516,6 +538,7 @@ fn test_sell_wrong_coin() {
         dec!(100),
         dec!(1),
         dec!("0.3"),
+        dec!("0.1"),
         package_address,
         &mut env
     ).unwrap();
@@ -527,6 +550,7 @@ fn test_sell_wrong_coin() {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     ).unwrap();
 
@@ -561,6 +585,7 @@ fn test_fees() -> Result<(), RuntimeError> {
         dec!(100),
         creation_fee_percentage,
         buy_sell_fee_percentage,
+        dec!("0.1"),
         package_address,
         &mut env
     )?;
@@ -573,6 +598,7 @@ fn test_fees() -> Result<(), RuntimeError> {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     )?;
     let coin_address = coin_bucket1.resource_address(&mut env)?;
@@ -611,6 +637,7 @@ fn test_fees() -> Result<(), RuntimeError> {
     radix_pump.update_fees(
         creation_fee_percentage,
         buy_sell_fee_percentage,
+        dec!("0.1"),
         &mut env
     )?;
 
@@ -621,6 +648,7 @@ fn test_fees() -> Result<(), RuntimeError> {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just another test coin".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     )?;
 
@@ -669,6 +697,7 @@ fn test_liquidation() -> Result<(), RuntimeError> {
         dec!(100),
         creation_fee_percentage,
         buy_sell_fee_percentage,
+        dec!("0.1"),
         package_address,
         &mut env
     )?;
@@ -681,6 +710,7 @@ fn test_liquidation() -> Result<(), RuntimeError> {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     )?;
     let coin_address = coin_bucket1.resource_address(&mut env)?;
@@ -740,6 +770,7 @@ fn test_buy_liquidation() {
         dec!(100),
         dec!(1),
         dec!("0.3"),
+        dec!("0.1"),
         package_address,
         &mut env
     ).unwrap();
@@ -751,6 +782,7 @@ fn test_buy_liquidation() {
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
         dec!(1000000),
+        dec!("0.1"),
         &mut env
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
@@ -760,6 +792,194 @@ fn test_buy_liquidation() {
     let _coin_bucket2 = radix_pump.buy(
         coin_address,
         base_coin_bucket1.take(dec!(100), &mut env).unwrap(),
+        &mut env
+    ).unwrap();
+}
+
+#[test]
+fn test_flash_loan() -> Result<(), RuntimeError> {
+    let mut env = TestEnvironment::new();
+    env.disable_auth_module();
+    let package_address =
+        PackageFactory::compile_and_publish(this_package!(), &mut env, CompileProfile::Fast)?;
+
+    let badge_bucket = ResourceBuilder::new_fungible(OwnerRole::None)
+        .divisibility(0)
+        .mint_initial_supply(1, &mut env)?;
+    let badge_address = badge_bucket.resource_address(&mut env)?;
+
+    let base_coin_bucket1 = ResourceBuilder::new_fungible(OwnerRole::None)
+        .divisibility(18)
+        .mint_initial_supply(dec!(1000000), &mut env)?;
+    let base_coin_address = base_coin_bucket1.resource_address(&mut env)?;
+
+    let flash_loan_fee_percentage = dec!("0.1");
+    let mut radix_pump = RadixPump::new(
+        badge_address,
+        base_coin_address,
+        dec!(100),
+        dec!(1),
+        dec!("0.3"),
+        flash_loan_fee_percentage,
+        package_address,
+        &mut env
+    )?;
+
+    let flash_loan_pool_fee_percentage = dec!("0.1");
+    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.create_new_coin(
+        base_coin_bucket1.take(dec!(100), &mut env)?,
+        "COIN".to_string(),
+        "Coin".to_string(),
+        "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
+        "Just a test coin".to_string(),
+        dec!(1000000),
+        flash_loan_pool_fee_percentage,
+        &mut env
+    )?;
+    let coin_address = coin_bucket1.resource_address(&mut env)?;
+
+    let (_, _, price, _, flash_loan_total_fee_percentage, _, _) = radix_pump.get_pool_info(coin_address, &mut env)?;
+    panic_if_significantly_different(
+        flash_loan_total_fee_percentage,
+        flash_loan_pool_fee_percentage + flash_loan_fee_percentage * (100 + flash_loan_pool_fee_percentage) / dec!(100),
+        "There's something wrong in flash_loan_total_fee_percentage computation",
+    );
+
+    let (coin_bucket2, transient_nft_bucket) = radix_pump.get_flash_loan(
+        coin_address,
+        dec!(1000),
+        &mut env
+    )?;
+
+    let fees = price * coin_bucket2.amount(&mut env)? * flash_loan_total_fee_percentage / dec!(100);
+    radix_pump.return_flash_loan(
+        transient_nft_bucket,
+        base_coin_bucket1.take(fees, &mut env)?,
+        coin_bucket2,
+        &mut env
+    )?;
+
+    Ok(())
+}
+
+#[test]
+#[should_panic]
+fn test_flash_loan_insufficient_fees() {
+    let mut env = TestEnvironment::new();
+    env.disable_auth_module();
+    let package_address =
+        PackageFactory::compile_and_publish(this_package!(), &mut env, CompileProfile::Fast).unwrap();
+
+    let badge_bucket = ResourceBuilder::new_fungible(OwnerRole::None)
+        .divisibility(0)
+        .mint_initial_supply(1, &mut env).unwrap();
+    let badge_address = badge_bucket.resource_address(&mut env).unwrap();
+
+    let base_coin_bucket1 = ResourceBuilder::new_fungible(OwnerRole::None)
+        .divisibility(18)
+        .mint_initial_supply(dec!(1000000), &mut env).unwrap();
+    let base_coin_address = base_coin_bucket1.resource_address(&mut env).unwrap();
+
+    let flash_loan_fee_percentage = dec!("0.1");
+    let mut radix_pump = RadixPump::new(
+        badge_address,
+        base_coin_address,
+        dec!(100),
+        dec!(1),
+        dec!("0.3"),
+        flash_loan_fee_percentage,
+        package_address,
+        &mut env
+    ).unwrap();
+
+    let flash_loan_pool_fee_percentage = dec!("0.1");
+    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.create_new_coin(
+        base_coin_bucket1.take(dec!(100), &mut env).unwrap(),
+        "COIN".to_string(),
+        "Coin".to_string(),
+        "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
+        "Just a test coin".to_string(),
+        dec!(1000000),
+        flash_loan_pool_fee_percentage,
+        &mut env
+    ).unwrap();
+    let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
+
+    let (_, _, price, _, flash_loan_total_fee_percentage, _, _) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+
+    let (coin_bucket2, transient_nft_bucket) = radix_pump.get_flash_loan(
+        coin_address,
+        dec!(1000),
+        &mut env
+    ).unwrap();
+
+    let fees = price * coin_bucket2.amount(&mut env).unwrap() * flash_loan_total_fee_percentage / dec!(100) - dec!("0.00001");
+    radix_pump.return_flash_loan(
+        transient_nft_bucket,
+        base_coin_bucket1.take(fees, &mut env).unwrap(),
+        coin_bucket2,
+        &mut env
+    ).unwrap();
+}
+
+#[test]
+#[should_panic]
+fn test_flash_loan_insufficient_amount() {
+    let mut env = TestEnvironment::new();
+    env.disable_auth_module();
+    let package_address =
+        PackageFactory::compile_and_publish(this_package!(), &mut env, CompileProfile::Fast).unwrap();
+
+    let badge_bucket = ResourceBuilder::new_fungible(OwnerRole::None)
+        .divisibility(0)
+        .mint_initial_supply(1, &mut env).unwrap();
+    let badge_address = badge_bucket.resource_address(&mut env).unwrap();
+
+    let base_coin_bucket1 = ResourceBuilder::new_fungible(OwnerRole::None)
+        .divisibility(18)
+        .mint_initial_supply(dec!(1000000), &mut env).unwrap();
+    let base_coin_address = base_coin_bucket1.resource_address(&mut env).unwrap();
+
+    let flash_loan_fee_percentage = dec!("0.1");
+    let mut radix_pump = RadixPump::new(
+        badge_address,
+        base_coin_address,
+        dec!(100),
+        dec!(1),
+        dec!("0.3"),
+        flash_loan_fee_percentage,
+        package_address,
+        &mut env
+    ).unwrap();
+
+    let flash_loan_pool_fee_percentage = dec!("0.1");
+    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.create_new_coin(
+        base_coin_bucket1.take(dec!(100), &mut env).unwrap(),
+        "COIN".to_string(),
+        "Coin".to_string(),
+        "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
+        "Just a test coin".to_string(),
+        dec!(1000000),
+        flash_loan_pool_fee_percentage,
+        &mut env
+    ).unwrap();
+    let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
+
+    let (_, _, price, _, flash_loan_total_fee_percentage, _, _) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+
+    let (coin_bucket2, transient_nft_bucket) = radix_pump.get_flash_loan(
+        coin_address,
+        dec!(1000),
+        &mut env
+    ).unwrap();
+
+    let _coin_bucket3 = coin_bucket2.take(dec!("0.00001"), &mut env).unwrap();
+
+    let fees = price * coin_bucket2.amount(&mut env).unwrap() * flash_loan_total_fee_percentage / dec!(100);
+    radix_pump.return_flash_loan(
+        transient_nft_bucket,
+        base_coin_bucket1.take(fees, &mut env).unwrap(),
+        coin_bucket2,
         &mut env
     ).unwrap();
 }
@@ -777,4 +997,5 @@ fn panic_if_significantly_different(
         y,
     );
 }
+
 

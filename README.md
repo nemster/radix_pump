@@ -1,6 +1,6 @@
 # RadixPump blueprint
 
-This blueprint implements a marketplace where people can create, buy and sell coins.
+This blueprint implements a marketplace where people can create, buy, sell and take flash loans of coins.
 
 ## Fair launch
 
@@ -21,10 +21,18 @@ The liquidation mode is a guarantee that a partial reimbursement is possible for
 Please note: the creator of a coin has no way to withdraw the liquidity out of the pool, he can only sell his coins, just like anyone else. So a partial reimbursement will always be possible for all of the holders.  
 
 Both the creator of a coin and the component owner can turn a coin into liquidation mode, when this happens:
-- it's no longer possible to buy the coin  
+- it's no longer possible to buy or borrow the coin  
 - the base coins in the pool are divided pro-rata among the coin holders  
 
 There's no going back from the liquidation mode.  
+
+## Flash loans
+
+Coins created in RadixPump can be borrowed by users.  
+The user must return a fee in base coin together with the borrowed coins in the same transaction or it fails:  
+`get_flash_loan` -> do something with the coins -> `return_flash_loan`  
+ 
+The component owner gets his own fee percentage while the coin creator can set a fee percentage that goes to the pool. Both fees are paid in base coins.  
 
 ## Known limitations
 
@@ -35,8 +43,6 @@ To avoid math overflows the supply of the created coins can't be bigger than 10^
 Compiled with `radixdlt/scrypto-builder:v1.2.0`  
 
 This is the sha256sum of the package files:  
-`04c27d2746e36cc476d64c43cb198d0ebd634d172afd6c4642927458160db7ee  target/wasm32-unknown-unknown/release/radix_pump.wasm`  
-`1a9b5348872ef7afffe84b6a57c48f342061825bc47d1e46f1cb52e0e7d775c7  target/wasm32-unknown-unknown/release/radix_pump.rpd`  
 
 ## Transaction manifests
 
@@ -46,7 +52,7 @@ Use this function to create a RadixPump component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("package_tdx_2_1pkr6necxgn6zh36ss7gxeqesdecuc7ev6qhe50hdls700pg6lxn0qp")
+    Address("")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -54,14 +60,16 @@ CALL_FUNCTION
     Decimal("<MINIMUM_DEPOSIT>")
     Decimal("<CREATION_FEE_PERCENTAGE>")
     Decimal("<BUY_SELL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_FEE_PERCENTAGE>")
 ;
 ```
 
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that can be later used to withdraw fees and other reserved operations.  
 `<BASE_COIN_ADDRESS>` is the resource address of the coin (probably XRD) that will be used to buy coins from the component.  
 `<MINIMUM_DEPOSIT>` is the minimum amount of base coins that a new coin creator must deposit.  
-`<CREATION_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by the token creators.  
-`<BUY_SELL_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers.  
+`<CREATION_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by the token creators to the component owner.  
+`<BUY_SELL_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the component owner.  
+`<FLASH_LOAN_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the component owner.  
 
 ### Forbid symbols
 
@@ -84,7 +92,7 @@ CALL_METHOD
 ```
 `<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
-`<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<SYMBOL>` is one of the symbols that need to be excluded. The symbols are converted to uppercase. An example list can be `Array<String>("XRD", "WXBTC", "XUSDC", "FLOOP", "CAVIAR", "XETH", "EARLY", "DFP2", "HUG", "OCI", "IDA", "WEFT", "WOWO", "XUSDT", "FOTON", "CAVIAR", "DAN", "DGC", "ASTRL", "DPH", "GAB", "FOMO", "CASSIE", "HIT", "JWLXRD", "LSUSP", "BOBBY", "DEXTR", "ICE")`  
 
 ### Forbid names
@@ -108,7 +116,7 @@ CALL_METHOD
 ```
 `<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
-`<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<NAME>` is one of the names that need to be excluded. The comparison is not case sensitive.  
 
 ### Create new coin
@@ -136,6 +144,7 @@ CALL_METHOD
     "<COIN_ICON_URL>"
     "<COIN_DESCRIPTION>"
     Decimal("<COIN_SUPPLY>")
+    Decimal("<FLASH_LOAN_POOL_FEE_PERCENTAGE>")
 ;
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
@@ -147,12 +156,13 @@ CALL_METHOD
 `<ACCOUNT_ADDRESS>` is the account of the user creating the new coin.  
 `<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
 `<BASE_COIN_AMOUNT>` is the base coin amount used to initialize the pool. It must be no less than the `<MINIMUM_DEPOSIT>` specifiled during the component creation. Not all of the amount goes into the pool: a percentage of `<CREATION_FEE_PERCENTAGE>` of this amount is credited to the component owner who can withdraw it later.  
-`<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<COIN_SYMBOL>` is the symbol to assign to the new coin. This is converted to uppercase and checked against all of the previously created coins' symbols and all of the symbols forbidden by the component owner.  
 `<COIN_NAME>` is the name to assign to the new coin. This is checked against all of the previously created coins' names and all of the names forbidden by the component owner.  
 `<COIN_ICON_URL>` is the URL of the image to assign as icon to the new coin; it must be a valid URL.  
 `<COIN_DESCRIPTION>` is a descriptive text that is added to the coin metadata (can be empty).  
 `<COIN_SUPPLY>` is the initial supply of the new coin. It is not be possible to incease the supply later but it can be reduced by burning coins.  
+`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool.  
 
 The coin creator receives a creator badge NFT that shows in the wallet a numeric ID and the resource address of the new created coin.  
 This badge can be later used to:  
@@ -199,7 +209,7 @@ CALL_METHOD
 `<ACCOUNT_ADDRESS>` is the account of the user buying the coin.  
 `<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
 `<BASE_COIN_AMOUNT>` is the base coin amount to buy the coin. A percentage of `<BUY_SELL_FEE_PERCENTAGE>` of this amount is credited to the component owner who can withdraw it later.  
-`<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<COIN_ADDRESS>` is the resource address of the coin the user wants to buy.  
 
 This method returns a bucket of the requested coin.
@@ -237,7 +247,7 @@ CALL_METHOD
 `<ACCOUNT_ADDRESS>` is the account of the user selling the coin.  
 `<COIN_ADDRESS>` is the coin the user wants to sell.  
 `<BASE_COIN_AMOUNT>` is the coin amount the user wants to sell.  
-`<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 
 This method returns a bucket of base coin.
 A percentage of `<BUY_SELL_FEE_PERCENTAGE>` is subtracted from the proceeds of coin sales and is credited to the component owner who can withdraw it later.  
@@ -246,7 +256,7 @@ A `SellEvent` event is issued. It contains the resource address of the sold coin
 
 ### Get fees
 
-The component owner can use this method to claim the fees paid by creators, buyers and sellers.  
+The component owner can use this method to claim the fees paid by creators, buyers, sellers and borrowers.  
 
 ```
 CALL_METHOD
@@ -268,13 +278,13 @@ CALL_METHOD
 
 `<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
-`<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 
 The fees are always base coins (probably XRD).  
 
 ### Update fees
 
-The component owner can use this method to update the fees for creators, buyers and sellers.
+The component owner can use this method to update the fees for creators, buyers, sellers and flash borrowers.
 
 ```
 CALL_METHOD
@@ -288,14 +298,16 @@ CALL_METHOD
     "update_fees"
     Decimal("<CREATION_FEE_PERCENTAGE>")
     Decimal("<BUY_SELL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_FEE_PERCENTAGE>")
 ;
 ```
 
 `<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
-`<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<CREATION_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by the token creators.  
 `<BUY_SELL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers.  
+`<FLASH_LOAN_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the component owner.  
 
 ### Owner initiated liquidation mode
 
@@ -317,7 +329,7 @@ CALL_METHOD
 
 `<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
-`<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<COIN_ADDRESS>` is the coin the component owner wants to put in liquidation mode.  
 
 A `LiquidationEvent` containing the resource address of the liquidating coin is issued.  
@@ -334,21 +346,123 @@ CALL_METHOD
     Array<NonFungibleLocalId>(NonFungibleLocalId("#<CREATOR_BADGE_ID>#"))
 ;
 POP_FROM_AUTH_ZONE
-    Proof("proof")
+    Proof("creator_proof")
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "creator_set_liquidation_mode"
-    Proof("proof")
+    Proof("creator_proof")
 ;
 ```
 
 `<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
 `<CREATOR_BADGE_ADDRESS>` is the badge receaved when creating the coin.  
 `<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
-`<COMPONENT_ADDRESS>` is the address of the component created with the `new` function.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 
 A `LiquidationEvent` containing the resource address of the liquidating coin is issued.  
+
+### Get a flash loan
+
+Get a flash loan of a coin created in RadixPump
+
+```
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "get_flash_loan"
+    Address("<COIN_ADDRESS>")
+    Decimal("<LOAN_AMOUNT>")
+;
+```
+
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<COIN_ADDRESS>` is the resource address of the coin the user wants to borrow.  
+`<LOAN_AMOUNT>` is the requested loan amount.  
+
+Together with the coin bucket a transient NFT is returned, this NFT can't be deposited anywhere, it can only be burned by the `return_flash_loan` method. Not burning it will cause the transaction to fail.  
+
+### Return a flash loan
+
+```
+TAKE_ALL_FROM_WORKTOP
+    Address("<TRANSIENT_NFT_ADDRESS>")
+    Bucket("transient_nft_bucket")
+;
+TAKE_FROM_WORKTOP
+    Address("<BASE_COIN_ADDRESS>")
+    Decimal("<FEES>")
+    Bucket("base_coin_bucket")
+;
+TAKE_FROM_WORKTOP
+    Address("<COIN_ADDRESS>")
+    Decimal("<LOAN_AMOUNT>")
+    Bucket("coin_bucket")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "return_flash_loan"
+    Bucket("transient_nft_bucket")
+    Bucket("base_coin_bucket")
+    Bucket("coin_bucket")
+;
+```
+`<TRANSIENT_NFT_ADDRESS>` is the address of the transient NFT returned by the `get_flash_loan`. This is known at the component intantiation and never changes.  
+`<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
+`<FEES>` is the total fees the user must pay to the component owner and the pool.  
+`<COIN_ADDRESS>` is the resource address of the coin the user borrowed.  
+`<LOAN_AMOUNT>` is the requested loan amount.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+
+### Update flash loan pool fee percentage
+
+A coin creator can modify the `flash_loan_pool_fee_percentage` specified at coin creation time.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_non_fungibles"
+    Address("<CREATOR_BADGE_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<CREATOR_BADGE_ID>#"))
+;
+POP_FROM_AUTH_ZONE
+    Proof("creator_proof")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "update_flash_loan_pool_fee_percentage"
+    Proof("creator_proof")
+    Decimal("flash_loan_pool_fee_percentage")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<CREATOR_BADGE_ADDRESS>` is the badge receaved when creating the coin.  
+`<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+
+### Get pool information
+
+This method can be useful for third parties code that needs to interact with a RadixPump component.  
+
+```
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "get_pool_info"
+    Address("<COIN_ADDRESS>")
+;
+```
+
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<COIN_ADDRESS>` is the resource address of the coin the user wants to receve information about.  
+
+The method returns these information:  
+- the amount of base coins in the coin pool
+- the amount of coins in the pool
+- the price of the last buy or sell operation
+- the buy and sell fee percentage (it's the same for all of the coins).  
+- the total fee percentage for flash loans of the specified coin
+- the pool mode (Normal or Liquidation)
+- the resource address of the transient NFT used in flash loans (it's the same for all of the coins).
 
 ## Copyright
 

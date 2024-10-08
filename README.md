@@ -35,8 +35,6 @@ To avoid math overflows the supply of the created coins can't be bigger than 10^
 Compiled with `radixdlt/scrypto-builder:v1.2.0`  
 
 This is the sha256sum of the package files:  
-`04c27d2746e36cc476d64c43cb198d0ebd634d172afd6c4642927458160db7ee  target/wasm32-unknown-unknown/release/radix_pump.wasm`  
-`1a9b5348872ef7afffe84b6a57c48f342061825bc47d1e46f1cb52e0e7d775c7  target/wasm32-unknown-unknown/release/radix_pump.rpd`  
 
 ## Transaction manifests
 
@@ -46,7 +44,7 @@ Use this function to create a RadixPump component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("package_tdx_2_1pkr6necxgn6zh36ss7gxeqesdecuc7ev6qhe50hdls700pg6lxn0qp")
+    Address("")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")

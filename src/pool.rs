@@ -42,6 +42,7 @@ pub struct Pool {
     base_coin_vault: Vault,
     coin_vault: Vault,
     mode: PoolMode,
+    last_price: Decimal,
 }
 
 impl Pool {
@@ -69,10 +70,12 @@ impl Pool {
         .unwrap();
         let creator_coin_bucket = coin_bucket.take(coin_amount_bought);
 
+        let price = base_coin_bucket.amount() / coin_amount_bought;
+
         Runtime::emit_event(
             NewCoinEvent {
                 resource_address: coin_bucket.resource_address(),
-                price: base_coin_bucket.amount() / coin_amount_bought,
+                price: price,
                 coins_in_pool: coin_bucket.amount(),
                 creator_allocation: coin_amount_bought,
             }
@@ -82,6 +85,7 @@ impl Pool {
             base_coin_vault: Vault::with_bucket(base_coin_bucket),
             coin_vault: Vault::with_bucket(coin_bucket),
             mode: PoolMode::Normal,
+            last_price: price,
         };
 
         (pool, creator_coin_bucket)
@@ -130,11 +134,13 @@ impl Pool {
         .unwrap();
         let coin_amount_bought = self.coin_vault.amount() - new_coin_amount;
 
+        self.last_price = base_coin_bucket.amount() / coin_amount_bought;
+
         Runtime::emit_event(
             BuyEvent {
                 resource_address: self.coin_vault.resource_address(),
                 amount: coin_amount_bought,
-                price: base_coin_bucket.amount() / coin_amount_bought,
+                price: self.last_price,
                 coins_in_pool: new_coin_amount,
             }
         );
@@ -182,11 +188,13 @@ impl Pool {
             }
         };
 
+        self.last_price = base_coin_bucket.amount() / coin_bucket.amount();
+
         Runtime::emit_event(
             SellEvent {
                 resource_address: self.coin_vault.resource_address(),
                 amount: coin_bucket.amount(),
-                price: base_coin_bucket.amount() / coin_bucket.amount(),
+                price: self.last_price,
                 coins_in_pool: self.coin_vault.amount() + coin_bucket.amount(),
                 mode: self.mode,
             }

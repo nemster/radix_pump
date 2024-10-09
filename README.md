@@ -4,7 +4,7 @@ This blueprint implements a marketplace where people can create, buy, sell and t
 
 ## Fair launch
 
-To create a new coin you have to deposit an amount of a base coin. It's up to the component owner, during instatiation, to decide which base coin to use (XRD or another one) and the minimum deposit amount needed to crate a new coin.  
+To create a new coin you have to deposit an amount of a base coin. It's up to the component owner, during instatiation, to decide which base coin to use (XRD or another one) and the minimum deposit amount needed to create a new coin.  
 When a new coin is created the creator gets a share of it at about the same price as the earliest buyers of the coin.  
 
 ## Modified constant product formula

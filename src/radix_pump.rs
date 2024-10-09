@@ -85,6 +85,7 @@ mod radix_pump {
         coin_creator_badge_resource_manager: ResourceManager,
         flash_loan_nft_resource_manager: ResourceManager,
         last_coin_creator_badge_id: u64,
+        last_transient_nft_id: u64,
         forbidden_symbols: KeyValueStore<String, u64>,
         forbidden_names: KeyValueStore<String, u64>,
         pools: KeyValueStore<ResourceAddress, Pool>,
@@ -197,6 +198,7 @@ mod radix_pump {
                 coin_creator_badge_resource_manager: coin_creator_badge_resource_manager,
                 flash_loan_nft_resource_manager: flash_loan_nft_resource_manager,
                 last_coin_creator_badge_id: 0,
+                last_transient_nft_id: 0,
                 forbidden_symbols: KeyValueStore::new(),
                 forbidden_names: KeyValueStore::new(),
                 pools: KeyValueStore::new(),
@@ -476,8 +478,10 @@ mod radix_pump {
         ) -> (Bucket, Bucket) {
             let (coin_bucket, price) = self.pools.get_mut(&coin_address).expect("Coin not found").get_flash_loan(amount);
 
+            self.last_transient_nft_id += 1;
+
             let transient_nft_bucket = self.flash_loan_nft_resource_manager.mint_non_fungible(
-                &NonFungibleLocalId::integer(1), //TODO: do not use always 1
+                &NonFungibleLocalId::integer(self.last_transient_nft_id),
                 FlashLoanData {
                     coin_resource_address: coin_address,
                     coin_amount: amount,

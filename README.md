@@ -34,6 +34,14 @@ The user must return a fee in base coin together with the borrowed coins in the 
  
 The component owner gets his own fee percentage while the coin creator can set a fee percentage that goes to the pool. Both fees are paid in base coins.  
 
+## Pool fees
+
+A coin creator can set fees on buy, sell and flash loan operations for his coin.  
+
+The component owner can set the upper limit for buy/sell and flash loan fees; by default this limit is 10%. the limit also applies retroactively to coins already created.  
+
+No one can retrieve pool fees, the paid base coins just get into the pool itself. The effect is a coin price increase.  
+
 ## Known limitations
 
 To avoid math overflows the supply of the created coins can't be bigger than 10^20.  
@@ -144,7 +152,8 @@ CALL_METHOD
     "<COIN_ICON_URL>"
     "<COIN_DESCRIPTION>"
     Decimal("<COIN_SUPPLY>")
-    Decimal("<BUY_SELL_POOL_FEE_PERCENTAGE>")
+    Decimal("<BUY_POOL_FEE_PERCENTAGE>")
+    Decimal("<SELL_POOL_FEE_PERCENTAGE>")
     Decimal("<FLASH_LOAN_POOL_FEE_PERCENTAGE>")
 ;
 CALL_METHOD
@@ -156,15 +165,15 @@ CALL_METHOD
 
 `<ACCOUNT_ADDRESS>` is the account of the user creating the new coin.  
 `<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
-`<BASE_COIN_AMOUNT>` is the base coin amount used to initialize the pool. It must be no less than the `<MINIMUM_DEPOSIT>` specifiled during the component creation. Not all of the amount goes into the pool: a percentage of `<CREATION_FEE_PERCENTAGE>` of this amount is credited to the component owner who can withdraw it later.  
-`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<BASE_COIN_AMOUNT>` is the base coin amount used to initialize the pool. It must be no less than the `<MINIMUM_DEPOSIT>` specifiled during the component creation. Not all of the amount goes into the pool: a percentage of `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<COIN_SYMBOL>` is the symbol to assign to the new coin. This is converted to uppercase and checked against all of the previously created coins' symbols and all of the symbols forbidden by the component owner.  
 `<COIN_NAME>` is the name to assign to the new coin. This is checked against all of the previously created coins' names and all of the names forbidden by the component owner.  
 `<COIN_ICON_URL>` is the URL of the image to assign as icon to the new coin; it must be a valid URL.  
 `<COIN_DESCRIPTION>` is a descriptive text that is added to the coin metadata (can be empty).  
 `<COIN_SUPPLY>` is the initial supply of the new coin. It is not be possible to incease the supply later but it can be reduced by burning coins.  
-`<BUY_SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the coin pool.  
-`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool.  
+`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
+`<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
+`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
 
 The coin creator receives a creator badge NFT that shows in the wallet a numeric ID and the resource address of the new created coin.  
 This badge can be later used to:  
@@ -419,9 +428,9 @@ CALL_METHOD
 `<LOAN_AMOUNT>` is the requested loan amount.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 
-### Update flash loan pool fee percentage
+### Update pool fee percentage
 
-A coin creator can modify the `flash_loan_pool_fee_percentage` specified at coin creation time.  
+A coin creator can modify the pool fees specified at coin creation time.  
 
 ```
 CALL_METHOD
@@ -437,7 +446,8 @@ CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "update_pool_fee_percentage"
     Proof("creator_proof")
-    Decimal("<BUY_SELL_FEE_PERCENTAGE>")
+    Decimal("<BUY_FEE_PERCENTAGE>")
+    Decimal("<SELL_FEE_PERCENTAGE>")
     Decimal("<FLASH_LOAN_FEE_PERCENTAGE>")
 ;
 ```
@@ -446,7 +456,8 @@ CALL_METHOD
 `<CREATOR_BADGE_ADDRESS>` is the badge receaved when creating the coin.  
 `<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
-`<BUY_SELL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers.  
+`<BUY_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers. The upper limit for this parameter can be changed by the componet owner.  
+`<SELL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers. The upper limit for this parameter can be changed by the componet owner.  
 `<FLASH_LOAN_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the component owner.  
 
 ### Get pool information
@@ -465,14 +476,14 @@ CALL_METHOD
 `<COIN_ADDRESS>` is the resource address of the coin the user wants to receve information about.  
 
 The method returns these information:  
-- the amount of base coins in the coin pool
-- the amount of coins in the pool
-- the price of the last buy or sell operation
-- the buy fee percentage.  
-- the sell fee percentage.  
-- the total fee percentage for flash loans of the specified coin
-- the pool mode (Normal or Liquidation)
-- the resource address of the transient NFT used in flash loans (it's the same for all of the coins).
+- the amount of base coins in the coin pool.  
+- the amount of coins in the pool.  
+- the price of the last buy or sell operation.  
+- total (component owner + pool) buy fee percentage.  
+- total (component owner + pool) sell fee percentage.  
+- total (component owner + pool) flash loan fee percentage.  
+- the pool mode (Normal or Liquidation).  
+- the resource address of the transient NFT used in flash loans (it's the same for all of the coins).  
 
 ## Copyright
 

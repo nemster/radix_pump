@@ -14,7 +14,8 @@ pub struct NewCoinEvent {
     price: Decimal,
     coins_in_pool: Decimal,
     creator_allocation: Decimal,
-    buy_sell_pool_fee_percentage: Decimal,
+    buy_pool_fee_percentage: Decimal,
+    sell_pool_fee_percentage: Decimal,
     flash_loan_pool_fee_percentage: Decimal,
 }
 
@@ -55,7 +56,8 @@ pub struct Pool {
     coin_vault: Vault,
     mode: PoolMode,
     last_price: Decimal,
-    buy_sell_pool_fee_percentage: Decimal,
+    buy_pool_fee_percentage: Decimal,
+    sell_pool_fee_percentage: Decimal,
     flash_loan_pool_fee_percentage: Decimal,
 }
 
@@ -66,7 +68,8 @@ impl Pool {
     pub fn new(
         base_coin_bucket: Bucket,
         mut coin_bucket: Bucket,
-        buy_sell_pool_fee_percentage: Decimal,
+        buy_pool_fee_percentage: Decimal,
+        sell_pool_fee_percentage: Decimal,
         flash_loan_pool_fee_percentage: Decimal,
     ) -> (Pool, Bucket) {
         let base_coin_bucket_amount = PreciseDecimal::from(base_coin_bucket.amount());
@@ -94,7 +97,8 @@ impl Pool {
                 price: price,
                 coins_in_pool: coin_bucket.amount(),
                 creator_allocation: coin_amount_bought,
-                buy_sell_pool_fee_percentage: buy_sell_pool_fee_percentage,
+                buy_pool_fee_percentage: buy_pool_fee_percentage,
+                sell_pool_fee_percentage: sell_pool_fee_percentage,
                 flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
             }
         );
@@ -104,7 +108,8 @@ impl Pool {
             coin_vault: Vault::with_bucket(coin_bucket),
             mode: PoolMode::Normal,
             last_price: price,
-            buy_sell_pool_fee_percentage: buy_sell_pool_fee_percentage,
+            buy_pool_fee_percentage: buy_pool_fee_percentage,
+            sell_pool_fee_percentage: sell_pool_fee_percentage,
             flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
         };
 
@@ -144,7 +149,7 @@ impl Pool {
 
         // Check if the component owner lowered max_buy_sell_pool_fee_percentage after the creator 
         // set a higher buy_sell_pool_fee_percentage
-        let fee_percentage = min(max_buy_sell_pool_fee_percentage, self.buy_sell_pool_fee_percentage);
+        let fee_percentage = min(max_buy_sell_pool_fee_percentage, self.buy_pool_fee_percentage);
 
         let fee_bucket = base_coin_bucket.take_advanced(
             base_coin_bucket.amount() * fee_percentage / dec!(100),
@@ -208,7 +213,7 @@ impl Pool {
 
                 // Check if the component owner lowered max_buy_sell_pool_fee_percentage after the creator 
                 // set a higher buy_sell_pool_fee_percentage
-                let fee_percentage = min(max_buy_sell_pool_fee_percentage, self.buy_sell_pool_fee_percentage);
+                let fee_percentage = min(max_buy_sell_pool_fee_percentage, self.sell_pool_fee_percentage);
 
                 let fee_bucket = base_coin_bucket.take_advanced(
                     base_coin_bucket.amount() * fee_percentage / dec!(100),
@@ -308,12 +313,13 @@ impl Pool {
         self.coin_vault.put(coin_bucket);
     }
 
-    pub fn get_pool_info(&self) -> (Decimal, Decimal, Decimal, Decimal, Decimal, PoolMode) {
+    pub fn get_pool_info(&self) -> (Decimal, Decimal, Decimal, Decimal, Decimal, Decimal, PoolMode) {
         (
             self.base_coin_vault.amount(),
             self.coin_vault.amount(),
             self.last_price,
-            self.buy_sell_pool_fee_percentage,
+            self.buy_pool_fee_percentage,
+            self.sell_pool_fee_percentage,
             self.flash_loan_pool_fee_percentage,
             self.mode,
         )
@@ -321,10 +327,12 @@ impl Pool {
 
     pub fn update_pool_fee_percentage(
         &mut self,
-        buy_sell_pool_fee_percentage: Decimal,
+        buy_pool_fee_percentage: Decimal,
+        sell_pool_fee_percentage: Decimal,
         flash_loan_pool_fee_percentage: Decimal,
     ) {
-        self.buy_sell_pool_fee_percentage = buy_sell_pool_fee_percentage;
+        self.buy_pool_fee_percentage = buy_pool_fee_percentage;
+        self.sell_pool_fee_percentage = sell_pool_fee_percentage;
         self.flash_loan_pool_fee_percentage = flash_loan_pool_fee_percentage;
     }
 }

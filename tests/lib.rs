@@ -34,13 +34,15 @@ fn test_insufficient_deposit() {
         &mut env
     ).unwrap();
 
-    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(minimum_deposit - dec!(1), &mut env).unwrap(),
         "COIN".to_string(),
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -80,13 +82,15 @@ fn test_empty_name() {
         &mut env
     ).unwrap();
 
-    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(minimum_deposit, &mut env).unwrap(),
         "COIN".to_string(),
         "    ".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "A test coin with only spaces in the name".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -126,13 +130,15 @@ fn test_empty_symbol() {
         &mut env
     ).unwrap();
 
-    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(minimum_deposit, &mut env).unwrap(),
         "  ".to_string(),
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "A test coin wih only spaces in the symbol".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -172,26 +178,30 @@ fn test_same_symbol() {
         &mut env
     ).unwrap();
 
-    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(minimum_deposit, &mut env).unwrap(),
         " CoiN".to_string(),
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
         &mut env
     ).unwrap();
 
-    let (_coin_creator_badge2_bucket, _coin_bucket2) = radix_pump.create_new_coin(
+    let (_coin_creator_badge2_bucket, _coin_bucket2) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(minimum_deposit, &mut env).unwrap(),
         "COIn ".to_string(),
         "AnotherCoin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Another coin with a very similar symbol".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -231,26 +241,30 @@ fn test_same_name() {
         &mut env
     ).unwrap();
 
-    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(minimum_deposit, &mut env).unwrap(),
         "COIN".to_string(),
         "Coin ".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
         &mut env
     ).unwrap();
 
-    let (_coin_creator_badge2_bucket, _coin_bucket2) = radix_pump.create_new_coin(
+    let (_coin_creator_badge2_bucket, _coin_bucket2) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(minimum_deposit, &mut env).unwrap(),
         "COIN2".to_string(),
         " COIN ".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Another coin with a very similar name".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -291,13 +305,15 @@ fn test_forbid_symbols() {
 
     radix_pump.forbid_symbols(vec!["XRD".to_string()], &mut env).unwrap();
 
-    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(dec!(100), &mut env).unwrap(),
         "xrd".to_string(),
         "Radix".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "A coin with the same name and symbol as XRD".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -338,13 +354,15 @@ fn test_forbid_names() {
 
     radix_pump.forbid_names(vec!["radix".to_string()], &mut env).unwrap();
 
-    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(dec!(100), &mut env).unwrap(),
         "xrd".to_string(),
         " Radix ".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "A coin with the same name and symbol as XRD".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -383,13 +401,15 @@ fn test_buy() -> Result<(), RuntimeError> {
     radix_pump.forbid_symbols(vec!["XRD".to_string()], &mut env)?;
     radix_pump.forbid_names(vec!["Radix".to_string()], &mut env)?;
 
-    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(dec!(100), &mut env)?,
         "COIN".to_string(),
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -451,13 +471,15 @@ fn test_buy_wrong_coin() {
         &mut env
     ).unwrap();
 
-    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(dec!(100), &mut env).unwrap(),
         "COIN".to_string(),
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -502,13 +524,15 @@ fn test_sell() -> Result<(), RuntimeError> {
     radix_pump.forbid_symbols(vec!["XRD".to_string()], &mut env)?;
     radix_pump.forbid_names(vec!["Radix".to_string()], &mut env)?;
 
-    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(dec!(100), &mut env)?,
         "COIN".to_string(),
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -567,13 +591,15 @@ fn test_sell_wrong_coin() {
         &mut env
     ).unwrap();
 
-    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, _coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(dec!(100), &mut env).unwrap(),
         "COIN".to_string(),
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -617,13 +643,15 @@ fn test_fees() -> Result<(), RuntimeError> {
     )?;
 
     let deposit_amount = dec!(1000);
-    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(deposit_amount, &mut env)?,
         "COIN".to_string(),
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -671,13 +699,15 @@ fn test_fees() -> Result<(), RuntimeError> {
         &mut env
     )?;
 
-    let (_coin_creator_badge_bucket, coin2_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, coin2_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(deposit_amount, &mut env)?,
         "C2".to_string(),
         "Coin 2".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just another test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -735,13 +765,15 @@ fn test_liquidation() -> Result<(), RuntimeError> {
     )?;
 
     let deposit_amount = dec!(1000);
-    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(deposit_amount, &mut env)?,
         "COIN".to_string(),
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -809,13 +841,15 @@ fn test_buy_liquidation() {
         &mut env
     ).unwrap();
 
-    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(dec!(100), &mut env).unwrap(),
         "COIN".to_string(),
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!("0.1"),
         dec!("0.1"),
         dec!("0.1"),
@@ -862,13 +896,15 @@ fn test_flash_loan() -> Result<(), RuntimeError> {
     )?;
 
     let flash_loan_pool_fee_percentage = dec!("0.1");
-    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(dec!(100), &mut env)?,
         "COIN".to_string(),
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!(0.1),
         dec!(0.1),
         flash_loan_pool_fee_percentage,
@@ -876,7 +912,7 @@ fn test_flash_loan() -> Result<(), RuntimeError> {
     )?;
     let coin_address = coin_bucket1.resource_address(&mut env)?;
 
-    let (_, _, price, _, _, flash_loan_total_fee_percentage, _, _) = radix_pump.get_pool_info(coin_address, &mut env)?;
+    let (_, _, price, _, _, flash_loan_total_fee_percentage, _, _, _, _, _, _) = radix_pump.get_pool_info(coin_address, &mut env)?;
     panic_if_significantly_different(
         flash_loan_total_fee_percentage,
         flash_loan_pool_fee_percentage + flash_loan_fee_percentage * (100 + flash_loan_pool_fee_percentage) / dec!(100),
@@ -931,13 +967,15 @@ fn test_flash_loan_insufficient_fees() {
     ).unwrap();
 
     let flash_loan_pool_fee_percentage = dec!("0.1");
-    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(dec!(100), &mut env).unwrap(),
         "COIN".to_string(),
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!(0.1),
         dec!(0.1),
         flash_loan_pool_fee_percentage,
@@ -945,7 +983,7 @@ fn test_flash_loan_insufficient_fees() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, price, _, _, flash_loan_total_fee_percentage, _, _) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let (_, _, price, _, _, flash_loan_total_fee_percentage, _, _, _, _, _, _) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
 
     let (coin_bucket2, transient_nft_bucket) = radix_pump.get_flash_loan(
         coin_address,
@@ -993,13 +1031,15 @@ fn test_flash_loan_insufficient_amount() {
     ).unwrap();
 
     let flash_loan_pool_fee_percentage = dec!("0.1");
-    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.create_new_coin(
+    let (_coin_creator_badge_bucket, coin_bucket1) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(dec!(100), &mut env).unwrap(),
         "COIN".to_string(),
         "Coin".to_string(),
         "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
         "Just a test coin".to_string(),
+        "".to_string(),
         dec!(1000000),
+        dec!(1),
         dec!(0.1),
         dec!(0.1),
         flash_loan_pool_fee_percentage,
@@ -1007,7 +1047,7 @@ fn test_flash_loan_insufficient_amount() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, price, _, _, flash_loan_total_fee_percentage, _, _) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let (_, _, price, _, _, flash_loan_total_fee_percentage, _, _, _, _, _, _) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
 
     let (coin_bucket2, transient_nft_bucket) = radix_pump.get_flash_loan(
         coin_address,

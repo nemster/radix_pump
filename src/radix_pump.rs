@@ -3,21 +3,17 @@ use scrypto::prelude::rust::cmp::*;
 use crate::pool::*;
 
 // Metadata for the coin creator badge
-static COIN_CREATOR_BADGE_NAME: &str = "Coin creator badge";
+static CREATOR_BADGE_NAME: &str = "Coin creator badge";
 
 // Metadata for the flash loan transient NFT
 static TRANSIENT_NFT_NAME: &str = "Flash loan transient NFT";
 
-// Maximum allwed supply
-// Although the math should be safe thans to the use of PreciseDecimal and properly optimized
-// formulas, for additional security it's safer to limit the number of coins to less than
-// the square root of Decimal::MAX
-static MAX_SUPPLY: Decimal = dec!("100000000000000000000");
-
 // Coin creator badge NFT data
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
-struct CoinCreatorData {
+struct CreatorData {
     coin_resource_address: ResourceAddress,
+    coin_name: String,
+    coin_symbol: String,
     creation_date: Instant,
 }
 
@@ -31,7 +27,9 @@ struct FlashLoanData {
 
 #[blueprint]
 #[events(
-    NewCoinEvent,
+    FairLaunchStartEvent,
+    FairLaunchEndEvent,
+    QuickLaunchEvent,
     BuyEvent,
     SellEvent,
     LiquidationEvent,
@@ -39,7 +37,7 @@ struct FlashLoanData {
 )]
 #[types(
     u64,
-    CoinCreatorData,
+    CreatorData,
     FlashLoanData,
 )]
 mod radix_pump {
@@ -48,7 +46,8 @@ mod radix_pump {
         methods {
             forbid_symbols => restrict_to: [OWNER];
             forbid_names => restrict_to: [OWNER];
-            create_new_coin => PUBLIC;
+            new_fair_launch => PUBLIC;
+            new_quick_launch => PUBLIC;
             buy => PUBLIC;
             sell => PUBLIC;
             get_fees => restrict_to: [OWNER];
@@ -59,6 +58,10 @@ mod radix_pump {
             return_flash_loan => PUBLIC;
             update_pool_fee_percentage => PUBLIC;
             get_pool_info => PUBLIC;
+            update_time_limits => restrict_to: [OWNER];
+            launch => PUBLIC;
+            terminate_launch => PUBLIC;
+            unlock => PUBLIC;
         }
     }
 
@@ -66,25 +69,30 @@ mod radix_pump {
         new => Free;
         forbid_symbols => Free;
         forbid_names => Free;
-        create_new_coin => Usd(dec!("0.05"));
+        new_fair_launch => Usd(dec!("0.05"));
+        new_quick_launch => Usd(dec!("0.05"));
         buy => Usd(dec!("0.005"));
         sell => Usd(dec!("0.005"));
         get_fees => Free;
         update_fees => Free;
         owner_set_liquidation_mode => Free;
         creator_set_liquidation_mode => Free;
-        get_flash_loan => Usd(dec!("0.001"));
+        get_flash_loan => Usd(dec!("0.002"));
         return_flash_loan => Free;
         update_pool_fee_percentage => Free;
         get_pool_info => Free;
+        update_time_limits => Free;
+        launch => Free;
+        terminate_launch => Free;
+        unlock => Usd(dec!("0.005"));
     }
 
     struct RadixPump {
         base_coin_address: ResourceAddress,
         minimum_deposit: Decimal,
-        coin_creator_badge_resource_manager: ResourceManager,
+        creator_badge_resource_manager: ResourceManager,
         flash_loan_nft_resource_manager: ResourceManager,
-        last_coin_creator_badge_id: u64,
+        next_creator_badge_id: u64,
         last_transient_nft_id: u64,
         forbidden_symbols: KeyValueStore<String, u64>,
         forbidden_names: KeyValueStore<String, u64>,
@@ -95,6 +103,8 @@ mod radix_pump {
         fee_vault: Vault,
         max_buy_sell_pool_fee_percentage: Decimal,
         max_flash_loan_pool_fee_percentage: Decimal,
+        min_launch_duration: i64,
+        min_lock_duration: i64,
     }
 
     impl RadixPump {
@@ -130,7 +140,7 @@ mod radix_pump {
             let (address_reservation, component_address) = Runtime::allocate_component_address(RadixPump::blueprint_id());
 
             // Create a ResourceManager for minting coin creator badges
-            let coin_creator_badge_resource_manager = ResourceBuilder::new_integer_non_fungible_with_registered_type::<CoinCreatorData>(
+            let creator_badge_resource_manager = ResourceBuilder::new_integer_non_fungible_with_registered_type::<CreatorData>(
                 OwnerRole::Updatable(rule!(require(owner_badge_address)))
             )
             .metadata(metadata!(
@@ -141,7 +151,7 @@ mod radix_pump {
                     metadata_locker_updater => rule!(require(owner_badge_address));
                 },
                 init {
-                    "name" => COIN_CREATOR_BADGE_NAME, updatable;
+                    "name" => CREATOR_BADGE_NAME, updatable;
                 }
             ))
             .mint_roles(mint_roles!(
@@ -195,9 +205,9 @@ mod radix_pump {
             Self {
                 base_coin_address: base_coin_address.clone(),
                 minimum_deposit: minimum_deposit,
-                coin_creator_badge_resource_manager: coin_creator_badge_resource_manager,
+                creator_badge_resource_manager: creator_badge_resource_manager,
                 flash_loan_nft_resource_manager: flash_loan_nft_resource_manager,
-                last_coin_creator_badge_id: 0,
+                next_creator_badge_id: 1,
                 last_transient_nft_id: 0,
                 forbidden_symbols: KeyValueStore::new(),
                 forbidden_names: KeyValueStore::new(),
@@ -208,6 +218,8 @@ mod radix_pump {
                 fee_vault: Vault::new(base_coin_address),
                 max_buy_sell_pool_fee_percentage: dec!(10),
                 max_flash_loan_pool_fee_percentage: dec!(10),
+                min_launch_duration: 604800, // One week
+                min_lock_duration: 7776000 // Three months
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
@@ -235,32 +247,12 @@ mod radix_pump {
             }
         }
 
-        // A user can create a new coin depositing enough base coins.
-        // He gets a fair share of coins and a badge to manage the metadata
-        pub fn create_new_coin(
+        fn check_fees(
             &mut self,
-            mut base_coin_bucket: Bucket,
-            mut coin_symbol: String,
-            mut coin_name: String,
-            coin_icon_url: String,
-            coin_description: String,
-            coin_supply: Decimal,
             buy_pool_fee_percentage: Decimal,
             sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee_percentage: Decimal,
-        ) -> (Bucket, Bucket) {
-            assert!(
-                base_coin_bucket.resource_address() == self.base_coin_address,
-                "Wrong base coin deposited",
-            );
-            assert!(
-                base_coin_bucket.amount() >= self.minimum_deposit,
-                "Insufficient base coin deposit",
-            );
-            assert!(
-                coin_supply <= MAX_SUPPLY,
-                "Coin supply is too big",
-            );
+        ) {
             assert!(
                 buy_pool_fee_percentage >= Decimal::ZERO && buy_pool_fee_percentage < self.max_buy_sell_pool_fee_percentage,
                 "Buy pool fee percentage can go from 0 (included) to {} (excluded)",
@@ -276,10 +268,15 @@ mod radix_pump {
                 "Flash loan pool fee percentage can go from 0 (included) to {} (excluded)",
                 self.max_flash_loan_pool_fee_percentage,
             );
+        }
 
-            self.last_coin_creator_badge_id += 1;
-
-            // Enforce uniqueness of coins' symbols and names
+        fn check_metadata(
+            &mut self,
+            mut coin_symbol: String,
+            mut coin_name: String,
+            mut coin_icon_url: String,
+            mut coin_info_url: String,
+        ) -> (String, String, String, String) {
             coin_symbol = coin_symbol.trim().to_uppercase();
             assert!(
                 coin_symbol.len() > 0,
@@ -289,7 +286,7 @@ mod radix_pump {
                 self.forbidden_symbols.get(&coin_symbol).is_none(),
                 "Symbol already used",
             );
-            self.forbidden_symbols.insert(coin_symbol.clone(), self.last_coin_creator_badge_id);
+            self.forbidden_symbols.insert(coin_symbol.clone(), self.next_creator_badge_id);
             coin_name = coin_name.trim().to_string();
             assert!(
                 coin_name.len() > 0,
@@ -300,49 +297,79 @@ mod radix_pump {
                 self.forbidden_names.get(&uppercase_coin_name).is_none(),
                 "Name already used",
             );
-            self.forbidden_names.insert(uppercase_coin_name, self.last_coin_creator_badge_id);
+            self.forbidden_names.insert(uppercase_coin_name, self.next_creator_badge_id);
+            coin_icon_url = coin_icon_url.trim().to_string();
+            coin_info_url = coin_info_url.trim().to_string();
 
-            // Each coin can be managed by one single NFT of the collection, a NonFungibleGlobalId
-            // is needed for this
-            let coin_creator_badge_rule = AccessRule::Protected(
-                AccessRuleNode::ProofRule(
-                    ProofRule::Require (
-                        ResourceOrNonFungible::NonFungible (
-                            NonFungibleGlobalId::new(
-                                self.coin_creator_badge_resource_manager.address(),
-                                NonFungibleLocalId::integer(self.last_coin_creator_badge_id.into()),
-                            )
-                        )
-                    )
-                )
+            (coin_symbol, coin_name, coin_icon_url, coin_info_url)
+        }
+
+        pub fn new_fair_launch(
+            &mut self,
+            mut coin_symbol: String,
+            mut coin_name: String,
+            mut coin_icon_url: String,
+            coin_description: String,
+            mut coin_info_url: String,
+            launch_price: Decimal,
+            creator_locked_percentage: Decimal,
+            buy_pool_fee_percentage: Decimal,
+            sell_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee_percentage: Decimal,
+        ) -> Bucket {
+            self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee_percentage);
+
+            (coin_symbol, coin_name, coin_icon_url, coin_info_url) =
+                self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
+
+            let (pool, coin_resource_address) = Pool::new_fair_launch(
+                coin_symbol.clone(),
+                coin_name.clone(),
+                coin_icon_url,
+                coin_description,
+                coin_info_url,
+                launch_price,
+                creator_locked_percentage,
+                buy_pool_fee_percentage,
+                sell_pool_fee_percentage,
+                flash_loan_pool_fee_percentage,
+                self.next_creator_badge_rule(),
+                self.base_coin_address,
+            );
+            self.pools.insert(
+                coin_resource_address,
+                pool,
             );
 
-            let coin_bucket: Bucket = ResourceBuilder::new_fungible(OwnerRole::Fixed(coin_creator_badge_rule.clone()))
-            .metadata(metadata!(
-                roles {
-                    metadata_setter => coin_creator_badge_rule.clone();
-                    metadata_setter_updater => rule!(deny_all);
-                    metadata_locker => coin_creator_badge_rule.clone();
-                    metadata_locker_updater => rule!(deny_all);
-                },
-                init {
-                    "symbol" => coin_symbol, locked;
-                    "name" => coin_name, locked;
-                    "icon_url" => MetadataValue::Url(UncheckedUrl::of(coin_icon_url)), updatable;
-                    "description" => coin_description, updatable;
-                }
-            ))
-            .mint_roles(mint_roles!(
-                minter => rule!(deny_all);
-                minter_updater => rule!(deny_all);
-            ))
-            .burn_roles(burn_roles!(
-                burner => coin_creator_badge_rule.clone();
-                burner_updater => coin_creator_badge_rule;
-            ))
-            .divisibility(DIVISIBILITY_MAXIMUM)
-            .mint_initial_supply(coin_supply)
-            .into();
+            self.mint_creator_badge(
+                coin_resource_address,
+                coin_name,
+                coin_symbol,
+            )
+        }
+
+        pub fn new_quick_launch(
+            &mut self,
+            mut base_coin_bucket: Bucket,
+            mut coin_symbol: String,
+            mut coin_name: String,
+            mut coin_icon_url: String,
+            coin_description: String,
+            mut coin_info_url: String,
+            coin_supply: Decimal,
+            coin_price: Decimal,
+            buy_pool_fee_percentage: Decimal,
+            sell_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee_percentage: Decimal,
+        ) -> (Bucket, Bucket) {
+            assert!(
+                base_coin_bucket.resource_address() == self.base_coin_address,
+                "Wrong base coin deposited",
+            );
+            assert!(
+                base_coin_bucket.amount() >= self.minimum_deposit,
+                "Insufficient base coin deposit",
+            );
 
             self.fee_vault.put(
                 base_coin_bucket.take_advanced(
@@ -351,27 +378,37 @@ mod radix_pump {
                 )
             );
 
-            let coin_creator_badge_bucket = self.coin_creator_badge_resource_manager.mint_non_fungible(
-                &NonFungibleLocalId::integer(self.last_coin_creator_badge_id.into()),
-                CoinCreatorData {
-                    coin_resource_address: coin_bucket.resource_address(),
-                    creation_date: Clock::current_time_rounded_to_seconds(),
-                }
-            );
+            self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee_percentage);
 
-            let (pool, coin_creator_coin_bucket) = Pool::new(
-                base_coin_bucket, 
-                coin_bucket,
+            (coin_symbol, coin_name, coin_icon_url, coin_info_url) =
+                self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
+
+            let (pool, creator_coin_bucket) = Pool::new_quick_launch(
+                base_coin_bucket,
+                coin_symbol.clone(),
+                coin_name.clone(),
+                coin_icon_url,
+                coin_description,
+                coin_info_url,
+                coin_supply,
+                coin_price,
                 buy_pool_fee_percentage,
                 sell_pool_fee_percentage,
                 flash_loan_pool_fee_percentage,
+                self.next_creator_badge_rule(),
             );
             self.pools.insert(
-                coin_creator_coin_bucket.resource_address(),
+                creator_coin_bucket.resource_address(),
                 pool,
             );
 
-            (coin_creator_badge_bucket, coin_creator_coin_bucket)
+            let creator_badge_bucket = self.mint_creator_badge(
+                creator_coin_bucket.resource_address(),
+                coin_name,
+                coin_symbol,
+            );
+
+            (creator_badge_bucket, creator_coin_bucket)
         }
 
         pub fn buy(
@@ -393,10 +430,7 @@ mod radix_pump {
 
             self.pools.get_mut(&coin_address)
             .expect("Coin not found")
-            .buy(
-                base_coin_bucket,
-                self.max_buy_sell_pool_fee_percentage,
-            )
+            .buy(base_coin_bucket)
         }
 
         pub fn sell(
@@ -405,10 +439,7 @@ mod radix_pump {
         ) -> Bucket {
             let mut base_coin_bucket = self.pools.get_mut(&coin_bucket.resource_address())
             .expect("Coin not found")
-            .sell(
-                coin_bucket,
-                self.max_buy_sell_pool_fee_percentage,
-            );
+            .sell(coin_bucket);
 
             self.fee_vault.put(
                 base_coin_bucket.take_advanced(
@@ -473,9 +504,9 @@ mod radix_pump {
             &mut self,
             creator_proof: Proof,
         ) {
-            let coin_creator_data = self.get_creator_data(creator_proof);
+            let creator_data = self.get_creator_data(creator_proof);
 
-            self.pools.get_mut(&coin_creator_data.coin_resource_address).unwrap().set_liquidation_mode();
+            self.pools.get_mut(&creator_data.coin_resource_address).unwrap().set_liquidation_mode();
         }
 
         pub fn get_flash_loan(
@@ -528,9 +559,9 @@ mod radix_pump {
 
             let mut pool = self.pools.get_mut(&coin_bucket.resource_address()).unwrap();
 
-            // In order to avoid price manipulation affecting the fees, consider the maximum among the
+            // In order to avoid price manipulation affecting the fees, take the maximum among the
             // price at the moment the flash loan was granted and the current price.
-            let (_, _, mut price, _, _, _, _) = pool.get_pool_info();
+            let (_, _, mut price, _, _, _, _, _, _, _, _) = pool.get_pool_info();
             price = max(price, flash_loan_data.price);
 
             self.fee_vault.put(
@@ -544,7 +575,6 @@ mod radix_pump {
                 base_coin_bucket,
                 coin_bucket,
                 price,
-                self.max_flash_loan_pool_fee_percentage,
             );
         }
 
@@ -555,25 +585,15 @@ mod radix_pump {
             sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee_percentage: Decimal,
         ) {
-            assert!(
-                buy_pool_fee_percentage >= Decimal::ZERO && buy_pool_fee_percentage < self.max_buy_sell_pool_fee_percentage,
-                "Buy pool fee percentage can go from 0 (included) to {} (excluded)",
-                self.max_buy_sell_pool_fee_percentage,
-            );
-            assert!(
-                sell_pool_fee_percentage >= Decimal::ZERO && sell_pool_fee_percentage < self.max_buy_sell_pool_fee_percentage,
-                "Sell pool fee percentage can go from 0 (included) to {} (excluded)",
-                self.max_buy_sell_pool_fee_percentage,
-            );
-            assert!(
-                flash_loan_pool_fee_percentage >= Decimal::ZERO && flash_loan_pool_fee_percentage < self.max_flash_loan_pool_fee_percentage,
-                "Flash loan pool fee percentage can go from 0 (included) to {} (excluded)",
-                self.max_flash_loan_pool_fee_percentage,
+            self.check_fees(
+                buy_pool_fee_percentage,
+                sell_pool_fee_percentage,
+                flash_loan_pool_fee_percentage,
             );
 
-            let coin_creator_data = self.get_creator_data(creator_proof);
+            let creator_data = self.get_creator_data(creator_proof);
 
-            self.pools.get_mut(&coin_creator_data.coin_resource_address).unwrap()
+            self.pools.get_mut(&creator_data.coin_resource_address).unwrap()
             .update_pool_fee_percentage(
                 buy_pool_fee_percentage,
                 sell_pool_fee_percentage,
@@ -584,30 +604,46 @@ mod radix_pump {
         pub fn get_pool_info(
             &self,
             coin_address: ResourceAddress,
-        ) -> (Decimal, Decimal, Decimal, Decimal, Decimal, Decimal, PoolMode, ResourceAddress) {
+        ) -> (
+            Decimal,
+            Decimal,
+            Decimal,
+            Decimal,
+            Decimal,
+            Decimal,
+            PoolMode,
+            Option<i64>,
+            Option<i64>,
+            Option<Decimal>,
+            Option<Decimal>,
+            ResourceAddress,
+        ) {
             let (
                 base_coin_amount,
                 coin_amount,
                 last_price,
-                mut buy_pool_fee_percentage,
-                mut sell_pool_fee_percentage,
-                mut flash_loan_pool_fee_percentage,
+                buy_pool_fee_percentage,
+                sell_pool_fee_percentage,
+                flash_loan_pool_fee_percentage,
                 pool_mode,
+                end_launch_time,
+                unlocking_time,
+                initial_locked_amount,
+                unlocked_amount,
             ) = self.pools.get(&coin_address).expect("Coin not found").get_pool_info();
-
-            // Check if the component owner has lowered max pool fees after pool fees have been set
-            buy_pool_fee_percentage = min(buy_pool_fee_percentage, self.max_buy_sell_pool_fee_percentage);
-            sell_pool_fee_percentage = min(sell_pool_fee_percentage, self.max_buy_sell_pool_fee_percentage);
-            flash_loan_pool_fee_percentage = min(flash_loan_pool_fee_percentage, self.max_flash_loan_pool_fee_percentage);
 
             (
                 base_coin_amount,
                 coin_amount,
                 last_price,
-                buy_pool_fee_percentage + self.buy_sell_fee_percentage * (100 + buy_pool_fee_percentage) / dec!(100),
-                self.buy_sell_fee_percentage + sell_pool_fee_percentage * (100 + self.buy_sell_fee_percentage) / dec!(100),
-                flash_loan_pool_fee_percentage + self.flash_loan_fee_percentage * (100 + flash_loan_pool_fee_percentage) / dec!(100),
+                self.buy_sell_fee_percentage + buy_pool_fee_percentage * (100 - self.buy_sell_fee_percentage) / dec!(100),
+                sell_pool_fee_percentage + self.buy_sell_fee_percentage * (100 - sell_pool_fee_percentage) / dec!(100),
+                flash_loan_pool_fee_percentage + self.flash_loan_fee_percentage,
                 pool_mode,
+                end_launch_time,
+                unlocking_time,
+                initial_locked_amount,
+                unlocked_amount,
                 self.flash_loan_nft_resource_manager.address(),
             )
         }
@@ -615,15 +651,135 @@ mod radix_pump {
         fn get_creator_data(
             &self,
             creator_proof: Proof
-        ) -> CoinCreatorData {
+        ) -> CreatorData {
             creator_proof.check_with_message(
-                self.coin_creator_badge_resource_manager.address(),
+                self.creator_badge_resource_manager.address(),
                 "Wrong badge",
             )
             .as_non_fungible()
-            .non_fungible::<CoinCreatorData>()
+            .non_fungible::<CreatorData>()
             .data()
         }
 
+        pub fn update_time_limits(
+            &mut self,
+            min_launch_duration: i64,
+            min_lock_duration: i64,
+        ) {
+            assert!(
+                min_launch_duration > 0,
+                "Min launch duration must be bigger than zero",
+            );
+            self.min_launch_duration = min_launch_duration;
+
+            assert!(
+                min_lock_duration > 0,
+                "Min lock duration must be bigger than zero",
+            );
+            self.min_lock_duration = min_lock_duration;
+        }
+
+        pub fn launch(
+            &mut self,
+            creator_proof: Proof,
+            end_launch_time: i64,
+            unlocking_time: i64,
+        ) {
+
+            assert!(
+                end_launch_time >= Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch + self.min_launch_duration,
+                "Launch time too short",
+            );
+            assert!(
+                unlocking_time >= end_launch_time + self.min_lock_duration,
+                "Lock time too short",
+            );
+
+            self.pools.get_mut(&self.get_creator_data(creator_proof).coin_resource_address)
+            .unwrap()
+            .launch(end_launch_time, unlocking_time);
+        }
+
+        pub fn terminate_launch(
+            &mut self,
+            creator_proof: Proof,
+        ) -> Bucket {
+            let mut base_coin_bucket = self.pools.get_mut(&self.get_creator_data(creator_proof).coin_resource_address)
+            .unwrap()
+            .terminate_launch();
+
+            self.fee_vault.put(
+                base_coin_bucket.take_advanced(
+                    self.creation_fee_percentage * base_coin_bucket.amount() / 100,
+                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                )
+            );
+
+            base_coin_bucket
+        }
+
+        fn mint_creator_badge(
+            &mut self,
+            coin_resource_address: ResourceAddress,
+            coin_name: String,
+            coin_symbol: String,
+        ) -> Bucket {
+            let creator_badge = self.creator_badge_resource_manager.mint_non_fungible(
+                &NonFungibleLocalId::integer(self.next_creator_badge_id.into()),
+                CreatorData {
+                    coin_resource_address: coin_resource_address,
+                    coin_name: coin_name,
+                    coin_symbol: coin_symbol,
+                    creation_date: Clock::current_time_rounded_to_seconds(),
+                }
+            );
+
+            self.next_creator_badge_id += 1;
+
+            creator_badge
+        }
+
+        fn next_creator_badge_rule(&mut self) -> AccessRule {
+            AccessRule::Protected(
+                AccessRuleNode::ProofRule(
+                    ProofRule::Require (
+                        ResourceOrNonFungible::NonFungible (
+                            NonFungibleGlobalId::new(
+                                self.creator_badge_resource_manager.address(),
+                                NonFungibleLocalId::integer(self.next_creator_badge_id.into()),
+                            )
+                        )
+                    )
+                )
+            )
+        }
+
+        pub fn unlock(
+            &mut self,
+            creator_proof: Proof,
+            amount: Option<Decimal>,
+            sell: bool,
+        ) -> Bucket {
+            let mut pool = self.pools.get_mut(&self.get_creator_data(creator_proof).coin_resource_address)
+            .unwrap();
+
+            let coin_bucket = pool.unlock(amount);
+
+            match sell {
+                false => coin_bucket,
+                true => {
+                    let mut base_coin_bucket = pool.sell(coin_bucket);
+
+                    self.fee_vault.put(
+                        base_coin_bucket.take_advanced(
+                            base_coin_bucket.amount() * self.buy_sell_fee_percentage / dec!(100),
+                            WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                        )
+                     );
+
+                    base_coin_bucket
+                },
+            }
+        }
     }
 }

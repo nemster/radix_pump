@@ -117,6 +117,22 @@ impl Pool {
             burner => coin_creator_badge_rule.clone();
             burner_updater => coin_creator_badge_rule.clone();
         ))
+        .deposit_roles(deposit_roles!(
+            depositor => rule!(allow_all);
+            depositor_updater => rule!(deny_all);
+        ))
+        .withdraw_roles(withdraw_roles!(
+            withdrawer => rule!(allow_all);
+            withdrawer_updater => rule!(deny_all);
+        ))
+        .recall_roles(recall_roles!(
+            recaller => rule!(deny_all);
+            recaller_updater => rule!(deny_all);
+        ))
+        .freeze_roles(freeze_roles!(
+            freezer => rule!(deny_all);
+            freezer_updater => rule!(deny_all);
+        ))
         .divisibility(DIVISIBILITY_MAXIMUM);
 
         match coin_info_url.len() {
@@ -124,9 +140,9 @@ impl Pool {
                 resource_manager.metadata(metadata!(
                     roles {
                         metadata_setter => coin_creator_badge_rule.clone();
-                        metadata_setter_updater => rule!(deny_all);
-                        metadata_locker => coin_creator_badge_rule;
-                        metadata_locker_updater => rule!(deny_all);
+                        metadata_setter_updater => coin_creator_badge_rule.clone();
+                        metadata_locker => coin_creator_badge_rule.clone();
+                        metadata_locker_updater => coin_creator_badge_rule;
                     },
                     init {
                         "symbol" => coin_symbol, locked;
@@ -139,9 +155,9 @@ impl Pool {
                 resource_manager.metadata(metadata!(
                     roles {
                         metadata_setter => coin_creator_badge_rule.clone();
-                        metadata_setter_updater => rule!(deny_all);
-                        metadata_locker => coin_creator_badge_rule;
-                        metadata_locker_updater => rule!(deny_all);
+                        metadata_setter_updater => coin_creator_badge_rule.clone();
+                        metadata_locker => coin_creator_badge_rule.clone();
+                        metadata_locker_updater => coin_creator_badge_rule;
                     },
                     init {
                         "symbol" => coin_symbol, locked;

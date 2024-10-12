@@ -60,8 +60,6 @@ No one can retrieve pool fees, the paid base coins just get into the pool itself
 Compiled with `radixdlt/scrypto-builder:v1.2.0`  
 
 This is the SHA256 of the package files:  
-`eb1e289924e2dfa46eb6ac8decf19327645e95989e7a61e2841f59f3918484d1`  `target/wasm32-unknown-unknown/release/radix_pump.wasm`  
-`2947c2935764e7f4335540925102db31f5807e7423262854624b12e9dfb5ef4e`  `target/wasm32-unknown-unknown/release/radix_pump.rpd`  
 
 ## Transaction manifests
 
@@ -71,7 +69,7 @@ Use this function to create a RadixPump component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("package_tdx_2_1pkhtaq6n85hy6s3c7psmpq4wc0xtqhw0s0f055az39qwq8zg6hpc8f")
+    Address("")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")

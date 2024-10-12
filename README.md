@@ -14,6 +14,8 @@ A FairLaunch happens in multiple steps:
 - The creator closes the launch phase calling the `terminate_launch` method and receives the proceeds of the coin sale (fees excluded). Now the price can move and users can buy and sell the coin at market level, the unlock of the creator coins starts and the supply stops.  
 - Once the launch phase is completed the creator can call the `unlock` whenever he wants; he receives a number of his locked coins proportional to the time passed since the end of the sale.  
 
+The supply is unknown until `terminate_launch` is called: new coins are minted when they are bought during the Launching phase. When launch ends the maximum supply is fixed.  
+
 ### QuickLaunch
 
 To create a new coin you have to deposit an amount of a base coin. It's up to the component owner to decide which base coin to use (XRD or another one) and the minimum deposit amount needed to create a new coin.  
@@ -58,6 +60,8 @@ No one can retrieve pool fees, the paid base coins just get into the pool itself
 Compiled with `radixdlt/scrypto-builder:v1.2.0`  
 
 This is the SHA256 of the package files:  
+`eb1e289924e2dfa46eb6ac8decf19327645e95989e7a61e2841f59f3918484d1`  `target/wasm32-unknown-unknown/release/radix_pump.wasm`  
+`2947c2935764e7f4335540925102db31f5807e7423262854624b12e9dfb5ef4e`  `target/wasm32-unknown-unknown/release/radix_pump.rpd`  
 
 ## Transaction manifests
 
@@ -67,7 +71,7 @@ Use this function to create a RadixPump component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("")
+    Address("package_tdx_2_1pkhtaq6n85hy6s3c7psmpq4wc0xtqhw0s0f055az39qwq8zg6hpc8f")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")

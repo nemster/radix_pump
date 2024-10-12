@@ -222,6 +222,7 @@ impl Pool {
             LaunchType::Fair(ref mut fair_launch) => {
                 self.mode = PoolMode::Launching;
                 fair_launch.end_launch_time = end_launch_time;
+                fair_launch.unlocking_time = unlocking_time;
 
                 Runtime::emit_event(
                     FairLaunchStartEvent {
@@ -407,7 +408,7 @@ impl Pool {
     ) -> Bucket {
         let fee = base_coin_bucket.amount() * self.buy_pool_fee_percentage / dec!(100);
 
-        let (coin_amount_bought, coins_in_pool) = match self.mode {
+        let (coin_bucket, coins_in_pool) = match self.mode {
             PoolMode::Normal => {
                 let (constant_product, ignored_coins) = self.custom_costant_product();
 
@@ -423,12 +424,23 @@ impl Pool {
 
                 self.last_price = base_coin_bucket.amount() / coin_amount_bought;
 
-                (coin_amount_bought, coins_in_pool)
+                (self.coin_vault.take(coin_amount_bought), coins_in_pool)
             },
-            PoolMode::Launching => {
-                let coin_amount_bought = (base_coin_bucket.amount() - fee) / self.last_price;
+            PoolMode::Launching => match self.launch {
+                LaunchType::Fair(ref mut fair_launch) => {
+                    let mut coin_bucket = fair_launch.resource_manager.mint(
+                        base_coin_bucket.amount() / self.last_price
+                    );
 
-                (coin_amount_bought, self.coin_vault.amount() - coin_amount_bought)
+                    self.coin_vault.put(
+                        coin_bucket.take(
+                            fee / self.last_price
+                        )
+                    );
+
+                    (coin_bucket, self.coin_vault.amount())
+                },
+                _ => Runtime::panic("Not allowed for this launch type".to_string()),
             },
             _ => Runtime::panic("Not allowed in this mode".to_string()),
         };
@@ -437,7 +449,7 @@ impl Pool {
             BuyEvent {
                 resource_address: self.coin_vault.resource_address(),
                 mode: self.mode,
-                amount: coin_amount_bought,
+                amount: coin_bucket.amount(),
                 price: self.last_price,
                 coins_in_pool: coins_in_pool,
                 fee_paid_to_the_pool: fee,
@@ -446,7 +458,7 @@ impl Pool {
 
         self.base_coin_vault.put(base_coin_bucket);
 
-        self.coin_vault.take(coin_amount_bought)
+        coin_bucket
     }
 
     pub fn sell(
@@ -466,7 +478,7 @@ impl Pool {
                 .unwrap();
 
                 let bought_base_coins = self.base_coin_vault.amount() - base_coins_in_vault;
-                let fee_amount = bought_base_coins * (dec!(100) - self.sell_pool_fee_percentage) / dec!(100);
+                let fee_amount = bought_base_coins * self.sell_pool_fee_percentage / dec!(100);
                 let base_coin_bucket = self.base_coin_vault.take_advanced(
                     bought_base_coins - fee_amount,
                     WithdrawStrategy::Rounded(RoundingMode::ToZero),

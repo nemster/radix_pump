@@ -350,7 +350,7 @@ mod radix_pump {
 
         pub fn new_quick_launch(
             &mut self,
-            base_coin_bucket: Bucket,
+            mut base_coin_bucket: Bucket,
             mut coin_symbol: String,
             mut coin_name: String,
             mut coin_icon_url: String,
@@ -369,6 +369,13 @@ mod radix_pump {
             assert!(
                 base_coin_bucket.amount() >= self.minimum_deposit,
                 "Insufficient base coin deposit",
+            );
+
+            self.fee_vault.put(
+                base_coin_bucket.take_advanced(
+                    self.creation_fee_percentage * base_coin_bucket.amount() / 100,
+                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                )
             );
 
             self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee_percentage);
@@ -629,9 +636,9 @@ mod radix_pump {
                 base_coin_amount,
                 coin_amount,
                 last_price,
-                buy_pool_fee_percentage + self.buy_sell_fee_percentage * (100 + buy_pool_fee_percentage) / dec!(100),
-                self.buy_sell_fee_percentage + sell_pool_fee_percentage * (100 + self.buy_sell_fee_percentage) / dec!(100),
-                flash_loan_pool_fee_percentage + self.flash_loan_fee_percentage * (100 + flash_loan_pool_fee_percentage) / dec!(100),
+                self.buy_sell_fee_percentage + buy_pool_fee_percentage * (100 - self.buy_sell_fee_percentage) / dec!(100),
+                sell_pool_fee_percentage + self.buy_sell_fee_percentage * (100 - sell_pool_fee_percentage) / dec!(100),
+                flash_loan_pool_fee_percentage + self.flash_loan_fee_percentage,
                 pool_mode,
                 end_launch_time,
                 unlocking_time,
@@ -678,13 +685,14 @@ mod radix_pump {
             end_launch_time: i64,
             unlocking_time: i64,
         ) {
+
             assert!(
                 end_launch_time >= Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch + self.min_launch_duration,
                 "Launch time too short",
             );
             assert!(
                 unlocking_time >= end_launch_time + self.min_lock_duration,
-                "Launch time too short",
+                "Lock time too short",
             );
 
             self.pools.get_mut(&self.get_creator_data(creator_proof).coin_resource_address)
@@ -696,9 +704,18 @@ mod radix_pump {
             &mut self,
             creator_proof: Proof,
         ) -> Bucket {
-            self.pools.get_mut(&self.get_creator_data(creator_proof).coin_resource_address)
+            let mut base_coin_bucket = self.pools.get_mut(&self.get_creator_data(creator_proof).coin_resource_address)
             .unwrap()
-            .terminate_launch()
+            .terminate_launch();
+
+            self.fee_vault.put(
+                base_coin_bucket.take_advanced(
+                    self.creation_fee_percentage * base_coin_bucket.amount() / 100,
+                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                )
+            );
+
+            base_coin_bucket
         }
 
         fn mint_creator_badge(

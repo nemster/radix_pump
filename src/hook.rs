@@ -15,6 +15,7 @@ pub struct HookArgument {
     pub coin_address: ResourceAddress,
     pub operation: HookableOperation,
     pub amount: Option<Decimal>,
+    // TODO: add mode. Other fields too?
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]

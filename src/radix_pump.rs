@@ -772,11 +772,15 @@ mod radix_pump {
                 &pool.enabled_hooks.get_hooks(HookableOperation::PostFairLaunch),
             );
 
+            // TODO: move this code into an helper
+
             let hook_argument = HookArgument {
                 coin_address: coin_address,
                 operation: HookableOperation::PostFairLaunch,
                 amount: None,
             };
+
+            // TODO: What if the hook has been unregistered for the operation after being attached?
 
             let mut additional_buckets: Vec<Bucket> = vec![];
             for hook in merged_hooks.iter() {

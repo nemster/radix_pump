@@ -1,5 +1,6 @@
 use scrypto::prelude::*;
 use scrypto::prelude::rust::cmp::*;
+use crate::hook_helpers::*;
 
 #[derive(ScryptoSbor, ScryptoEvent)]
 pub struct FairLaunchStartEvent {
@@ -99,6 +100,7 @@ pub struct Pool {
     buy_pool_fee_percentage: Decimal,
     sell_pool_fee_percentage: Decimal,
     flash_loan_pool_fee_percentage: Decimal,
+    pub enabled_hooks: HooksPerOperation,
     launch: LaunchType,
 }
 
@@ -208,6 +210,7 @@ impl Pool {
             buy_pool_fee_percentage: buy_pool_fee_percentage,
             sell_pool_fee_percentage: sell_pool_fee_percentage,
             flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
+            enabled_hooks: HooksPerOperation::new(),
             launch: LaunchType::Fair(
                 FairLaunchDetails {
                     end_launch_time: 0,
@@ -393,6 +396,7 @@ impl Pool {
             buy_pool_fee_percentage: buy_pool_fee_percentage,
             sell_pool_fee_percentage: sell_pool_fee_percentage,
             flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
+            enabled_hooks: HooksPerOperation::new(),
             launch: LaunchType::Quick,
         };
 

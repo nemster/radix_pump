@@ -1,6 +1,10 @@
 use scrypto::prelude::*;
 use scrypto::prelude::rust::cmp::*;
+use std::ops::Deref;
 use crate::pool::*;
+use crate::hook::*;
+use crate::hook_helpers::*;
+use crate::hook::hook::*;
 
 // Metadata for the coin creator badge
 static CREATOR_BADGE_NAME: &str = "Coin creator badge";
@@ -25,6 +29,22 @@ struct FlashLoanData {
     price: Decimal,
 }
 
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct HookEnabledEvent {
+    resource_address: Option<ResourceAddress>,
+    hook_name: String,
+    hook_address: Global<Hook>,
+    operations: Vec<String>,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct HookDisabledEvent {
+    resource_address: Option<ResourceAddress>,
+    hook_name: String,
+    hook_address: Global<Hook>,
+    operations: Vec<String>,
+}
+
 #[blueprint]
 #[events(
     FairLaunchStartEvent,
@@ -34,6 +54,8 @@ struct FlashLoanData {
     SellEvent,
     LiquidationEvent,
     FlashLoanEvent,
+    HookEnabledEvent,
+    HookDisabledEvent,
 )]
 #[types(
     u64,
@@ -62,6 +84,12 @@ mod radix_pump {
             launch => PUBLIC;
             terminate_launch => PUBLIC;
             unlock => PUBLIC;
+            register_hook => restrict_to: [OWNER];
+            unregister_hook => restrict_to: [OWNER];
+            owner_enable_hook => restrict_to: [OWNER];
+            owner_disable_hook => restrict_to: [OWNER];
+            creator_enable_hook => restrict_to: [OWNER];
+            creator_disable_hook => restrict_to: [OWNER];
         }
     }
 
@@ -85,6 +113,12 @@ mod radix_pump {
         launch => Free;
         terminate_launch => Free;
         unlock => Usd(dec!("0.005"));
+        register_hook => Free;
+        unregister_hook => Free;
+        owner_enable_hook => Free;
+        owner_disable_hook => Free;
+        creator_enable_hook => Free;
+        creator_disable_hook => Free;
     }
 
     struct RadixPump {
@@ -105,6 +139,10 @@ mod radix_pump {
         max_flash_loan_pool_fee_percentage: Decimal,
         min_launch_duration: i64,
         min_lock_duration: i64,
+        hooks_badge_vault: Vault,
+        registered_hooks: HookByName,
+        registered_hooks_operations: HooksPerOperation,
+        globally_enabled_hooks: HooksPerOperation,
     }
 
     impl RadixPump {
@@ -140,7 +178,7 @@ mod radix_pump {
             let (address_reservation, component_address) = Runtime::allocate_component_address(RadixPump::blueprint_id());
 
             // Create a ResourceManager for minting coin creator badges
-            let creator_badge_resource_manager = ResourceBuilder::new_integer_non_fungible_with_registered_type::<CreatorData>(
+            let creator_badge_resource_manager = <scrypto::prelude::ResourceBuilder as RadixPumpResourceBuilder>::new_integer_non_fungible_with_registered_type::<CreatorData>(
                 OwnerRole::Updatable(rule!(require(owner_badge_address)))
             )
             .metadata(metadata!(
@@ -156,7 +194,7 @@ mod radix_pump {
             ))
             .mint_roles(mint_roles!(
                 minter => rule!(require(global_caller(component_address)));
-                minter_updater => rule!(deny_all);
+                minter_updater => rule!(require(owner_badge_address));
             ))
             .non_fungible_data_update_roles(non_fungible_data_update_roles!(
                 non_fungible_data_updater => rule!(deny_all);
@@ -169,7 +207,7 @@ mod radix_pump {
             .create_with_no_initial_supply();
 
             // Create a ResourceManager for the flash loan transient NFT
-            let flash_loan_nft_resource_manager = ResourceBuilder::new_integer_non_fungible_with_registered_type::<FlashLoanData>(
+            let flash_loan_nft_resource_manager = <scrypto::prelude::ResourceBuilder as RadixPumpResourceBuilder>::new_integer_non_fungible_with_registered_type::<FlashLoanData>(
                 OwnerRole::Updatable(rule!(require(owner_badge_address)))
             )
             .metadata(metadata!(
@@ -201,6 +239,29 @@ mod radix_pump {
             ))
             .create_with_no_initial_supply();
 
+            let hooks_badge_resource_manager = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            .divisibility(0)
+            .metadata(metadata!(
+                roles {
+                    metadata_setter => rule!(require(owner_badge_address));
+                    metadata_setter_updater => rule!(require(owner_badge_address));
+                    metadata_locker => rule!(require(owner_badge_address));
+                    metadata_locker_updater => rule!(require(owner_badge_address));
+                },
+                init {
+                    "name" => "Hooks badge", updatable;
+                }
+            ))
+            .mint_roles(mint_roles!(
+                minter => rule!(deny_all);
+                minter_updater => rule!(require(owner_badge_address));
+            ))
+            .burn_roles(burn_roles!(
+                burner => rule!(deny_all);
+                burner_updater => rule!(require(owner_badge_address));
+            ))
+            .create_with_no_initial_supply();
+
             // Instantiate the component
             Self {
                 base_coin_address: base_coin_address.clone(),
@@ -219,7 +280,11 @@ mod radix_pump {
                 max_buy_sell_pool_fee_percentage: dec!(10),
                 max_flash_loan_pool_fee_percentage: dec!(10),
                 min_launch_duration: 604800, // One week
-                min_lock_duration: 7776000 // Three months
+                min_lock_duration: 7776000, // Three months
+                hooks_badge_vault: Vault::with_bucket(hooks_badge_resource_manager.mint(1)),
+                registered_hooks: KeyValueStore::new(),
+                registered_hooks_operations: HooksPerOperation::new(),
+                globally_enabled_hooks: HooksPerOperation::new(),
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
@@ -617,6 +682,7 @@ mod radix_pump {
             Option<Decimal>,
             Option<Decimal>,
             ResourceAddress,
+            ResourceAddress,
         ) {
             let (
                 base_coin_amount,
@@ -645,6 +711,7 @@ mod radix_pump {
                 initial_locked_amount,
                 unlocked_amount,
                 self.flash_loan_nft_resource_manager.address(),
+                self.hooks_badge_vault.resource_address(),
             )
         }
 
@@ -684,7 +751,7 @@ mod radix_pump {
             creator_proof: Proof,
             end_launch_time: i64,
             unlocking_time: i64,
-        ) {
+        ) -> Vec<Bucket> {
 
             assert!(
                 end_launch_time >= Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch + self.min_launch_duration,
@@ -695,9 +762,44 @@ mod radix_pump {
                 "Lock time too short",
             );
 
-            self.pools.get_mut(&self.get_creator_data(creator_proof).coin_resource_address)
-            .unwrap()
-            .launch(end_launch_time, unlocking_time);
+            let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
+            let mut pool = self.pools.get_mut(&coin_address).unwrap();
+
+            pool.launch(end_launch_time, unlocking_time);
+
+            let merged_hooks = self.globally_enabled_hooks.merge(
+                HookableOperation::PostFairLaunch,
+                &pool.enabled_hooks.get_hooks(HookableOperation::PostFairLaunch),
+            );
+
+            let hook_argument = HookArgument {
+                coin_address: coin_address,
+                operation: HookableOperation::PostFairLaunch,
+                amount: None,
+            };
+
+            let mut additional_buckets: Vec<Bucket> = vec![];
+            for hook in merged_hooks.iter() {
+                let hook_address = self.registered_hooks.get(&hook);
+
+                let hook_output = match hook_address {
+                    None => None,
+                    Some(hook_address) =>
+                        self.hooks_badge_vault.as_fungible().authorize_with_amount(
+                            1,
+                            || {
+                                hook_address.deref().hook(hook_argument.clone())
+                            }
+                        ),
+                };
+
+                match hook_output {
+                    None => {},
+                    Some(bucket) => additional_buckets.push(bucket),
+                }
+            }
+
+            additional_buckets
         }
 
         pub fn terminate_launch(
@@ -780,6 +882,132 @@ mod radix_pump {
                     base_coin_bucket
                 },
             }
+        }
+
+        pub fn register_hook(
+            &mut self,
+            name: String,
+            operations: Vec<String>,
+            component_address: Global<Hook>,
+        ) {
+            self.registered_hooks_operations.add_hook(&name, &operations);
+
+            self.registered_hooks.insert(name, component_address); // TODO: What if it already exists?
+        }
+
+        pub fn unregister_hook(
+            &mut self,
+            name: String,
+            operations: Option<Vec<String>>,
+        ) { 
+            match operations {
+                None => {
+                    self.registered_hooks.remove(&name);
+                },
+
+                Some(operations) =>
+                    self.registered_hooks_operations.remove_hook(&name, &operations),
+            }
+        }
+
+        pub fn owner_enable_hook(
+            &mut self,
+            name: String,
+            operations: Vec<String>,
+        ) {
+            let hook_address = self.registered_hooks.get(&name).expect("Unknown hook");
+
+            for operation in operations.iter() {
+                assert!(
+                    self.registered_hooks_operations.hook_exists(&name, &operation),
+                    "Hook {} not registered for operation {}",
+                    name,
+                    operation,
+                );
+            }
+
+            self.globally_enabled_hooks.add_hook(&name, &operations);
+
+            Runtime::emit_event(
+                HookEnabledEvent {
+                    resource_address: None,
+                    hook_name: name,
+                    hook_address: *hook_address,
+                    operations: operations,
+                }
+            );
+        }
+
+        pub fn owner_disable_hook(
+            &mut self,
+            name: String,
+            operations: Vec<String>,
+        ) {
+            let hook_address = self.registered_hooks.get(&name).expect("Unknown hook");
+
+            self.globally_enabled_hooks.remove_hook(&name, &operations);
+
+            Runtime::emit_event(
+                HookDisabledEvent {
+                    resource_address: None,
+                    hook_name: name,
+                    hook_address: *hook_address,
+                    operations: operations,
+                }
+            );
+        }
+
+        pub fn creator_enable_hook(
+            &mut self,
+            creator_proof: Proof,
+            name: String,
+            operations: Vec<String>,
+        ) {
+            let hook_address = self.registered_hooks.get(&name).expect("Unknown hook");
+
+            for operation in operations.iter() {
+                assert!(
+                    self.registered_hooks_operations.hook_exists(&name, &operation),
+                    "Hook {} not registered for operation {}",
+                    name,
+                    operation,
+                );
+            }
+
+            let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
+
+            self.pools.get_mut(&coin_address).unwrap().enabled_hooks.add_hook(&name, &operations);
+            
+            Runtime::emit_event(
+                HookEnabledEvent {
+                    resource_address: Some(coin_address),
+                    hook_name: name,
+                    hook_address: *hook_address,
+                    operations: operations,
+                }
+            );
+        }
+
+        pub fn creator_disable_hook(
+            &mut self,
+            creator_proof: Proof,
+            name: String,
+            operations: Vec<String>,
+        ) {
+            let hook_address = self.registered_hooks.get(&name).expect("Unknown hook");
+
+            let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
+
+            self.pools.get_mut(&coin_address).unwrap().enabled_hooks.remove_hook(&name, &operations);
+
+            Runtime::emit_event(
+                HookDisabledEvent {
+                    resource_address: Some(coin_address),
+                    hook_name: name,
+                    hook_address: *hook_address,
+                    operations: operations,
+                }
+            );
         }
     }
 }

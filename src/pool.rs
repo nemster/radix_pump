@@ -1,5 +1,6 @@
 use scrypto::prelude::*;
 use scrypto::prelude::rust::cmp::*;
+use crate::hook_helpers::*;
 
 #[derive(ScryptoSbor, ScryptoEvent)]
 pub struct FairLaunchStartEvent {
@@ -99,6 +100,7 @@ pub struct Pool {
     buy_pool_fee_percentage: Decimal,
     sell_pool_fee_percentage: Decimal,
     flash_loan_pool_fee_percentage: Decimal,
+    pub enabled_hooks: HooksPerOperation,
     launch: LaunchType,
 }
 
@@ -117,6 +119,22 @@ impl Pool {
             burner => coin_creator_badge_rule.clone();
             burner_updater => coin_creator_badge_rule.clone();
         ))
+        .deposit_roles(deposit_roles!(
+            depositor => rule!(allow_all);
+            depositor_updater => rule!(deny_all);
+        ))
+        .withdraw_roles(withdraw_roles!(
+            withdrawer => rule!(allow_all);
+            withdrawer_updater => rule!(deny_all);
+        ))
+        .recall_roles(recall_roles!(
+            recaller => rule!(deny_all);
+            recaller_updater => rule!(deny_all);
+        ))
+        .freeze_roles(freeze_roles!(
+            freezer => rule!(deny_all);
+            freezer_updater => rule!(deny_all);
+        ))
         .divisibility(DIVISIBILITY_MAXIMUM);
 
         match coin_info_url.len() {
@@ -124,9 +142,9 @@ impl Pool {
                 resource_manager.metadata(metadata!(
                     roles {
                         metadata_setter => coin_creator_badge_rule.clone();
-                        metadata_setter_updater => rule!(deny_all);
-                        metadata_locker => coin_creator_badge_rule;
-                        metadata_locker_updater => rule!(deny_all);
+                        metadata_setter_updater => coin_creator_badge_rule.clone();
+                        metadata_locker => coin_creator_badge_rule.clone();
+                        metadata_locker_updater => coin_creator_badge_rule;
                     },
                     init {
                         "symbol" => coin_symbol, locked;
@@ -139,9 +157,9 @@ impl Pool {
                 resource_manager.metadata(metadata!(
                     roles {
                         metadata_setter => coin_creator_badge_rule.clone();
-                        metadata_setter_updater => rule!(deny_all);
-                        metadata_locker => coin_creator_badge_rule;
-                        metadata_locker_updater => rule!(deny_all);
+                        metadata_setter_updater => coin_creator_badge_rule.clone();
+                        metadata_locker => coin_creator_badge_rule.clone();
+                        metadata_locker_updater => coin_creator_badge_rule;
                     },
                     init {
                         "symbol" => coin_symbol, locked;
@@ -192,6 +210,7 @@ impl Pool {
             buy_pool_fee_percentage: buy_pool_fee_percentage,
             sell_pool_fee_percentage: sell_pool_fee_percentage,
             flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
+            enabled_hooks: HooksPerOperation::new(),
             launch: LaunchType::Fair(
                 FairLaunchDetails {
                     end_launch_time: 0,
@@ -212,7 +231,7 @@ impl Pool {
         &mut self,
         end_launch_time: i64,
         unlocking_time: i64,
-    ) {
+    ) -> Decimal {
         assert!(
             self.mode == PoolMode::WaitingForLaunch,
             "Not allowed in this mode",
@@ -239,9 +258,11 @@ impl Pool {
             },
             _ => Runtime::panic("Not allowed for this launch type".to_string()),
         };
+
+        self.last_price
     }
 
-    pub fn terminate_launch(&mut self) -> Bucket {
+    pub fn terminate_launch(&mut self) -> (Bucket, Decimal, Decimal) {
         assert!(
             self.mode == PoolMode::Launching,
             "Not allowed in this mode",
@@ -276,17 +297,19 @@ impl Pool {
                 fair_launch.resource_manager.set_mintable(rule!(deny_all));
                 fair_launch.resource_manager.lock_mintable();
 
+                let supply = fair_launch.resource_manager.total_supply().unwrap();
+
                 Runtime::emit_event(
                     FairLaunchEndEvent {
                         resource_address: fair_launch.resource_manager.address(),
                         creator_proceeds: base_coin_bucket.amount(),
                         creator_locked_allocation: fair_launch.locked_vault.amount(),
-                        supply: fair_launch.resource_manager.total_supply().unwrap(),
+                        supply: supply,
                         coins_in_pool: self.coin_vault.amount(),
                     }
                 );
 
-                base_coin_bucket
+                (base_coin_bucket, self.last_price, supply)
             },
             _ => Runtime::panic("Not allowed for this launch type".to_string()),
         }
@@ -377,6 +400,7 @@ impl Pool {
             buy_pool_fee_percentage: buy_pool_fee_percentage,
             sell_pool_fee_percentage: sell_pool_fee_percentage,
             flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
+            enabled_hooks: HooksPerOperation::new(),
             launch: LaunchType::Quick,
         };
 
@@ -405,7 +429,7 @@ impl Pool {
     pub fn buy(
         &mut self,
         base_coin_bucket: Bucket,
-    ) -> Bucket {
+    ) -> (Bucket, Decimal, PoolMode) {
         let fee = base_coin_bucket.amount() * self.buy_pool_fee_percentage / dec!(100);
 
         let (coin_bucket, coins_in_pool) = match self.mode {
@@ -458,13 +482,13 @@ impl Pool {
 
         self.base_coin_vault.put(base_coin_bucket);
 
-        coin_bucket
+        (coin_bucket, self.last_price, self.mode)
     }
 
     pub fn sell(
         &mut self,
         coin_bucket: Bucket,
-    ) -> Bucket {
+    ) -> (Bucket, Decimal, PoolMode) {
 
         let (base_coin_bucket, fee_amount) = match self.mode {
             PoolMode::Normal => {
@@ -519,7 +543,7 @@ impl Pool {
 
         self.coin_vault.put(coin_bucket);
 
-        base_coin_bucket
+        (base_coin_bucket, self.last_price, self.mode)
     }
 
     pub fn set_liquidation_mode(&mut self) {

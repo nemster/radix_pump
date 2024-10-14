@@ -51,17 +51,36 @@ The component owner gets his own fee percentage while the coin creator can set a
 
 A coin creator can set fees on buy, sell and flash loan operations for his coin.  
 
-The component owner can set the upper limit for buy/sell and flash loan fees; by default this limit is 10%. the limit also applies retroactively to coins already created.  
+The component owner can set the upper limit for buy/sell and flash loan fees; by default this limit is 10%.
 
 No one can retrieve pool fees, the paid base coins just get into the pool itself. The effect is a coin price increase.  
+
+## Hooks
+
+Hooks are external component authomatically called by RadixPump when certain operations are performed.  
+
+The component owner can make hooks available by calling the `register_hook` method, he must specify the operations this hook can be attached to.  
+The available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostBuy`, `PostSell` and `PostReturnFlashLoan`. I avoided `Pre` hooks to prevent frontrunning and sandwitch attacks.  
+
+Once an hook is registered the component owner can attach it to one or more operation globally (i.e. for all pools) via the `owner_enable_hook` method.
+A coin owner can attach a registered hook to operations happening on his coin.
+
+Hooks can be used to extend RadixPump features in any way; just few examples:
+- make an airdrop to the 100 first buyers on my coin  
+- authomatically buy the next 10 coins quick launched  
+- authomatically buy the dips  
+...  
+A simple hook that just emits an event is provided as example; when developing a new hook make sure it has a `hook` method with the same arguments and return type as the provided example.
+
+An hook can never steal the buckets intended for the user; it can only add new bucket towards him.  
+
+RadixPump uses a proof of a badge when calling an hook, so the hook can be sure about the caller.  
 
 ## Verifiable Scrypto build
 
 Compiled with `radixdlt/scrypto-builder:v1.2.0`  
 
 This is the SHA256 of the package files:  
-`eb1e289924e2dfa46eb6ac8decf19327645e95989e7a61e2841f59f3918484d1`  `target/wasm32-unknown-unknown/release/radix_pump.wasm`  
-`2947c2935764e7f4335540925102db31f5807e7423262854624b12e9dfb5ef4e`  `target/wasm32-unknown-unknown/release/radix_pump.rpd`  
 
 ## Transaction manifests
 
@@ -71,7 +90,7 @@ Use this function to create a RadixPump component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("package_tdx_2_1pkhtaq6n85hy6s3c7psmpq4wc0xtqhw0s0f055az39qwq8zg6hpc8f")
+    Address("")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -579,6 +598,7 @@ CALL_METHOD
     <MIN_LOCK_DURATION>i64
 ;
 ```
+
 `<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
@@ -677,6 +697,176 @@ CALL_METHOD
 
 Depending on the vaule of `<SELL>` a bucket of coins or a bucket of base coins is returned.
 If `<SELL>` is true, a `SellEvent` is issued. It contains the resource address of the sold coin, the pool mode (Normal), the sold amount, the new price, the number of coins currently in the pool and the fees paid to the pool.  
+
+### register_hook
+
+The component owner can call this method to make an hook available to the creators and to himself.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "register_hook"
+    "<HOOK_NAME>"
+    Array<String>("<OPERATION>", "<OPERATION>", ...)
+    Address("<HOOK_ADDRESS>")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<HOOK_NAME>` is the name that will be used to refer to this hook.  
+`<OPERATION>` is one of the operations the hooks can be attached to. Available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostBuy`, `PostSell` and `PostReturnFlashLoan`.  
+`<HOOK_ADDRESS>` is the component address of the hook.  
+
+### unregister_hook
+
+The component owner can use this method to remove an hook that was previously registered or to make it not available for one or more operations.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "unregister_hook"
+    "<HOOK_NAME>"
+    Some(Array<String>("<OPERATION>", "<OPERATION>", ...))
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<HOOK_NAME>` is the name of a previously registered hook.  
+`<OPERATION>` is one of the operations the hooks can no longer be attached to. If instead of this argument `None` is passed, RadixPump will completely forgot about the hook.  
+
+### owner_enable_hook
+
+The component owner can use this method to attach an hook to one or more operations globally (all the pools).  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "owner_enable_hook"
+    "<HOOK_NAME>"
+    Array<String>("<OPERATION>", "<OPERATION>", ...)
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<HOOK_NAME>` is the name of a previously registered hook.  
+`<OPERATION>` is one of the operations the hooks gets attached to.  
+
+A `HookEnabledEvent` is issued; it contains the hook name, the hook address and the list of operations it has been attached to.  
+
+### owner_disable_hook
+
+The component owner can use this method to detach an hook from one or more operations globally.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "owner_disable_hook"
+    "<HOOK_NAME>"
+    Array<String>("<OPERATION>", "<OPERATION>", ...)
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<HOOK_NAME>` is the name of a previously registered hook.  
+`<OPERATION>` is one of the operations the hooks gets attached to.  
+
+A `HookDisabledEvent` is issued; it contains the hook name, the hook address and the list of operations it has been detached from.  
+
+### creator_enable_hook
+
+A coin creator can call this method to attach a previously registered hook to one or more operations on his pool.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_non_fungibles"
+    Address("<CREATOR_BADGE_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<CREATOR_BADGE_ID>#"))
+;
+POP_FROM_AUTH_ZONE
+    Proof("creator_proof")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "creator_enable_hook"
+    Proof("creator_proof")
+    "<HOOK_NAME>"
+    Array<String>("<OPERATION>", "<OPERATION>", ...)
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<CREATOR_BADGE_ADDRESS>` is the badge receaved when creating the coin.  
+`<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<HOOK_NAME>` is the name of a previously registered hook.  
+`<OPERATION>` is one of the operations the hooks gets attached to.  
+
+A `HookEnabledEvent` is issued; it contains the coin resource address, the hook name, the hook address and the list of operations it has been attached to.  
+
+### creator_disable_hook
+
+A coin creator can call this method to detach a previously attached hook from one or more operations on his pool.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_non_fungibles"
+    Address("<CREATOR_BADGE_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<CREATOR_BADGE_ID>#"))
+;
+POP_FROM_AUTH_ZONE
+    Proof("creator_proof")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "creator_disable_hook"
+    Proof("creator_proof")
+    "<HOOK_NAME>"
+    Array<String>("<OPERATION>", "<OPERATION>", ...)
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<CREATOR_BADGE_ADDRESS>` is the badge receaved when creating the coin.  
+`<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<HOOK_NAME>` is the name of a previously attached hook.  
+`<OPERATION>` is one of the operations the hooks gets detached from.  
+
+A `HookDisabledEvent` is issued; it contains the coin resource address, the hook name, the hook address and the list of operations it has been detached from.  
 
 ## Copyright
 

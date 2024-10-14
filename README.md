@@ -57,7 +57,7 @@ No one can retrieve pool fees, the paid base coins just get into the pool itself
 
 ## Hooks
 
-Hooks are external component authomatically called by RadixPump when certain operations are performed.  
+Hooks are external components authomatically called by RadixPump when certain operations are performed.  
 
 The component owner can make hooks available by calling the `register_hook` method, he must specify the operations this hook can be attached to.  
 The available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostBuy`, `PostSell` and `PostReturnFlashLoan`. I avoided `Pre` hooks to prevent frontrunning and sandwitch attacks.  
@@ -67,10 +67,10 @@ A coin owner can attach a registered hook to operations happening on his coin.
 
 Hooks can be used to extend RadixPump features in any way; just few examples:
 - make an airdrop to the 100 first buyers on my coin  
-- authomatically buy the next 10 coins quick launched  
+- authomatically buy the next 10 quick launched coins  
 - authomatically buy the dips  
 ...  
-A simple hook that just emits an event is provided as example; when developing a new hook make sure it has a `hook` method with the same arguments and return type as the provided example.
+A simple hook that just emits an event and mints a token is provided as example; when developing a new hook make sure it has a `hook` method with the same arguments and return type as the provided example.
 
 An hook can never steal the buckets intended for the user; it can only add new bucket towards him.  
 
@@ -81,6 +81,8 @@ RadixPump uses a proof of a badge when calling an hook, so the hook can be sure 
 Compiled with `radixdlt/scrypto-builder:v1.2.0`  
 
 This is the SHA256 of the package files:  
+`9fa0de86892071788e5a65c337c2f45850ee570e212d4dfa993943bf298b3e57`  `target/wasm32-unknown-unknown/release/radix_pump.rpd`  
+`c994e6345b44e38aebb9d16cbeea2121bfc4824b444a9da87fede104f2fa4011`  `target/wasm32-unknown-unknown/release/radix_pump.wasm`  
 
 ## Transaction manifests
 
@@ -90,7 +92,7 @@ Use this function to create a RadixPump component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("")
+    Address("package_tdx_2_1p4wws2a59tkwh4ldt28tlthhhu22f8syvxkrvwuq6q7h5n3e7a659p")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")

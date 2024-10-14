@@ -1,4 +1,5 @@
 use scrypto::prelude::*;
+use crate::pool::*;
 
 #[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
 pub enum HookableOperation {
@@ -15,7 +16,8 @@ pub struct HookArgument {
     pub coin_address: ResourceAddress,
     pub operation: HookableOperation,
     pub amount: Option<Decimal>,
-    // TODO: add mode. Other fields too?
+    pub mode: PoolMode,
+    pub price: Option<Decimal>,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
@@ -23,6 +25,8 @@ pub struct HookCallEvent {
     coin_address: ResourceAddress,
     operation: HookableOperation,
     amount: Option<Decimal>,
+    pub mode: PoolMode,
+    pub price: Option<Decimal>,
 }
 
 #[blueprint]
@@ -63,6 +67,8 @@ mod hook {
                     coin_address: argument.coin_address,
                     operation: argument.operation,
                     amount: argument.amount,
+                    mode: argument.mode,
+                    price: argument.price,
                 }
             );
 

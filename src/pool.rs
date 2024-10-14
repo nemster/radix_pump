@@ -231,7 +231,7 @@ impl Pool {
         &mut self,
         end_launch_time: i64,
         unlocking_time: i64,
-    ) {
+    ) -> Decimal {
         assert!(
             self.mode == PoolMode::WaitingForLaunch,
             "Not allowed in this mode",
@@ -258,9 +258,11 @@ impl Pool {
             },
             _ => Runtime::panic("Not allowed for this launch type".to_string()),
         };
+
+        self.last_price
     }
 
-    pub fn terminate_launch(&mut self) -> Bucket {
+    pub fn terminate_launch(&mut self) -> (Bucket, Decimal, Decimal) {
         assert!(
             self.mode == PoolMode::Launching,
             "Not allowed in this mode",
@@ -295,17 +297,19 @@ impl Pool {
                 fair_launch.resource_manager.set_mintable(rule!(deny_all));
                 fair_launch.resource_manager.lock_mintable();
 
+                let supply = fair_launch.resource_manager.total_supply().unwrap();
+
                 Runtime::emit_event(
                     FairLaunchEndEvent {
                         resource_address: fair_launch.resource_manager.address(),
                         creator_proceeds: base_coin_bucket.amount(),
                         creator_locked_allocation: fair_launch.locked_vault.amount(),
-                        supply: fair_launch.resource_manager.total_supply().unwrap(),
+                        supply: supply,
                         coins_in_pool: self.coin_vault.amount(),
                     }
                 );
 
-                base_coin_bucket
+                (base_coin_bucket, self.last_price, supply)
             },
             _ => Runtime::panic("Not allowed for this launch type".to_string()),
         }
@@ -425,7 +429,7 @@ impl Pool {
     pub fn buy(
         &mut self,
         base_coin_bucket: Bucket,
-    ) -> Bucket {
+    ) -> (Bucket, Decimal, PoolMode) {
         let fee = base_coin_bucket.amount() * self.buy_pool_fee_percentage / dec!(100);
 
         let (coin_bucket, coins_in_pool) = match self.mode {
@@ -478,13 +482,13 @@ impl Pool {
 
         self.base_coin_vault.put(base_coin_bucket);
 
-        coin_bucket
+        (coin_bucket, self.last_price, self.mode)
     }
 
     pub fn sell(
         &mut self,
         coin_bucket: Bucket,
-    ) -> Bucket {
+    ) -> (Bucket, Decimal, PoolMode) {
 
         let (base_coin_bucket, fee_amount) = match self.mode {
             PoolMode::Normal => {
@@ -539,7 +543,7 @@ impl Pool {
 
         self.coin_vault.put(coin_bucket);
 
-        base_coin_bucket
+        (base_coin_bucket, self.last_price, self.mode)
     }
 
     pub fn set_liquidation_mode(&mut self) {

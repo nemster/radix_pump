@@ -426,7 +426,7 @@ mod radix_pump {
             buy_pool_fee_percentage: Decimal,
             sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee_percentage: Decimal,
-        ) -> (Bucket, Bucket) {
+        ) -> (Bucket, Bucket, Vec<Bucket>) {
             assert!(
                 base_coin_bucket.resource_address() == self.base_coin_address,
                 "Wrong base coin deposited",
@@ -462,8 +462,9 @@ mod radix_pump {
                 flash_loan_pool_fee_percentage,
                 self.next_creator_badge_rule(),
             );
+            let coin_address = creator_coin_bucket.resource_address();
             self.pools.insert(
-                creator_coin_bucket.resource_address(),
+                coin_address,
                 pool,
             );
 
@@ -473,14 +474,26 @@ mod radix_pump {
                 coin_symbol,
             );
 
-            (creator_badge_bucket, creator_coin_bucket)
+            let hook_argument = HookArgument {
+                coin_address: coin_address,
+                operation: HookableOperation::PostQuickLaunch,
+                amount: Some(coin_supply),
+                mode: PoolMode::Normal,
+                price: Some(coin_price),
+            };
+            let buckets = self.execute_hooks(
+                &vec![],
+                &hook_argument,
+            );
+
+            (creator_badge_bucket, creator_coin_bucket, buckets)
         }
 
         pub fn buy(
             &mut self,
             coin_address: ResourceAddress,
             mut base_coin_bucket: Bucket,
-        ) -> Bucket {
+        ) -> (Bucket, Vec<Bucket>) {
             assert!(
                 base_coin_bucket.resource_address() == self.base_coin_address,
                 "Wrong base coin",
@@ -493,18 +506,36 @@ mod radix_pump {
                 )
             );
 
-            self.pools.get_mut(&coin_address)
-            .expect("Coin not found")
-            .buy(base_coin_bucket)
+            let mut pool = self.pools.get_mut(&coin_address).expect("Coin not found");
+
+            let (coin_bucket, price, mode) = pool.buy(base_coin_bucket);
+
+            let hook_argument = HookArgument {
+                coin_address: coin_address,
+                operation: HookableOperation::PostBuy,
+                amount: Some(coin_bucket.amount()),
+                mode: mode,
+                price: Some(price),
+            };
+            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            drop(pool);
+            let buckets = self.execute_hooks(
+                &pool_enabled_hooks,
+                &hook_argument,
+            );
+
+            (coin_bucket, buckets)
         }
 
         pub fn sell(
             &mut self,
             coin_bucket: Bucket,
-        ) -> Bucket {
-            let mut base_coin_bucket = self.pools.get_mut(&coin_bucket.resource_address())
-            .expect("Coin not found")
-            .sell(coin_bucket);
+        ) -> (Bucket, Vec<Bucket>) {
+            let amount = coin_bucket.amount();
+            let coin_address = coin_bucket.resource_address();
+            let mut pool = self.pools.get_mut(&coin_address).expect("Coin not found");
+
+            let (mut base_coin_bucket, price, mode) = pool.sell(coin_bucket);
 
             self.fee_vault.put(
                 base_coin_bucket.take_advanced(
@@ -513,7 +544,21 @@ mod radix_pump {
                 )
             );
 
-            base_coin_bucket
+            let hook_argument = HookArgument {
+                coin_address: coin_address,
+                operation: HookableOperation::PostSell,
+                amount: Some(amount),
+                mode: mode,
+                price: Some(price),
+            };
+            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            drop(pool);
+            let buckets = self.execute_hooks(
+                &pool_enabled_hooks,
+                &hook_argument,
+            );
+
+            (base_coin_bucket, buckets)
         }
 
         pub fn get_fees(
@@ -600,7 +645,7 @@ mod radix_pump {
             transient_nft_bucket: Bucket,
             mut base_coin_bucket: Bucket,
             coin_bucket: Bucket,
-        ) {
+        ) -> Vec<Bucket> {
             assert!(
                 transient_nft_bucket.resource_address() == self.flash_loan_nft_resource_manager.address(),
                 "Wrong NFT",
@@ -626,7 +671,7 @@ mod radix_pump {
 
             // In order to avoid price manipulation affecting the fees, take the maximum among the
             // price at the moment the flash loan was granted and the current price.
-            let (_, _, mut price, _, _, _, _, _, _, _, _) = pool.get_pool_info();
+            let (_, _, mut price, _, _, _, mode, _, _, _, _) = pool.get_pool_info();
             price = max(price, flash_loan_data.price);
 
             self.fee_vault.put(
@@ -641,6 +686,20 @@ mod radix_pump {
                 coin_bucket,
                 price,
             );
+
+            let hook_argument = HookArgument {
+                coin_address: flash_loan_data.coin_resource_address,
+                operation: HookableOperation::PostReturnFlashLoan,
+                amount: Some(flash_loan_data.coin_amount),
+                mode: mode,
+                price: Some(price),
+            };
+            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            drop(pool);
+            self.execute_hooks(
+                &pool_enabled_hooks,
+                &hook_argument,
+            )
         }
 
         pub fn update_pool_fee_percentage(
@@ -765,37 +824,49 @@ mod radix_pump {
             let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
             let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
-            pool.launch(end_launch_time, unlocking_time);
-
-            let merged_hooks = self.globally_enabled_hooks.merge(
-                HookableOperation::PostFairLaunch,
-                &pool.enabled_hooks.get_hooks(HookableOperation::PostFairLaunch),
-            );
-
-            // TODO: move this code into an helper
+            let price = pool.launch(end_launch_time, unlocking_time);
 
             let hook_argument = HookArgument {
                 coin_address: coin_address,
                 operation: HookableOperation::PostFairLaunch,
                 amount: None,
+                mode: PoolMode::Launching,
+                price: Some(price),
             };
+            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            drop(pool);
+            self.execute_hooks(
+                &pool_enabled_hooks,
+                &hook_argument,
+            )
+        }
 
-            // TODO: What if the hook has been unregistered for the operation after being attached?
+        fn execute_hooks(
+            &self,
+            pool_enabled_hooks: &Vec<String>,
+            hook_argument: &HookArgument,
+        ) -> Vec<Bucket> {
+            let merged_hooks = self.globally_enabled_hooks.merge(
+                hook_argument.operation,
+                pool_enabled_hooks,
+            );
+
+            let registered_hooks_per_operation = self.registered_hooks_operations.get_hooks(hook_argument.operation);
 
             let mut additional_buckets: Vec<Bucket> = vec![];
+
             for hook in merged_hooks.iter() {
                 let hook_address = self.registered_hooks.get(&hook);
 
-                let hook_output = match hook_address {
-                    None => None,
-                    Some(hook_address) =>
-                        self.hooks_badge_vault.as_fungible().authorize_with_amount(
-                            1,
-                            || {
-                                hook_address.deref().hook(hook_argument.clone())
-                            }
-                        ),
-                };
+                // Ignore hoooks that have been unregistered by the componet owner; do not panic
+                if hook_address.is_none() || !registered_hooks_per_operation.iter().any(|x| x == hook) {
+                    continue;
+                }
+
+                let hook_output = self.hooks_badge_vault.as_fungible().authorize_with_amount(
+                    1,
+                    || { hook_address.unwrap().deref().hook(hook_argument.clone()) }
+                );
 
                 match hook_output {
                     None => {},
@@ -809,10 +880,12 @@ mod radix_pump {
         pub fn terminate_launch(
             &mut self,
             creator_proof: Proof,
-        ) -> Bucket {
-            let mut base_coin_bucket = self.pools.get_mut(&self.get_creator_data(creator_proof).coin_resource_address)
-            .unwrap()
-            .terminate_launch();
+        ) -> (Bucket, Vec<Bucket>) {
+            let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
+
+            let mut pool = self.pools.get_mut(&coin_address).unwrap();
+
+            let (mut base_coin_bucket, price, supply) = pool.terminate_launch();
 
             self.fee_vault.put(
                 base_coin_bucket.take_advanced(
@@ -821,7 +894,21 @@ mod radix_pump {
                 )
             );
 
-            base_coin_bucket
+            let hook_argument = HookArgument {
+                coin_address: coin_address,
+                operation: HookableOperation::PostTerminateFairLaunch,
+                amount: Some(supply),
+                mode: PoolMode::Normal,
+                price: Some(price),
+            };
+            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            drop(pool);
+            let buckets = self.execute_hooks(
+                &pool_enabled_hooks,
+                &hook_argument,
+            );
+
+            (base_coin_bucket, buckets)
         }
 
         fn mint_creator_badge(
@@ -865,16 +952,17 @@ mod radix_pump {
             creator_proof: Proof,
             amount: Option<Decimal>,
             sell: bool,
-        ) -> Bucket {
-            let mut pool = self.pools.get_mut(&self.get_creator_data(creator_proof).coin_resource_address)
-            .unwrap();
+        ) -> (Bucket, Vec<Bucket>) {
+            let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
+            let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
             let coin_bucket = pool.unlock(amount);
+            let unlocked_amount = coin_bucket.amount();
 
             match sell {
-                false => coin_bucket,
+                false => (coin_bucket, vec![]),
                 true => {
-                    let mut base_coin_bucket = pool.sell(coin_bucket);
+                    let (mut base_coin_bucket, price, mode) =  pool.sell(coin_bucket);
 
                     self.fee_vault.put(
                         base_coin_bucket.take_advanced(
@@ -883,7 +971,21 @@ mod radix_pump {
                         )
                      );
 
-                    base_coin_bucket
+                    let hook_argument = HookArgument {
+                        coin_address: coin_address,
+                        operation: HookableOperation::PostSell,
+                        amount: Some(unlocked_amount),
+                        mode: mode,
+                        price: Some(price),
+                    };
+                    let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+                    drop(pool);
+                    let buckets = self.execute_hooks(
+                        &pool_enabled_hooks,
+                        &hook_argument,
+                    );
+
+                    (base_coin_bucket, buckets)
                 },
             }
         }

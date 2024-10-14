@@ -51,7 +51,7 @@ The component owner gets his own fee percentage while the coin creator can set a
 
 A coin creator can set fees on buy, sell and flash loan operations for his coin.  
 
-The component owner can set the upper limit for buy/sell and flash loan fees; by default this limit is 10%. the limit also applies retroactively to coins already created.  
+The component owner can set the upper limit for buy/sell and flash loan fees; by default this limit is 10%.
 
 No one can retrieve pool fees, the paid base coins just get into the pool itself. The effect is a coin price increase.  
 

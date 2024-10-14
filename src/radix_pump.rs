@@ -998,7 +998,7 @@ mod radix_pump {
         ) {
             self.registered_hooks_operations.add_hook(&name, &operations);
 
-            self.registered_hooks.insert(name, component_address); // TODO: What if it already exists?
+            self.registered_hooks.insert(name, component_address);
         }
 
         pub fn unregister_hook(

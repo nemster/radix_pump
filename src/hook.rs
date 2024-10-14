@@ -42,6 +42,7 @@ mod hook {
     }
 
     struct Hook {
+        resource_manager: ResourceManager,
     }
 
     impl Hook {
@@ -49,7 +50,16 @@ mod hook {
             owner_badge_address: ResourceAddress,
             caller_badge_address: ResourceAddress,
         ) -> Global<Hook> {
-            Self {}
+            let resource_manager = ResourceBuilder::new_fungible(OwnerRole::None)
+            .mint_roles(mint_roles!(
+                minter => rule!(allow_all);
+                minter_updater => rule!(deny_all);
+            ))
+            .create_with_no_initial_supply();
+
+            Self {
+                resource_manager: resource_manager,
+            }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Fixed(rule!(require(owner_badge_address))))
             .roles(roles!(
@@ -72,7 +82,7 @@ mod hook {
                 }
             );
 
-            None
+            Some(self.resource_manager.mint(1))
         }
     }
 }

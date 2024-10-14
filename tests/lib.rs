@@ -3,12 +3,23 @@ use radix_pump::radix_pump::radix_pump_test::*;
 use radix_pump::hook::hook_test::*;
 use scrypto::NonFungibleData;
 
+#[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
+enum PoolMode {
+    WaitingForLaunch,
+    Launching,
+    Normal,
+    Liquidation,
+}
+
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
 struct CreatorData {
+    id: u64,
     coin_resource_address: ResourceAddress,
     coin_name: String,
     coin_symbol: String,
     creation_date: Instant,
+    #[mutable]
+    pool_mode: PoolMode,
 }
 
 #[test]

@@ -946,7 +946,10 @@ fn test_flash_loan() -> Result<(), RuntimeError> {
     )?;
     let coin_address = coin_bucket1.resource_address(&mut env)?;
 
-    let (_, _, price, _, _, flash_loan_total_fee_percentage, _, _, _, _, _, _, _) = radix_pump.get_pool_info(coin_address, &mut env)?;
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env)?;
+    let price = pool_info.last_price;
+    let flash_loan_total_fee_percentage = pool_info.total_flash_loan_fee_percentage;
+
     panic_if_significantly_different(
         flash_loan_total_fee_percentage,
         flash_loan_pool_fee_percentage + flash_loan_fee_percentage,
@@ -1018,7 +1021,9 @@ fn test_flash_loan_insufficient_fees() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, price, _, _, flash_loan_total_fee_percentage, _, _, _, _, _, _, _) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let price = pool_info.last_price;
+    let flash_loan_total_fee_percentage = pool_info.total_flash_loan_fee_percentage;
 
     let (coin_bucket2, transient_nft_bucket) = radix_pump.get_flash_loan(
         coin_address,
@@ -1083,7 +1088,9 @@ fn test_flash_loan_insufficient_amount() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, price, _, _, flash_loan_total_fee_percentage, _, _, _, _, _, _, _) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let price = pool_info.last_price;
+    let flash_loan_total_fee_percentage = pool_info.total_flash_loan_fee_percentage;
 
     let (coin_bucket2, transient_nft_bucket) = radix_pump.get_flash_loan(
         coin_address,
@@ -1174,21 +1181,12 @@ fn test_fair_launch() -> Result<(), RuntimeError> {
         &mut env
     )?;
 
-    let (
-        _base_coin_amount,
-        _coin_amount,
-        last_price,
-        total_buy_fee,
-        _total_sell_fee,
-        _total_flash_loan_fee,
-        _pool_mode,
-        end_launch_time,
-        unlocking_time,
-        _initial_locked_amount,
-        _unlocked_amount,
-        _flash_loan_nft_address,
-        _hooks_badge_resource_address,
-    ) = radix_pump.get_pool_info(coin_resource_address, &mut env)?;
+    let pool_info = radix_pump.get_pool_info(coin_resource_address, &mut env)?;
+    let last_price = pool_info.last_price;
+    let total_buy_fee = pool_info.total_buy_fee_percentage;
+    let end_launch_time = pool_info.end_launch_time;
+    let unlocking_time = pool_info.unlocking_time;
+
     assert!(
         end_launch_time.unwrap() == now + min_launch_duration,
         "Wrong end_launch_time reported",
@@ -1267,21 +1265,9 @@ fn test_fair_launch() -> Result<(), RuntimeError> {
         &mut env
     )?;
 
-    let (
-        _base_coin_amount,
-        _coin_amount,
-        _last_price,
-        _total_buy_fee,
-        _total_sell_fee,
-        _total_flash_loan_fee,
-        _pool_mode,
-        _end_launch_time,
-        _unlocking_time,
-        initial_locked_amount,
-        unlocked_amount,
-        _flash_loan_nft_address,
-        _hooks_badge_address,
-    ) = radix_pump.get_pool_info(coin_resource_address, &mut env)?;
+    let pool_info = radix_pump.get_pool_info(coin_resource_address, &mut env)?;
+    let initial_locked_amount = pool_info.initial_locked_amount;
+    let unlocked_amount = pool_info.unlocked_amount;
 
     panic_if_significantly_different(
         initial_locked_amount.unwrap(),
@@ -1538,7 +1524,8 @@ fn test_hook() -> Result<(), RuntimeError> {
     )?;
     let coin_address = coin_bucket1.resource_address(&mut env)?;
 
-    let (_, _, _, _, _, _, _, _, _, _, _, _, hooks_badge_address) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let hooks_badge_address = pool_info.hooks_badge_resource_address;
 
     let hook = Hook::new(
         badge_address,
@@ -1712,7 +1699,8 @@ fn test_hook_wrong_operation() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, _, _, _, _, _, _, _, _, _, _, hooks_badge_address) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let hooks_badge_address = pool_info.hooks_badge_resource_address;
 
     let hook = Hook::new(
         badge_address,
@@ -1789,7 +1777,8 @@ fn test_hook_unregistered_operation() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, _, _, _, _, _, _, _, _, _, _, hooks_badge_address) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let hooks_badge_address = pool_info.hooks_badge_resource_address;
 
     let hook = Hook::new(
         badge_address,
@@ -1868,7 +1857,8 @@ fn test_hook_unregistered_hook() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, _, _, _, _, _, _, _, _, _, _, hooks_badge_address) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let hooks_badge_address = pool_info.hooks_badge_resource_address;
 
     let hook = Hook::new(
         badge_address,
@@ -1947,7 +1937,8 @@ fn test_hook_wrong_name() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, _, _, _, _, _, _, _, _, _, _, hooks_badge_address) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let hooks_badge_address = pool_info.hooks_badge_resource_address;
 
     let hook = Hook::new(
         badge_address,

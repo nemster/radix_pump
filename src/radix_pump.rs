@@ -24,6 +24,23 @@ struct CreatorData {
     pool_mode: PoolMode,
 }
 
+#[derive(Debug, ScryptoSbor, PartialEq, Clone)]
+pub struct PoolInfo {
+    pub base_coin_amount: Decimal,
+    pub coin_amount: Decimal,
+    pub last_price: Decimal,
+    pub total_buy_fee_percentage: Decimal,
+    pub total_sell_fee_percentage: Decimal,
+    pub total_flash_loan_fee_percentage: Decimal,
+    pub pool_mode: PoolMode,
+    pub end_launch_time: Option<i64>,
+    pub unlocking_time: Option<i64>,
+    pub initial_locked_amount: Option<Decimal>,
+    pub unlocked_amount: Option<Decimal>,
+    pub flash_loan_nft_resource_address: ResourceAddress,
+    pub hooks_badge_resource_address: ResourceAddress,
+}
+
 // Flash loan transient NFT data
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
 struct FlashLoanData {
@@ -747,21 +764,7 @@ mod radix_pump {
         pub fn get_pool_info(
             &self,
             coin_address: ResourceAddress,
-        ) -> (
-            Decimal,
-            Decimal,
-            Decimal,
-            Decimal,
-            Decimal,
-            Decimal,
-            PoolMode,
-            Option<i64>,
-            Option<i64>,
-            Option<Decimal>,
-            Option<Decimal>,
-            ResourceAddress,
-            ResourceAddress,
-        ) {
+        ) -> PoolInfo {
             let (
                 base_coin_amount,
                 coin_amount,
@@ -776,21 +779,21 @@ mod radix_pump {
                 unlocked_amount,
             ) = self.pools.get(&coin_address).expect("Coin not found").get_pool_info();
 
-            (
-                base_coin_amount,
-                coin_amount,
-                last_price,
-                self.buy_sell_fee_percentage + buy_pool_fee_percentage * (100 - self.buy_sell_fee_percentage) / dec!(100),
-                sell_pool_fee_percentage + self.buy_sell_fee_percentage * (100 - sell_pool_fee_percentage) / dec!(100),
-                flash_loan_pool_fee_percentage + self.flash_loan_fee_percentage,
-                pool_mode,
-                end_launch_time,
-                unlocking_time,
-                initial_locked_amount,
-                unlocked_amount,
-                self.flash_loan_nft_resource_manager.address(),
-                self.hooks_badge_vault.resource_address(),
-            )
+            PoolInfo {
+                base_coin_amount: base_coin_amount,
+                coin_amount: coin_amount,
+                last_price: last_price,
+                total_buy_fee_percentage: self.buy_sell_fee_percentage + buy_pool_fee_percentage * (100 - self.buy_sell_fee_percentage) / dec!(100),
+                total_sell_fee_percentage: sell_pool_fee_percentage + self.buy_sell_fee_percentage * (100 - sell_pool_fee_percentage) / dec!(100),
+                total_flash_loan_fee_percentage: flash_loan_pool_fee_percentage + self.flash_loan_fee_percentage,
+                pool_mode: pool_mode,
+                end_launch_time: end_launch_time,
+                unlocking_time: unlocking_time,
+                initial_locked_amount: initial_locked_amount,
+                unlocked_amount: unlocked_amount,
+                flash_loan_nft_resource_address: self.flash_loan_nft_resource_manager.address(),
+                hooks_badge_resource_address: self.hooks_badge_vault.resource_address(),
+            }
         }
 
         fn get_creator_data(

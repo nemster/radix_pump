@@ -7,6 +7,7 @@ use scrypto::NonFungibleData;
 enum PoolMode {
     WaitingForLaunch,
     Launching,
+    TerminatingLaunch,
     Normal,
     Liquidation,
 }

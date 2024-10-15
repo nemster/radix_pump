@@ -5,6 +5,7 @@ use crate::pool::*;
 use crate::hook::*;
 use crate::hook_helpers::*;
 use crate::hook::hook::*;
+use crate::random_helper::*;
 
 // Metadata for the coin creator badge
 static CREATOR_BADGE_NAME: &str = "Coin creator badge";
@@ -70,6 +71,7 @@ pub struct HookDisabledEvent {
     FairLaunchStartEvent,
     FairLaunchEndEvent,
     QuickLaunchEvent,
+    RandomLaunchStartEvent,
     BuyEvent,
     SellEvent,
     LiquidationEvent,
@@ -90,6 +92,7 @@ mod radix_pump {
             forbid_names => restrict_to: [OWNER];
             new_fair_launch => PUBLIC;
             new_quick_launch => PUBLIC;
+            new_random_launch => PUBLIC;
             buy => PUBLIC;
             sell => PUBLIC;
             get_fees => restrict_to: [OWNER];
@@ -120,6 +123,7 @@ mod radix_pump {
         forbid_names => Free;
         new_fair_launch => Usd(dec!("0.05"));
         new_quick_launch => Usd(dec!("0.05"));
+        new_random_launch => Usd(dec!("0.05"));
         buy => Usd(dec!("0.005"));
         sell => Usd(dec!("0.005"));
         get_fees => Free;
@@ -165,6 +169,7 @@ mod radix_pump {
         registered_hooks: HookByName,
         registered_hooks_operations: HooksPerOperation,
         globally_enabled_hooks: HooksPerOperation,
+        random_component: Global<AnyComponent>,
     }
 
     impl RadixPump {
@@ -177,6 +182,7 @@ mod radix_pump {
             creation_fee_percentage: Decimal,
             buy_sell_fee_percentage: Decimal,
             flash_loan_fee_percentage: Decimal,
+            random_component: Global<AnyComponent>,
         ) -> Global<RadixPump> {
 
             assert!(
@@ -307,6 +313,7 @@ mod radix_pump {
                 registered_hooks: KeyValueStore::new(),
                 registered_hooks_operations: HooksPerOperation::new(),
                 globally_enabled_hooks: HooksPerOperation::new(),
+                random_component: random_component,
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
@@ -1164,6 +1171,54 @@ mod radix_pump {
         ) {
             let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
             self.pools.get_mut(&coin_address).unwrap().burn(amount);
+        }
+
+        pub fn new_random_launch(
+            &mut self,
+            mut coin_symbol: String,
+            mut coin_name: String,
+            mut coin_icon_url: String,
+            coin_description: String,
+            mut coin_info_url: String,
+            ticket_price: Decimal,
+            winning_tickets: u32,
+            coins_per_winning_ticket: Decimal,
+            buy_pool_fee_percentage: Decimal,
+            sell_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee_percentage: Decimal,
+        ) -> Bucket {
+            self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee_percentage);
+                    
+            (coin_symbol, coin_name, coin_icon_url, coin_info_url) =
+                self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
+
+            let (pool, coin_resource_address) = Pool::new_random_launch(
+                coin_symbol.clone(),
+                coin_name.clone(),
+                coin_icon_url, 
+                coin_description,
+                coin_info_url,
+                ticket_price,
+                winning_tickets,
+                coins_per_winning_ticket,
+                buy_pool_fee_percentage,
+                sell_pool_fee_percentage,
+                flash_loan_pool_fee_percentage,
+                self.next_creator_badge_rule(),
+                self.base_coin_address,
+                self.next_creator_badge_id,
+            );
+            self.pools.insert(
+                coin_resource_address,
+                pool,
+            );
+
+            self.mint_creator_badge(
+                coin_resource_address,
+                coin_name,
+                coin_symbol,
+                PoolMode::WaitingForLaunch,
+            )
         }
     }
 }

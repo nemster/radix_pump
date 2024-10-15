@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 scrypto = { version = "1.2.0" }
+random = { git = "https://github.com/dot-random/dot-random", rev = "v0.1-scrypto-1.2.0", package = "random" }
 
 [dev-dependencies]
 scrypto-test = { version = "1.2.0" }

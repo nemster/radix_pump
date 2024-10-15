@@ -1046,6 +1046,7 @@ checksum = "1a03d7e7816ade40c6ecedff7515198906d644527771bd8fb5a335094353a15a"
 name = "radix_pump"
 version = "1.0.0"
 dependencies = [
+ "random",
  "scrypto",
  "scrypto-test",
 ]
@@ -1090,6 +1091,11 @@ checksum = "ca3129af7b92a17112d59ad498c6f81eaf463253766b90396d39ea7a39d6613c"
 dependencies = [
  "rand_core",
 ]
+
+[[package]]
+name = "random"
+version = "0.1.0"
+source = "git+https://github.com/dot-random/dot-random?rev=v0.1-scrypto-1.2.0#a76a56de5342208b3ff4eab263bddc529df86a61"
 
 [[package]]
 name = "redox_syscall"

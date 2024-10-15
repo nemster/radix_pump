@@ -658,4 +658,29 @@ impl Pool {
         self.sell_pool_fee_percentage = sell_pool_fee_percentage;
         self.flash_loan_pool_fee_percentage = flash_loan_pool_fee_percentage;
     }
+
+    pub fn burn(
+        &mut self,
+        mut amount: Decimal,
+    ) {
+        match &self.launch {
+            LaunchType::Quick => {
+                assert!(
+                    self.mode == PoolMode::Normal,
+                    "Not allowed in this mode",
+                );
+
+                let (_, ignored_coins) = self.custom_costant_product();
+                amount = min(amount, ignored_coins.checked_truncate(RoundingMode::ToZero).unwrap());
+
+                assert!(
+                    amount > Decimal::ZERO,
+                    "No coins to burn",
+                );
+
+                self.coin_vault.take(amount).burn();
+            },
+            _ => Runtime::panic("Not allowed for this launch type".to_string()),
+        }
+    }
 }

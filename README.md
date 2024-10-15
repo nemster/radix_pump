@@ -25,6 +25,7 @@ The classic constant product formula isn't very suited for handling the pool gen
 A user could easily buy great part of the supply for few base coins.  
 This is why a modified version of the constant product formula is used. This modified version just ignores part of the coins in the pool so that bot sides of the pool have equal value.  
 Everytime a user buys the coin, the number of ignored coins decreases. 
+The coin creator can also burn the currently ignored coins by calling the `burn` method.
 
 ## Liquidation mode
 
@@ -869,6 +870,41 @@ CALL_METHOD
 `<OPERATION>` is one of the operations the hooks gets detached from.  
 
 A `HookDisabledEvent` is issued; it contains the coin resource address, the hook name, the hook address and the list of operations it has been detached from.  
+
+### burn
+
+This method allows the creator of a quick launched coin to burn (part of) the excess coins in the pool.  
+Two proofs are needed, it is not a mistake!  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_non_fungibles"
+    Address("<CREATOR_BADGE_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<CREATOR_BADGE_ID>#"))
+;
+POP_FROM_AUTH_ZONE
+    Proof("creator_proof")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_non_fungibles"
+    Address("<CREATOR_BADGE_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<CREATOR_BADGE_ID>#"))
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "burn"
+    Proof("creator_proof")
+    <AMOUNT>
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<CREATOR_BADGE_ADDRESS>` is the badge receaved when creating the coin.  
+`<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<AMOUNT>` is the maximum amount of coins the creator wants to burn. The actual amount depends on the number of currently ignored coins too.  
 
 ## Copyright
 

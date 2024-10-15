@@ -2033,6 +2033,86 @@ fn test_hook_wrong_badge() {
     ).unwrap();
 }
 
+#[test]
+fn test_burn() -> Result<(), RuntimeError> {
+    let mut env = TestEnvironment::new();
+
+    let package_address =
+        PackageFactory::compile_and_publish(this_package!(), &mut env, CompileProfile::Fast)?;
+
+    let badge_bucket = ResourceBuilder::new_fungible(OwnerRole::None)
+        .divisibility(0)
+        .mint_initial_supply(1, &mut env)?;
+    let badge_address = badge_bucket.resource_address(&mut env)?;
+
+    let base_coin_bucket1 = ResourceBuilder::new_fungible(OwnerRole::None)
+        .divisibility(18)
+        .mint_initial_supply(dec!(1000000), &mut env)?;
+    let base_coin_address = base_coin_bucket1.resource_address(&mut env)?;
+
+    let mut radix_pump = RadixPump::new(
+        badge_address,
+        base_coin_address,
+        dec!(100),
+        dec!(1),
+        dec!("0.3"),
+        dec!("0.1"),
+        package_address,
+        &mut env
+    )?;
+
+    let (coin_creator_badge_bucket, coin_bucket1, _buckets) = radix_pump.new_quick_launch(
+        base_coin_bucket1.take(dec!(100), &mut env)?,
+        "COIN".to_string(),
+        "Coin".to_string(),
+        "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
+        "Just a test coin".to_string(),
+        "".to_string(),
+        dec!(1000000),
+        dec!(1),
+        dec!("0.1"),
+        dec!("0.1"),
+        dec!("0.1"),
+        &mut env
+    )?;
+    let coin_address = coin_bucket1.resource_address(&mut env)?;
+
+    let (_coin_bucket2, _buckets) = radix_pump.buy(
+        coin_address,
+        base_coin_bucket1.take(dec!(100), &mut env)?,
+        &mut env
+    )?;
+
+    let pool_info1 = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+
+    let max_amount_to_burn = dec!(500);
+
+    env.disable_auth_module();
+
+    radix_pump.burn(
+        coin_creator_badge_bucket.create_proof_of_non_fungibles(
+            IndexSet::from([1.into()]),
+            &mut env
+        )?,
+        max_amount_to_burn,
+        &mut env
+    )?;
+
+    let pool_info2 = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+
+    let diff = pool_info1.coin_amount - pool_info2.coin_amount;
+    assert!(
+        diff > Decimal::ZERO,
+        "No coins burned",
+    );
+    assert!(
+        diff <= max_amount_to_burn,
+        "Too many coins burned",
+    );
+
+    Ok(())
+}
+
 fn panic_if_significantly_different(
     x: Decimal,
     y: Decimal,

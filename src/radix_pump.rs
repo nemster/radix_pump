@@ -110,6 +110,7 @@ mod radix_pump {
             owner_disable_hook => restrict_to: [OWNER];
             creator_enable_hook => restrict_to: [OWNER];
             creator_disable_hook => restrict_to: [OWNER];
+            burn => PUBLIC;
         }
     }
 
@@ -139,6 +140,7 @@ mod radix_pump {
         owner_disable_hook => Free;
         creator_enable_hook => Free;
         creator_disable_hook => Free;
+        burn => Free;
     }
 
     struct RadixPump {
@@ -259,7 +261,7 @@ mod radix_pump {
             ))
             .create_with_no_initial_supply();
 
-            let hooks_badge_resource_manager = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            let hooks_badge_bucket = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
             .divisibility(0)
             .metadata(metadata!(
                 roles {
@@ -280,7 +282,7 @@ mod radix_pump {
                 burner => rule!(deny_all);
                 burner_updater => rule!(require(owner_badge_address));
             ))
-            .create_with_no_initial_supply();
+            .mint_initial_supply(dec![1]);
 
             // Instantiate the component
             Self {
@@ -301,7 +303,7 @@ mod radix_pump {
                 max_flash_loan_pool_fee_percentage: dec!(10),
                 min_launch_duration: 604800, // One week
                 min_lock_duration: 7776000, // Three months
-                hooks_badge_vault: Vault::with_bucket(hooks_badge_resource_manager.mint(1)),
+                hooks_badge_vault: Vault::with_bucket(hooks_badge_bucket.into()),
                 registered_hooks: KeyValueStore::new(),
                 registered_hooks_operations: HooksPerOperation::new(),
                 globally_enabled_hooks: HooksPerOperation::new(),
@@ -1153,6 +1155,15 @@ mod radix_pump {
                     operations: operations,
                 }
             );
+        }
+
+        pub fn burn(
+            &mut self,
+            creator_proof: Proof,
+            amount: Decimal,
+        ) {
+            let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
+            self.pools.get_mut(&coin_address).unwrap().burn(amount);
         }
     }
 }

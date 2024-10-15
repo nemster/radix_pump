@@ -102,6 +102,7 @@ pub struct Pool {
     flash_loan_pool_fee_percentage: Decimal,
     pub enabled_hooks: HooksPerOperation,
     launch: LaunchType,
+    creator_id: u64,
 }
 
 impl Pool {
@@ -185,6 +186,7 @@ impl Pool {
         flash_loan_pool_fee_percentage: Decimal,
         coin_creator_badge_rule: AccessRule,
         base_coin_address: ResourceAddress,
+        creator_id: u64,
     ) -> (Pool, ResourceAddress) {
         let component_address = Runtime::global_address();
 
@@ -222,6 +224,7 @@ impl Pool {
                     resource_manager: resource_manager,
                 }
             ),
+            creator_id: creator_id,
         };
 
         (pool, resource_manager.address())
@@ -358,6 +361,7 @@ impl Pool {
         sell_pool_fee_percentage: Decimal,
         flash_loan_pool_fee_percentage: Decimal,
         coin_creator_badge_rule: AccessRule,
+        creator_id: u64,
     ) -> (Pool, Bucket) {
         let mut coin_bucket = Pool::start_resource_manager_creation(
             coin_symbol,
@@ -402,6 +406,7 @@ impl Pool {
             flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
             enabled_hooks: HooksPerOperation::new(),
             launch: LaunchType::Quick,
+            creator_id: creator_id,
         };
 
         (pool, creator_coin_bucket.into())
@@ -546,7 +551,7 @@ impl Pool {
         (base_coin_bucket, self.last_price, self.mode)
     }
 
-    pub fn set_liquidation_mode(&mut self) {
+    pub fn set_liquidation_mode(&mut self) -> u64 {
         assert!(
             self.mode == PoolMode::Normal || self.mode == PoolMode::Launching,
             "Not allowed in this mode",
@@ -559,6 +564,8 @@ impl Pool {
         );
 
         self.mode = PoolMode::Liquidation;
+
+        self.creator_id
     }
 
     pub fn get_flash_loan(
@@ -650,5 +657,30 @@ impl Pool {
         self.buy_pool_fee_percentage = buy_pool_fee_percentage;
         self.sell_pool_fee_percentage = sell_pool_fee_percentage;
         self.flash_loan_pool_fee_percentage = flash_loan_pool_fee_percentage;
+    }
+
+    pub fn burn(
+        &mut self,
+        mut amount: Decimal,
+    ) {
+        match &self.launch {
+            LaunchType::Quick => {
+                assert!(
+                    self.mode == PoolMode::Normal,
+                    "Not allowed in this mode",
+                );
+
+                let (_, ignored_coins) = self.custom_costant_product();
+                amount = min(amount, ignored_coins.checked_truncate(RoundingMode::ToZero).unwrap());
+
+                assert!(
+                    amount > Decimal::ZERO,
+                    "No coins to burn",
+                );
+
+                self.coin_vault.take(amount).burn();
+            },
+            _ => Runtime::panic("Not allowed for this launch type".to_string()),
+        }
     }
 }

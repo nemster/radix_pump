@@ -25,6 +25,7 @@ The classic constant product formula isn't very suited for handling the pool gen
 A user could easily buy great part of the supply for few base coins.  
 This is why a modified version of the constant product formula is used. This modified version just ignores part of the coins in the pool so that bot sides of the pool have equal value.  
 Everytime a user buys the coin, the number of ignored coins decreases. 
+The coin creator can also burn the currently ignored coins by calling the `burn` method.
 
 ## Liquidation mode
 
@@ -70,6 +71,7 @@ Hooks can be used to extend RadixPump features in any way; just few examples:
 - authomatically buy the next 10 quick launched coins  
 - authomatically buy the dips  
 ...  
+
 A simple hook that just emits an event and mints a token is provided as example; when developing a new hook make sure it has a `hook` method with the same arguments and return type as the provided example.
 
 An hook can never steal the buckets intended for the user; it can only add new bucket towards him.  
@@ -81,8 +83,6 @@ RadixPump uses a proof of a badge when calling an hook, so the hook can be sure 
 Compiled with `radixdlt/scrypto-builder:v1.2.0`  
 
 This is the SHA256 of the package files:  
-`9fa0de86892071788e5a65c337c2f45850ee570e212d4dfa993943bf298b3e57`  `target/wasm32-unknown-unknown/release/radix_pump.rpd`  
-`c994e6345b44e38aebb9d16cbeea2121bfc4824b444a9da87fede104f2fa4011`  `target/wasm32-unknown-unknown/release/radix_pump.wasm`  
 
 ## Transaction manifests
 
@@ -92,7 +92,7 @@ Use this function to create a RadixPump component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("package_tdx_2_1p4wws2a59tkwh4ldt28tlthhhu22f8syvxkrvwuq6q7h5n3e7a659p")
+    Address("")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -568,7 +568,7 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<COIN_ADDRESS>` is the resource address of the coin the user wants to receve information about.  
 
-The method returns these information:  
+The method returns a `PoolInfo` struct containing these information:  
 - the amount of base coins in the coin pool.  
 - the amount of coins in the pool.  
 - the price of the last buy or sell operation.  
@@ -581,6 +581,7 @@ The method returns these information:
 - the creator allocation initially locked (FairLaunch only)
 - the currently claimed creator allocation  (FairLaunch only)
 - the resource address of the transient NFT used in flash loans (it's the same for all of the coins).  
+- the respurce address of the badge the component uses to authenticate against hooks.  
 
 ### update_time_limits
 
@@ -869,6 +870,41 @@ CALL_METHOD
 `<OPERATION>` is one of the operations the hooks gets detached from.  
 
 A `HookDisabledEvent` is issued; it contains the coin resource address, the hook name, the hook address and the list of operations it has been detached from.  
+
+### burn
+
+This method allows the creator of a quick launched coin to burn (part of) the excess coins in the pool.  
+Two proofs are needed, it is not a mistake!  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_non_fungibles"
+    Address("<CREATOR_BADGE_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<CREATOR_BADGE_ID>#"))
+;
+POP_FROM_AUTH_ZONE
+    Proof("creator_proof")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_non_fungibles"
+    Address("<CREATOR_BADGE_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<CREATOR_BADGE_ID>#"))
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "burn"
+    Proof("creator_proof")
+    <AMOUNT>
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<CREATOR_BADGE_ADDRESS>` is the badge receaved when creating the coin.  
+`<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<AMOUNT>` is the maximum amount of coins the creator wants to burn. The actual amount depends on the number of currently ignored coins too.  
 
 ## Copyright
 

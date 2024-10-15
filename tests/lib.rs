@@ -3,12 +3,23 @@ use radix_pump::radix_pump::radix_pump_test::*;
 use radix_pump::hook::hook_test::*;
 use scrypto::NonFungibleData;
 
+#[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
+enum PoolMode {
+    WaitingForLaunch,
+    Launching,
+    Normal,
+    Liquidation,
+}
+
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
 struct CreatorData {
+    id: u64,
     coin_resource_address: ResourceAddress,
     coin_name: String,
     coin_symbol: String,
     creation_date: Instant,
+    #[mutable]
+    pool_mode: PoolMode,
 }
 
 #[test]
@@ -388,7 +399,6 @@ fn test_forbid_names() {
 #[test]
 fn test_buy() -> Result<(), RuntimeError> {
     let mut env = TestEnvironment::new();
-    env.disable_auth_module();
 
     let package_address =
         PackageFactory::compile_and_publish(this_package!(), &mut env, CompileProfile::Fast)?;
@@ -414,8 +424,12 @@ fn test_buy() -> Result<(), RuntimeError> {
         &mut env
     )?;
 
+    env.disable_auth_module();
+
     radix_pump.forbid_symbols(vec!["XRD".to_string()], &mut env)?;
     radix_pump.forbid_names(vec!["Radix".to_string()], &mut env)?;
+
+    env.enable_auth_module();
 
     let (_coin_creator_badge_bucket, coin_bucket1, _buckets) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(dec!(100), &mut env)?,
@@ -513,7 +527,6 @@ fn test_buy_wrong_coin() {
 #[test]
 fn test_sell() -> Result<(), RuntimeError> {
     let mut env = TestEnvironment::new();
-    env.disable_auth_module();
 
     let package_address =
         PackageFactory::compile_and_publish(this_package!(), &mut env, CompileProfile::Fast)?;
@@ -538,9 +551,6 @@ fn test_sell() -> Result<(), RuntimeError> {
         package_address,
         &mut env
     )?;
-
-    radix_pump.forbid_symbols(vec!["XRD".to_string()], &mut env)?;
-    radix_pump.forbid_names(vec!["Radix".to_string()], &mut env)?;
 
     let (_coin_creator_badge_bucket, coin_bucket1, _buckets) = radix_pump.new_quick_launch(
         base_coin_bucket1.take(dec!(1000), &mut env)?,
@@ -634,7 +644,6 @@ fn test_sell_wrong_coin() {
 #[test]
 fn test_fees() -> Result<(), RuntimeError> {
     let mut env = TestEnvironment::new();
-    env.disable_auth_module();
 
     let package_address =
         PackageFactory::compile_and_publish(this_package!(), &mut env, CompileProfile::Fast)?;
@@ -678,6 +687,8 @@ fn test_fees() -> Result<(), RuntimeError> {
         &mut env
     )?;
     let coin_address = coin_bucket1.resource_address(&mut env)?;
+
+    env.disable_auth_module();
 
     let base_coin_bucket2 = radix_pump.get_fees(&mut env)?;
     assert!(
@@ -757,7 +768,6 @@ fn test_fees() -> Result<(), RuntimeError> {
 #[test]
 fn test_liquidation() -> Result<(), RuntimeError> {
     let mut env = TestEnvironment::new();
-    env.disable_auth_module();
 
     let package_address =
         PackageFactory::compile_and_publish(this_package!(), &mut env, CompileProfile::Fast)?;
@@ -804,7 +814,11 @@ fn test_liquidation() -> Result<(), RuntimeError> {
     let base_coins_in_pool = deposit_amount * (dec!(1) - creation_fee_percentage / dec!(100));
     let coins_out_of_the_pool = coin_bucket1.amount(&mut env)?;
 
+    env.disable_auth_module();
+
     radix_pump.owner_set_liquidation_mode(coin_address, &mut env)?;
+
+    env.enable_auth_module();
 
     let mut coin_sold = dec!(100);
     let (base_coin_bucket2, _buckets) = radix_pump.sell(
@@ -891,7 +905,6 @@ fn test_buy_liquidation() {
 #[test]
 fn test_flash_loan() -> Result<(), RuntimeError> {
     let mut env = TestEnvironment::new();
-    env.disable_auth_module();
 
     let package_address =
         PackageFactory::compile_and_publish(this_package!(), &mut env, CompileProfile::Fast)?;
@@ -935,7 +948,10 @@ fn test_flash_loan() -> Result<(), RuntimeError> {
     )?;
     let coin_address = coin_bucket1.resource_address(&mut env)?;
 
-    let (_, _, price, _, _, flash_loan_total_fee_percentage, _, _, _, _, _, _, _) = radix_pump.get_pool_info(coin_address, &mut env)?;
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env)?;
+    let price = pool_info.last_price;
+    let flash_loan_total_fee_percentage = pool_info.total_flash_loan_fee_percentage;
+
     panic_if_significantly_different(
         flash_loan_total_fee_percentage,
         flash_loan_pool_fee_percentage + flash_loan_fee_percentage,
@@ -1007,7 +1023,9 @@ fn test_flash_loan_insufficient_fees() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, price, _, _, flash_loan_total_fee_percentage, _, _, _, _, _, _, _) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let price = pool_info.last_price;
+    let flash_loan_total_fee_percentage = pool_info.total_flash_loan_fee_percentage;
 
     let (coin_bucket2, transient_nft_bucket) = radix_pump.get_flash_loan(
         coin_address,
@@ -1072,7 +1090,9 @@ fn test_flash_loan_insufficient_amount() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, price, _, _, flash_loan_total_fee_percentage, _, _, _, _, _, _, _) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let price = pool_info.last_price;
+    let flash_loan_total_fee_percentage = pool_info.total_flash_loan_fee_percentage;
 
     let (coin_bucket2, transient_nft_bucket) = radix_pump.get_flash_loan(
         coin_address,
@@ -1094,7 +1114,6 @@ fn test_flash_loan_insufficient_amount() {
 #[test]
 fn test_fair_launch() -> Result<(), RuntimeError> {
     let mut env = TestEnvironment::new();
-    env.disable_auth_module();
 
     let package_address =
         PackageFactory::compile_and_publish(this_package!(), &mut env, CompileProfile::Fast)?;
@@ -1146,9 +1165,11 @@ fn test_fair_launch() -> Result<(), RuntimeError> {
     )?;
     let coin_resource_address = creator_data.coin_resource_address;
 
+    env.disable_auth_module();
     let min_launch_duration = 100;
     let min_lock_duration = 10000;
     radix_pump.update_time_limits(min_launch_duration, min_lock_duration, &mut env)?;
+    env.enable_auth_module();
 
     let now = 1800000000;
     env.set_current_time(Instant::new(now));
@@ -1163,21 +1184,12 @@ fn test_fair_launch() -> Result<(), RuntimeError> {
         &mut env
     )?;
 
-    let (
-        _base_coin_amount,
-        _coin_amount,
-        last_price,
-        total_buy_fee,
-        _total_sell_fee,
-        _total_flash_loan_fee,
-        _pool_mode,
-        end_launch_time,
-        unlocking_time,
-        _initial_locked_amount,
-        _unlocked_amount,
-        _flash_loan_nft_address,
-        _hooks_badge_resource_address,
-    ) = radix_pump.get_pool_info(coin_resource_address, &mut env)?;
+    let pool_info = radix_pump.get_pool_info(coin_resource_address, &mut env)?;
+    let last_price = pool_info.last_price;
+    let total_buy_fee = pool_info.total_buy_fee_percentage;
+    let end_launch_time = pool_info.end_launch_time;
+    let unlocking_time = pool_info.unlocking_time;
+
     assert!(
         end_launch_time.unwrap() == now + min_launch_duration,
         "Wrong end_launch_time reported",
@@ -1256,21 +1268,9 @@ fn test_fair_launch() -> Result<(), RuntimeError> {
         &mut env
     )?;
 
-    let (
-        _base_coin_amount,
-        _coin_amount,
-        _last_price,
-        _total_buy_fee,
-        _total_sell_fee,
-        _total_flash_loan_fee,
-        _pool_mode,
-        _end_launch_time,
-        _unlocking_time,
-        initial_locked_amount,
-        unlocked_amount,
-        _flash_loan_nft_address,
-        _hooks_badge_address,
-    ) = radix_pump.get_pool_info(coin_resource_address, &mut env)?;
+    let pool_info = radix_pump.get_pool_info(coin_resource_address, &mut env)?;
+    let initial_locked_amount = pool_info.initial_locked_amount;
+    let unlocked_amount = pool_info.unlocked_amount;
 
     panic_if_significantly_different(
         initial_locked_amount.unwrap(),
@@ -1284,6 +1284,68 @@ fn test_fair_launch() -> Result<(), RuntimeError> {
     );
 
     Ok(())
+}
+
+#[test]
+#[should_panic]
+fn test_wrong_creator_badge() {
+    let mut env = TestEnvironment::new();
+    env.disable_auth_module();
+
+    let package_address =
+        PackageFactory::compile_and_publish(this_package!(), &mut env, CompileProfile::Fast).unwrap();
+
+    let badge_bucket = ResourceBuilder::new_fungible(OwnerRole::None)
+        .divisibility(0)
+        .mint_initial_supply(1, &mut env).unwrap();
+    let badge_address = badge_bucket.resource_address(&mut env).unwrap();
+
+    let base_coin_bucket1 = ResourceBuilder::new_fungible(OwnerRole::None)
+        .divisibility(18)
+        .mint_initial_supply(dec!(1000000), &mut env).unwrap();
+    let base_coin_address = base_coin_bucket1.resource_address(&mut env).unwrap();
+
+    let mut radix_pump = RadixPump::new(
+        badge_address,
+        base_coin_address,
+        dec!(100),
+        dec!("1"),
+        dec!("0.3"),
+        dec!("0.1"),
+        package_address,
+        &mut env
+    ).unwrap();
+
+    let _coin_creator_badge_bucket = radix_pump.new_fair_launch(
+        "FCOIN".to_string(),
+        "Fair Coin".to_string(),
+        "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
+        "Fair launched coin".to_string(),
+        "".to_string(),
+        dec!(0.2),
+        dec!(10),
+        dec!("0.1"),
+        dec!("0.1"),
+        dec!("0.1"),
+        &mut env
+    ).unwrap();
+
+    let min_launch_duration = 100;
+    let min_lock_duration = 10000;
+    let _ = radix_pump.update_time_limits(min_launch_duration, min_lock_duration, &mut env).unwrap();
+
+    let now = 1800000000;
+    env.set_current_time(Instant::new(now));
+
+    radix_pump.launch(
+        badge_bucket.create_proof_of_amount( // Wrong badge
+            dec!(1),
+            &mut env
+        ).unwrap(),
+        now + min_launch_duration,
+        now + min_launch_duration + min_lock_duration,
+        &mut env
+    ).unwrap();
 }
 
 #[test]
@@ -1342,7 +1404,7 @@ fn test_fair_launch_too_short_duration() {
             IndexSet::from([1.into()]),
             &mut env
         ).unwrap(),
-        now + min_launch_duration - 1,
+        now + min_launch_duration - 1, // Too short
         now + min_launch_duration + min_lock_duration,
         &mut env
     ).unwrap();
@@ -1405,7 +1467,7 @@ fn test_fair_launch_too_short_unlock() {
             &mut env
         ).unwrap(),
         now + min_launch_duration,
-        now + min_launch_duration + min_lock_duration - 1,
+        now + min_launch_duration + min_lock_duration - 1, // Too short
         &mut env
     ).unwrap();
 }
@@ -1485,7 +1547,6 @@ fn test_fair_launch_terminate_too_soon() {
 #[test]
 fn test_hook() -> Result<(), RuntimeError> {
     let mut env = TestEnvironment::new();
-    env.disable_auth_module();
 
     let package_address =
         PackageFactory::compile_and_publish(this_package!(), &mut env, CompileProfile::Fast)?;
@@ -1527,7 +1588,8 @@ fn test_hook() -> Result<(), RuntimeError> {
     )?;
     let coin_address = coin_bucket1.resource_address(&mut env)?;
 
-    let (_, _, _, _, _, _, _, _, _, _, _, _, hooks_badge_address) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let hooks_badge_address = pool_info.hooks_badge_resource_address;
 
     let hook = Hook::new(
         badge_address,
@@ -1535,6 +1597,8 @@ fn test_hook() -> Result<(), RuntimeError> {
         package_address,
         &mut env
     )?;
+
+    env.disable_auth_module();
 
     radix_pump.register_hook(
         "test hook".to_string(),
@@ -1701,7 +1765,8 @@ fn test_hook_wrong_operation() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, _, _, _, _, _, _, _, _, _, _, hooks_badge_address) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let hooks_badge_address = pool_info.hooks_badge_resource_address;
 
     let hook = Hook::new(
         badge_address,
@@ -1778,7 +1843,8 @@ fn test_hook_unregistered_operation() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, _, _, _, _, _, _, _, _, _, _, hooks_badge_address) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let hooks_badge_address = pool_info.hooks_badge_resource_address;
 
     let hook = Hook::new(
         badge_address,
@@ -1857,7 +1923,8 @@ fn test_hook_unregistered_hook() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, _, _, _, _, _, _, _, _, _, _, hooks_badge_address) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let hooks_badge_address = pool_info.hooks_badge_resource_address;
 
     let hook = Hook::new(
         badge_address,
@@ -1936,7 +2003,8 @@ fn test_hook_wrong_name() {
     ).unwrap();
     let coin_address = coin_bucket1.resource_address(&mut env).unwrap();
 
-    let (_, _, _, _, _, _, _, _, _, _, _, _, hooks_badge_address) = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let pool_info = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+    let hooks_badge_address = pool_info.hooks_badge_resource_address;
 
     let hook = Hook::new(
         badge_address,
@@ -2029,6 +2097,86 @@ fn test_hook_wrong_badge() {
         dec!("0.1"),
         &mut env
     ).unwrap();
+}
+
+#[test]
+fn test_burn() -> Result<(), RuntimeError> {
+    let mut env = TestEnvironment::new();
+
+    let package_address =
+        PackageFactory::compile_and_publish(this_package!(), &mut env, CompileProfile::Fast)?;
+
+    let badge_bucket = ResourceBuilder::new_fungible(OwnerRole::None)
+        .divisibility(0)
+        .mint_initial_supply(1, &mut env)?;
+    let badge_address = badge_bucket.resource_address(&mut env)?;
+
+    let base_coin_bucket1 = ResourceBuilder::new_fungible(OwnerRole::None)
+        .divisibility(18)
+        .mint_initial_supply(dec!(1000000), &mut env)?;
+    let base_coin_address = base_coin_bucket1.resource_address(&mut env)?;
+
+    let mut radix_pump = RadixPump::new(
+        badge_address,
+        base_coin_address,
+        dec!(100),
+        dec!(1),
+        dec!("0.3"),
+        dec!("0.1"),
+        package_address,
+        &mut env
+    )?;
+
+    let (coin_creator_badge_bucket, coin_bucket1, _buckets) = radix_pump.new_quick_launch(
+        base_coin_bucket1.take(dec!(100), &mut env)?,
+        "COIN".to_string(),
+        "Coin".to_string(),
+        "https://assets.radixdlt.com/icons/icon-xrd-32x32.png".to_string(),
+        "Just a test coin".to_string(),
+        "".to_string(),
+        dec!(1000000),
+        dec!(1),
+        dec!("0.1"),
+        dec!("0.1"),
+        dec!("0.1"),
+        &mut env
+    )?;
+    let coin_address = coin_bucket1.resource_address(&mut env)?;
+
+    let (_coin_bucket2, _buckets) = radix_pump.buy(
+        coin_address,
+        base_coin_bucket1.take(dec!(100), &mut env)?,
+        &mut env
+    )?;
+
+    let pool_info1 = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+
+    let max_amount_to_burn = dec!(500);
+
+    env.disable_auth_module();
+
+    radix_pump.burn(
+        coin_creator_badge_bucket.create_proof_of_non_fungibles(
+            IndexSet::from([1.into()]),
+            &mut env
+        )?,
+        max_amount_to_burn,
+        &mut env
+    )?;
+
+    let pool_info2 = radix_pump.get_pool_info(coin_address, &mut env).unwrap();
+
+    let diff = pool_info1.coin_amount - pool_info2.coin_amount;
+    assert!(
+        diff > Decimal::ZERO,
+        "No coins burned",
+    );
+    assert!(
+        diff <= max_amount_to_burn,
+        "Too many coins burned",
+    );
+
+    Ok(())
 }
 
 fn panic_if_significantly_different(

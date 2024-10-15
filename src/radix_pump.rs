@@ -15,10 +15,30 @@ static TRANSIENT_NFT_NAME: &str = "Flash loan transient NFT";
 // Coin creator badge NFT data
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
 struct CreatorData {
+    id: u64,
     coin_resource_address: ResourceAddress,
     coin_name: String,
     coin_symbol: String,
     creation_date: Instant,
+    #[mutable]
+    pool_mode: PoolMode,
+}
+
+#[derive(Debug, ScryptoSbor, PartialEq, Clone)]
+pub struct PoolInfo {
+    pub base_coin_amount: Decimal,
+    pub coin_amount: Decimal,
+    pub last_price: Decimal,
+    pub total_buy_fee_percentage: Decimal,
+    pub total_sell_fee_percentage: Decimal,
+    pub total_flash_loan_fee_percentage: Decimal,
+    pub pool_mode: PoolMode,
+    pub end_launch_time: Option<i64>,
+    pub unlocking_time: Option<i64>,
+    pub initial_locked_amount: Option<Decimal>,
+    pub unlocked_amount: Option<Decimal>,
+    pub flash_loan_nft_resource_address: ResourceAddress,
+    pub hooks_badge_resource_address: ResourceAddress,
 }
 
 // Flash loan transient NFT data
@@ -90,6 +110,7 @@ mod radix_pump {
             owner_disable_hook => restrict_to: [OWNER];
             creator_enable_hook => restrict_to: [OWNER];
             creator_disable_hook => restrict_to: [OWNER];
+            burn => PUBLIC;
         }
     }
 
@@ -119,6 +140,7 @@ mod radix_pump {
         owner_disable_hook => Free;
         creator_enable_hook => Free;
         creator_disable_hook => Free;
+        burn => Free;
     }
 
     struct RadixPump {
@@ -197,8 +219,8 @@ mod radix_pump {
                 minter_updater => rule!(require(owner_badge_address));
             ))
             .non_fungible_data_update_roles(non_fungible_data_update_roles!(
-                non_fungible_data_updater => rule!(deny_all);
-                non_fungible_data_updater_updater => rule!(deny_all);
+                non_fungible_data_updater => rule!(require(global_caller(component_address)));
+                non_fungible_data_updater_updater => rule!(require(owner_badge_address));
             ))
             .burn_roles(burn_roles!(
                 burner => rule!(allow_all);
@@ -239,7 +261,7 @@ mod radix_pump {
             ))
             .create_with_no_initial_supply();
 
-            let hooks_badge_resource_manager = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            let hooks_badge_bucket = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
             .divisibility(0)
             .metadata(metadata!(
                 roles {
@@ -260,7 +282,7 @@ mod radix_pump {
                 burner => rule!(deny_all);
                 burner_updater => rule!(require(owner_badge_address));
             ))
-            .create_with_no_initial_supply();
+            .mint_initial_supply(dec![1]);
 
             // Instantiate the component
             Self {
@@ -281,7 +303,7 @@ mod radix_pump {
                 max_flash_loan_pool_fee_percentage: dec!(10),
                 min_launch_duration: 604800, // One week
                 min_lock_duration: 7776000, // Three months
-                hooks_badge_vault: Vault::with_bucket(hooks_badge_resource_manager.mint(1)),
+                hooks_badge_vault: Vault::with_bucket(hooks_badge_bucket.into()),
                 registered_hooks: KeyValueStore::new(),
                 registered_hooks_operations: HooksPerOperation::new(),
                 globally_enabled_hooks: HooksPerOperation::new(),
@@ -400,6 +422,7 @@ mod radix_pump {
                 flash_loan_pool_fee_percentage,
                 self.next_creator_badge_rule(),
                 self.base_coin_address,
+                self.next_creator_badge_id,
             );
             self.pools.insert(
                 coin_resource_address,
@@ -410,6 +433,7 @@ mod radix_pump {
                 coin_resource_address,
                 coin_name,
                 coin_symbol,
+                PoolMode::WaitingForLaunch,
             )
         }
 
@@ -461,6 +485,7 @@ mod radix_pump {
                 sell_pool_fee_percentage,
                 flash_loan_pool_fee_percentage,
                 self.next_creator_badge_rule(),
+                self.next_creator_badge_id,
             );
             let coin_address = creator_coin_bucket.resource_address();
             self.pools.insert(
@@ -472,6 +497,7 @@ mod radix_pump {
                 creator_coin_bucket.resource_address(),
                 coin_name,
                 coin_symbol,
+                PoolMode::Normal,
             );
 
             let hook_argument = HookArgument {
@@ -607,7 +633,13 @@ mod radix_pump {
             &mut self,
             coin_address: ResourceAddress,
         ) {
-            self.pools.get_mut(&coin_address).expect("Coin not found").set_liquidation_mode();
+            let creator_id = self.pools.get_mut(&coin_address).expect("Coin not found").set_liquidation_mode();
+
+            self.creator_badge_resource_manager.update_non_fungible_data(
+                &NonFungibleLocalId::integer(creator_id.into()),
+                "pool_mode",
+                PoolMode::Liquidation,
+            );
         }
 
         pub fn creator_set_liquidation_mode(
@@ -615,6 +647,12 @@ mod radix_pump {
             creator_proof: Proof,
         ) {
             let creator_data = self.get_creator_data(creator_proof);
+
+            self.creator_badge_resource_manager.update_non_fungible_data(
+                &NonFungibleLocalId::integer(creator_data.id.into()),
+                "pool_mode",
+                PoolMode::Liquidation,
+            );
 
             self.pools.get_mut(&creator_data.coin_resource_address).unwrap().set_liquidation_mode();
         }
@@ -728,21 +766,7 @@ mod radix_pump {
         pub fn get_pool_info(
             &self,
             coin_address: ResourceAddress,
-        ) -> (
-            Decimal,
-            Decimal,
-            Decimal,
-            Decimal,
-            Decimal,
-            Decimal,
-            PoolMode,
-            Option<i64>,
-            Option<i64>,
-            Option<Decimal>,
-            Option<Decimal>,
-            ResourceAddress,
-            ResourceAddress,
-        ) {
+        ) -> PoolInfo {
             let (
                 base_coin_amount,
                 coin_amount,
@@ -757,21 +781,21 @@ mod radix_pump {
                 unlocked_amount,
             ) = self.pools.get(&coin_address).expect("Coin not found").get_pool_info();
 
-            (
-                base_coin_amount,
-                coin_amount,
-                last_price,
-                self.buy_sell_fee_percentage + buy_pool_fee_percentage * (100 - self.buy_sell_fee_percentage) / dec!(100),
-                sell_pool_fee_percentage + self.buy_sell_fee_percentage * (100 - sell_pool_fee_percentage) / dec!(100),
-                flash_loan_pool_fee_percentage + self.flash_loan_fee_percentage,
-                pool_mode,
-                end_launch_time,
-                unlocking_time,
-                initial_locked_amount,
-                unlocked_amount,
-                self.flash_loan_nft_resource_manager.address(),
-                self.hooks_badge_vault.resource_address(),
-            )
+            PoolInfo {
+                base_coin_amount: base_coin_amount,
+                coin_amount: coin_amount,
+                last_price: last_price,
+                total_buy_fee_percentage: self.buy_sell_fee_percentage + buy_pool_fee_percentage * (100 - self.buy_sell_fee_percentage) / dec!(100),
+                total_sell_fee_percentage: sell_pool_fee_percentage + self.buy_sell_fee_percentage * (100 - sell_pool_fee_percentage) / dec!(100),
+                total_flash_loan_fee_percentage: flash_loan_pool_fee_percentage + self.flash_loan_fee_percentage,
+                pool_mode: pool_mode,
+                end_launch_time: end_launch_time,
+                unlocking_time: unlocking_time,
+                initial_locked_amount: initial_locked_amount,
+                unlocked_amount: unlocked_amount,
+                flash_loan_nft_resource_address: self.flash_loan_nft_resource_manager.address(),
+                hooks_badge_resource_address: self.hooks_badge_vault.resource_address(),
+            }
         }
 
         fn get_creator_data(
@@ -821,10 +845,17 @@ mod radix_pump {
                 "Lock time too short",
             );
 
-            let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
+            let creator_data = self.get_creator_data(creator_proof);
+            let coin_address = creator_data.coin_resource_address;
             let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
             let price = pool.launch(end_launch_time, unlocking_time);
+
+            self.creator_badge_resource_manager.update_non_fungible_data(
+                &NonFungibleLocalId::integer(creator_data.id.into()),
+                "pool_mode",
+                PoolMode::Launching,
+            );
 
             let hook_argument = HookArgument {
                 coin_address: coin_address,
@@ -881,7 +912,8 @@ mod radix_pump {
             &mut self,
             creator_proof: Proof,
         ) -> (Bucket, Vec<Bucket>) {
-            let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
+            let creator_data = self.get_creator_data(creator_proof);
+            let coin_address = creator_data.coin_resource_address;
 
             let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
@@ -892,6 +924,12 @@ mod radix_pump {
                     self.creation_fee_percentage * base_coin_bucket.amount() / 100,
                     WithdrawStrategy::Rounded(RoundingMode::ToZero),
                 )
+            );
+
+            self.creator_badge_resource_manager.update_non_fungible_data(
+                &NonFungibleLocalId::integer(creator_data.id.into()),
+                "pool_mode",
+                PoolMode::Normal,
             );
 
             let hook_argument = HookArgument {
@@ -916,14 +954,17 @@ mod radix_pump {
             coin_resource_address: ResourceAddress,
             coin_name: String,
             coin_symbol: String,
+            pool_mode: PoolMode
         ) -> Bucket {
             let creator_badge = self.creator_badge_resource_manager.mint_non_fungible(
                 &NonFungibleLocalId::integer(self.next_creator_badge_id.into()),
                 CreatorData {
+                    id: self.next_creator_badge_id,
                     coin_resource_address: coin_resource_address,
                     coin_name: coin_name,
                     coin_symbol: coin_symbol,
                     creation_date: Clock::current_time_rounded_to_seconds(),
+                    pool_mode: pool_mode,
                 }
             );
 
@@ -1114,6 +1155,15 @@ mod radix_pump {
                     operations: operations,
                 }
             );
+        }
+
+        pub fn burn(
+            &mut self,
+            creator_proof: Proof,
+            amount: Decimal,
+        ) {
+            let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
+            self.pools.get_mut(&coin_address).unwrap().burn(amount);
         }
     }
 }

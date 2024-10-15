@@ -83,8 +83,8 @@ RadixPump uses a proof of a badge when calling an hook, so the hook can be sure 
 Compiled with `radixdlt/scrypto-builder:v1.2.0`  
 
 This is the SHA256 of the package files:  
-`78963054e32cfa7bf6529f120b1c042a082a759cee734a7b9dc0f91372eb35d0`  `target/wasm32-unknown-unknown/release/radix_pump.rpd`
-`01c7d1e97f7123e76b6eae6046b4d3a212a53dbb6972a00fe129c033d1a82afd`  `target/wasm32-unknown-unknown/release/radix_pump.wasm`
+`78963054e32cfa7bf6529f120b1c042a082a759cee734a7b9dc0f91372eb35d0`  `target/wasm32-unknown-unknown/release/radix_pump.rpd`  
+`01c7d1e97f7123e76b6eae6046b4d3a212a53dbb6972a00fe129c033d1a82afd`  `target/wasm32-unknown-unknown/release/radix_pump.wasm`  
 
 ## Transaction manifests
 

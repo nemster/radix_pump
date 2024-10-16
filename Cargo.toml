@@ -1,13 +1,14 @@
-[package]
-name = "radix_pump"
+[workspace.package]
 version = "1.0.0"
 edition = "2021"
 
-[dependencies]
-scrypto = { version = "1.2.0" }
-
-[dev-dependencies]
-scrypto-test = { version = "1.2.0" }
+[workspace.dependencies]
+sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+native-sdk = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+transaction = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+scrypto-interface = { path = "scrypto-interface" }
+radix-engine-interface = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
 
 [profile.release]
 opt-level = 'z'        # Optimize for size.
@@ -17,12 +18,9 @@ panic = 'abort'        # Abort on panic.
 strip = true           # Strip the symbols.
 overflow-checks = true # Panic in the case of an overflow.
 
-[features]
-default = []
-
-[lib]
-crate-type = ["cdylib", "lib"]
-
 [workspace]
-# Set the package crate as its own empty workspace, to hide it from any potential ancestor workspace
-# Remove this [workspace] section if you intend the package to be part of a Cargo workspace
+resolver = "2"
+members= ["radix_pump", "hooks"]
+
+[workspace.lints.clippy]
+arithmetic_side_effects = "warn"

@@ -1,0 +1,41 @@
+[config]
+default_to_workspace = false
+
+[tasks.test]
+command = "cargo"
+args = [
+    "test",
+    "--release",
+    "--features",
+    "package-loader/build-time-blueprints",
+    "--no-fail-fast",
+]
+
+[tasks.check]
+install_crate = "clippy"
+command = "cargo"
+args = ["clippy", "--all"]
+
+[tasks.format]
+install_crate = "rustfmt"
+command = "cargo"
+args = ["fmt"]
+
+[tasks.fmt]
+alias = "format"
+
+[tasks.publish-stokenet]
+command = "cargo"
+args = [
+    "run",
+    "--package",
+    "bootstrapper",
+    "--",
+    "publish-test-to-stokenet",
+    "./frontend/public/config.json",
+    "./frontend/src/config.json",
+]
+
+[tasks.frontend-start]
+command = "npm"
+args = ["start", "--prefix", "./frontend"]

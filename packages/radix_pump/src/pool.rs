@@ -1,5 +1,6 @@
 use scrypto::prelude::*;
 use scrypto::prelude::rust::cmp::*;
+use crate::common::*;
 use crate::hook_helpers::*;
 
 #[derive(ScryptoSbor, ScryptoEvent)]
@@ -81,14 +82,6 @@ struct FairLaunchDetails {
 enum LaunchType {
     Quick,
     Fair(FairLaunchDetails),
-}
-
-#[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
-pub enum PoolMode {
-    WaitingForLaunch,
-    Launching,
-    Normal,
-    Liquidation,
 }
 
 #[derive(ScryptoSbor)]

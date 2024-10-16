@@ -1,0 +1,22 @@
+[package]
+name = "hooks"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+radix-engine-interface = { workspace = true }
+sbor = { workspace = true }
+scrypto = { workspace = true }
+scrypto-interface = { path = "../../libraries/scrypto-interface/" }
+transaction = { workspace = true, optional = true }
+
+[features]
+default = []
+test = []
+manifest-builder-stubs = ["dep:transaction"]
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[lints]
+workspace = true

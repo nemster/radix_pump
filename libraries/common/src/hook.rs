@@ -1,6 +1,6 @@
 use scrypto::prelude::*;
-use crate::pool::*;
 use scrypto_interface::*;
+use crate::common::*;
 
 #[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
 pub enum HookableOperation {
@@ -17,15 +17,6 @@ pub struct HookArgument {
     pub coin_address: ResourceAddress,
     pub operation: HookableOperation,
     pub amount: Option<Decimal>,
-    pub mode: PoolMode,
-    pub price: Option<Decimal>,
-}
-
-#[derive(ScryptoSbor, ScryptoEvent)]
-pub struct HookCallEvent {
-    coin_address: ResourceAddress,
-    operation: HookableOperation,
-    amount: Option<Decimal>,
     pub mode: PoolMode,
     pub price: Option<Decimal>,
 }

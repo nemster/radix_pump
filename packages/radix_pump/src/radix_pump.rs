@@ -1,8 +1,10 @@
 use scrypto::prelude::*;
 use scrypto::prelude::rust::cmp::*;
+use crate::common::*;
 use crate::pool::*;
 use crate::hook::*;
 use crate::hook_helpers::*;
+use std::ops::Deref;
 
 // Metadata for the coin creator badge
 static CREATOR_BADGE_NAME: &str = "Coin creator badge";
@@ -51,7 +53,7 @@ struct FlashLoanData {
 pub struct HookEnabledEvent {
     resource_address: Option<ResourceAddress>,
     hook_name: String,
-    hook_address: Global<Hook>,
+    hook_address: HookInterfaceScryptoStub,
     operations: Vec<String>,
 }
 
@@ -59,7 +61,7 @@ pub struct HookEnabledEvent {
 pub struct HookDisabledEvent {
     resource_address: Option<ResourceAddress>,
     hook_name: String,
-    hook_address: Global<Hook>,
+    hook_address: HookInterfaceScryptoStub,
     operations: Vec<String>,
 }
 
@@ -1033,7 +1035,7 @@ mod radix_pump {
             &mut self,
             name: String,
             operations: Vec<String>,
-            component_address: Global<Hook>,
+            component_address: HookInterfaceScryptoStub,
         ) {
             self.registered_hooks_operations.add_hook(&name, &operations);
 

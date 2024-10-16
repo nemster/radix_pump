@@ -1,7 +1,7 @@
 use scrypto::prelude::*;
 use crate::hook::*;
 
-pub type HookByName = KeyValueStore<String, Global<Hook>>;
+pub type HookByName = KeyValueStore<String, HookInterfaceScryptoStub>;
 
 #[derive(ScryptoSbor)]
 pub struct HooksPerOperation {

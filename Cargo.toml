@@ -1,28 +1,42 @@
-[package]
-name = "radix_pump"
-version = "1.0.0"
+[workspace]
+resolver = "2"
+members = [
+    # Packages
+    "packages/radix_pump",
+    # Libraries
+    "libraries/scrypto-interface",
+]
+
+[workspace.package]
+version = "0.1.0"
 edition = "2021"
+description = "RadixPump implements a marketplace where people can create, buy, sell and take flash loans of coins."
 
-[dependencies]
+[workspace.dependencies]
+sbor = { version = "1.2.0" }
+utils = { version = "1.2.0" }
 scrypto = { version = "1.2.0" }
-
-[dev-dependencies]
+native-sdk = { version = "1.2.0" }
+radix-engine = { version = "1.2.0" }
+radix-engine-common = { version = "1.2.0" }
+radix-engine-stores = { version = "1.2.0" }
+radix-engine-derive = { version = "1.2.0" }
+radix-engine-queries = { version = "1.2.0" }
+radix-engine-store-interface = { version = "1.2.0" }
+scrypto-unit = { version = "1.2.0" }
 scrypto-test = { version = "1.2.0" }
+state-manager = { version = "1.2.0" }
+radix-transactions = { version = "1.2.0" }
+radix-engine-interface = { version = "1.2.0" }
 
 [profile.release]
-opt-level = 'z'        # Optimize for size.
-lto = true             # Enable Link Time Optimization.
-codegen-units = 1      # Reduce number of codegen units to increase optimizations.
-panic = 'abort'        # Abort on panic.
-strip = true           # Strip the symbols.
-overflow-checks = true # Panic in the case of an overflow.
+opt-level = 'z'
+lto = true
+codegen-units = 1
+panic = 'abort'
+strip = true
+overflow-checks = true
 
-[features]
-default = []
+[workspace.lints.clippy]
+arithmetic_side_effects = "warn"
 
-[lib]
-crate-type = ["cdylib", "lib"]
-
-[workspace]
-# Set the package crate as its own empty workspace, to hide it from any potential ancestor workspace
-# Remove this [workspace] section if you intend the package to be part of a Cargo workspace

@@ -1,0 +1,21 @@
+[package]
+name = "radix_pump"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+scrypto = { workspace = true }
+scrypto-interface = { path = "../../libraries/scrypto-interface/" }
+radix-engine-interface = { workspace = true }
+radix-transactions = { workspace = true, optional = true }
+
+[features]
+default = []
+test = []
+manifest-builder-stubs = ["dep:radix-transactions"]
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[lints]
+workspace = true

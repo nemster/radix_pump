@@ -1,5 +1,6 @@
 use scrypto::prelude::*;
 use crate::pool::*;
+use scrypto_interface::*;
 
 #[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
 pub enum HookableOperation {

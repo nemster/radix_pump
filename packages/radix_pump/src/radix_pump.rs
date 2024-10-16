@@ -1,10 +1,8 @@
 use scrypto::prelude::*;
 use scrypto::prelude::rust::cmp::*;
-use std::ops::Deref;
 use crate::pool::*;
 use crate::hook::*;
 use crate::hook_helpers::*;
-use crate::hook::hook::*;
 
 // Metadata for the coin creator badge
 static CREATOR_BADGE_NAME: &str = "Coin creator badge";

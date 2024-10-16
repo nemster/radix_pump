@@ -13,21 +13,21 @@ edition = "2021"
 description = "RadixPump implements a marketplace where people can create, buy, sell and take flash loans of coins."
 
 [workspace.dependencies]
-sbor = { version = "1.2.0" }
-utils = { version = "1.2.0" }
-scrypto = { version = "1.2.0" }
-native-sdk = { version = "1.2.0" }
-radix-engine = { version = "1.2.0" }
-radix-engine-common = { version = "1.2.0" }
-radix-engine-stores = { version = "1.2.0" }
-radix-engine-derive = { version = "1.2.0" }
-radix-engine-queries = { version = "1.2.0" }
-radix-engine-store-interface = { version = "1.2.0" }
-scrypto-unit = { version = "1.2.0" }
-scrypto-test = { version = "1.2.0" }
-state-manager = { version = "1.2.0" }
-radix-transactions = { version = "1.2.0" }
-radix-engine-interface = { version = "1.2.0" }
+sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+utils = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+native-sdk = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+transaction = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+radix-engine = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+radix-engine-common = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+radix-engine-stores = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+radix-engine-derive = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+radix-engine-queries = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+radix-engine-interface = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+radix-engine-store-interface = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+scrypto-unit = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+scrypto-test = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+state-manager = { git = "https://github.com/radixdlt/babylon-node", rev = "63a8267196995fef0830e4fbf0271bea65c90ab1" }
 
 [profile.release]
 opt-level = 'z'

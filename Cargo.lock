@@ -3,22 +3,6 @@
 version = 3
 
 [[package]]
-name = "annotate-snippets"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d9b665789884a7e8fb06c84b295e923b03ca51edbb7d08f91a6a50322ecbfe6"
-dependencies = [
- "anstyle",
- "unicode-width",
-]
-
-[[package]]
-name = "anstyle"
-version = "1.0.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1bec1de6f59aedf83baf9ff929c98f2ad654b97c9510f4e70cf6f661d49fd5b1"
-
-[[package]]
 name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -77,9 +61,9 @@ dependencies = [
 
 [[package]]
 name = "bnum"
-version = "0.11.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e31ea183f6ee62ac8b8a8cf7feddd766317adfb13ff469de57ce033efd6a790"
+checksum = "845141a4fade3f790628b7daaaa298a25b204fb28907eb54febe5142db6ce653"
 dependencies = [
  "num-integer",
  "num-traits",
@@ -108,9 +92,8 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "const-sha1"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d8a42181e0652c2997ae4d217f25b63c5337a52fd2279736e97b832fa0a3cff"
+version = "0.2.0"
+source = "git+https://github.com/radixdlt/const-sha1#5e9ae2a99e9c76e85aa67f42e4b62e7f7ce8dad4"
 
 [[package]]
 name = "cpufeatures"
@@ -194,12 +177,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60b1af1c220855b6ceac025d3f6ecdd2b7c4894bfe9cd9bda4fbb4bc7c0d4cf0"
 
 [[package]]
-name = "equivalent"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -228,9 +205,9 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
 name = "hashbrown"
-version = "0.15.0"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e087f84d4f86bf4b218b927129862374b72199ae7d8657835f1e89000eea4fb"
+checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
 
 [[package]]
 name = "heck"
@@ -255,11 +232,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "707907fe3c25f5424cce2cb7e1cbcafee6bdbe735ca90ef77c29e84591e5b9da"
+version = "2.0.0-pre"
+source = "git+https://github.com/bluss/indexmap?rev=eedabaca9f84e520eab01325b305c08f3773e66c#eedabaca9f84e520eab01325b305c08f3773e66c"
 dependencies = [
- "equivalent",
  "hashbrown",
  "serde",
 ]
@@ -384,22 +359,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "radix-blueprint-schema-init"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9a744eb07ded9effa0a6ab1e3d4dba1707a980ec0acb8ebeb37cdb78b373cd1"
-dependencies = [
- "bitflags",
- "radix-common",
- "sbor",
- "serde",
-]
-
-[[package]]
-name = "radix-common"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1ce97ee67264628b4651706ec6808e443fbb0ecba766824a0e94887a5b54969"
+name = "radix-engine-common"
+version = "1.1.0-dev"
+source = "git+https://github.com/radixdlt/radixdlt-scrypto?rev=4887c5e4be2603433592ed290b70b1a0c03cced3#4887c5e4be2603433592ed290b70b1a0c03cced3"
 dependencies = [
  "bech32",
  "blake2",
@@ -412,88 +374,58 @@ dependencies = [
  "num-integer",
  "num-traits",
  "paste",
- "radix-rust",
- "radix-sbor-derive",
+ "radix-engine-derive",
  "sbor",
  "secp256k1",
  "serde",
  "sha3",
  "strum",
- "zeroize",
+ "utils",
 ]
 
 [[package]]
-name = "radix-common-derive"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc0ac980f09b21f849aa12f2473adfa366e70829ed634f5735512532066f71ad"
+name = "radix-engine-derive"
+version = "1.1.0-dev"
+source = "git+https://github.com/radixdlt/radixdlt-scrypto?rev=4887c5e4be2603433592ed290b70b1a0c03cced3#4887c5e4be2603433592ed290b70b1a0c03cced3"
 dependencies = [
- "paste",
  "proc-macro2",
  "quote",
- "radix-common",
- "syn 1.0.109",
+ "sbor-derive-common",
+ "syn 1.0.93",
 ]
 
 [[package]]
 name = "radix-engine-interface"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69a96a51e803213f13cf199c92eaafa3884292c1e66d8afc1d8aef7e15625ff0"
+version = "1.1.0-dev"
+source = "git+https://github.com/radixdlt/radixdlt-scrypto?rev=4887c5e4be2603433592ed290b70b1a0c03cced3#4887c5e4be2603433592ed290b70b1a0c03cced3"
 dependencies = [
  "bitflags",
  "const-sha1",
  "hex",
  "lazy_static",
  "paste",
- "radix-blueprint-schema-init",
- "radix-common",
- "radix-common-derive",
- "radix-rust",
+ "radix-engine-common",
+ "radix-engine-derive",
+ "radix-engine-macros",
  "regex",
  "sbor",
+ "scrypto-schema",
  "serde",
  "serde_json",
  "strum",
+ "utils",
 ]
 
 [[package]]
-name = "radix-rust"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6010fd7ebd7c2d3a3d270525c54a0dcb43fbaf3447fb32b42a0bcc4326109c64"
+name = "radix-engine-macros"
+version = "1.1.0-dev"
+source = "git+https://github.com/radixdlt/radixdlt-scrypto?rev=4887c5e4be2603433592ed290b70b1a0c03cced3#4887c5e4be2603433592ed290b70b1a0c03cced3"
 dependencies = [
- "indexmap",
- "serde",
-]
-
-[[package]]
-name = "radix-sbor-derive"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cc92b5760b129af15be9a82fe2e8118aa851da81b22c8a12d56ab494f071321"
-dependencies = [
+ "paste",
  "proc-macro2",
  "quote",
- "sbor-derive-common",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "radix-transactions"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6f12b263db56da50ba27fcca074c870a16fd7e4f6a88022f7c4b2ad761e2e11"
-dependencies = [
- "annotate-snippets",
- "bech32",
- "hex",
- "lazy_static",
- "radix-common",
- "radix-engine-interface",
- "radix-rust",
- "sbor",
- "strum",
+ "radix-engine-common",
+ "syn 1.0.93",
 ]
 
 [[package]]
@@ -501,9 +433,10 @@ name = "radix_pump"
 version = "0.1.0"
 dependencies = [
  "radix-engine-interface",
- "radix-transactions",
+ "sbor",
  "scrypto",
  "scrypto-interface",
+ "transaction",
 ]
 
 [[package]]
@@ -586,48 +519,43 @@ checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 
 [[package]]
 name = "sbor"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17d72c7d255b90198cf83c4cc4907021a927f484586939d8d50bdcd045287bde"
+version = "1.1.0-dev"
+source = "git+https://github.com/radixdlt/radixdlt-scrypto?rev=4887c5e4be2603433592ed290b70b1a0c03cced3#4887c5e4be2603433592ed290b70b1a0c03cced3"
 dependencies = [
  "const-sha1",
  "hex",
  "lazy_static",
  "paste",
- "radix-rust",
  "sbor-derive",
  "serde",
+ "utils",
 ]
 
 [[package]]
 name = "sbor-derive"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a51a6bd2e7849a2a8826a473e83a9a995011af21892acee89e62ce93f0d7c42"
+version = "1.1.0-dev"
+source = "git+https://github.com/radixdlt/radixdlt-scrypto?rev=4887c5e4be2603433592ed290b70b1a0c03cced3#4887c5e4be2603433592ed290b70b1a0c03cced3"
 dependencies = [
  "proc-macro2",
  "sbor-derive-common",
- "syn 1.0.109",
 ]
 
 [[package]]
 name = "sbor-derive-common"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02f1209a1d8c81d724c45afc06e41aa4e64a18b389e8cdece53da61bad1c1620"
+version = "1.1.0-dev"
+source = "git+https://github.com/radixdlt/radixdlt-scrypto?rev=4887c5e4be2603433592ed290b70b1a0c03cced3#4887c5e4be2603433592ed290b70b1a0c03cced3"
 dependencies = [
  "const-sha1",
  "itertools",
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 1.0.93",
 ]
 
 [[package]]
 name = "scrypto"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc8a64aa6af83ed0dfc588a278c54138d9e7d855cf7b3a22287c5239a964285e"
+version = "1.1.0-dev"
+source = "git+https://github.com/radixdlt/radixdlt-scrypto?rev=4887c5e4be2603433592ed290b70b1a0c03cced3#4887c5e4be2603433592ed290b70b1a0c03cced3"
 dependencies = [
  "bech32",
  "const-sha1",
@@ -635,30 +563,30 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "paste",
- "radix-blueprint-schema-init",
- "radix-common",
+ "radix-engine-common",
+ "radix-engine-derive",
  "radix-engine-interface",
- "radix-rust",
  "sbor",
  "scrypto-derive",
+ "scrypto-schema",
  "strum",
+ "utils",
 ]
 
 [[package]]
 name = "scrypto-derive"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c369a0c3f292e4704bd71d47c80a2d6162b1e0212e9c34f130634ee29e58c0ed"
+version = "1.1.0-dev"
+source = "git+https://github.com/radixdlt/radixdlt-scrypto?rev=4887c5e4be2603433592ed290b70b1a0c03cced3#4887c5e4be2603433592ed290b70b1a0c03cced3"
 dependencies = [
  "proc-macro2",
  "quote",
- "radix-blueprint-schema-init",
- "radix-common",
+ "radix-engine-common",
  "regex",
  "sbor",
+ "scrypto-schema",
  "serde",
  "serde_json",
- "syn 1.0.109",
+ "syn 1.0.93",
 ]
 
 [[package]]
@@ -672,19 +600,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "scrypto-schema"
+version = "1.1.0-dev"
+source = "git+https://github.com/radixdlt/radixdlt-scrypto?rev=4887c5e4be2603433592ed290b70b1a0c03cced3#4887c5e4be2603433592ed290b70b1a0c03cced3"
+dependencies = [
+ "bitflags",
+ "radix-engine-common",
+ "sbor",
+ "serde",
+]
+
+[[package]]
 name = "secp256k1"
-version = "0.28.2"
+version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d24b59d129cdadea20aea4fb2352fa053712e5d713eee47d700cd4b2bc002f10"
+checksum = "6b1629c9c557ef9b293568b338dddfc8208c98a18c59d722a9d53f859d9c9b62"
 dependencies = [
  "secp256k1-sys",
 ]
 
 [[package]]
 name = "secp256k1-sys"
-version = "0.9.2"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5d1746aae42c19d583c3c1a8c646bfad910498e2051c551a7f2e3c0c9fbb7eb"
+checksum = "83080e2c2fc1006e625be82e5d1eb6a43b7fd9578b617fcc55814daf286bba4b"
 dependencies = [
  "cc",
 ]
@@ -786,6 +725,16 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "syn"
+version = "1.0.93"
+source = "git+https://github.com/dtolnay/syn.git?tag=1.0.93#2e505a847174ff8939431c4f5ffb565906590ac2"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-xid",
+]
+
+[[package]]
+name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
@@ -816,6 +765,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "transaction"
+version = "1.1.0-dev"
+source = "git+https://github.com/radixdlt/radixdlt-scrypto?rev=4887c5e4be2603433592ed290b70b1a0c03cced3#4887c5e4be2603433592ed290b70b1a0c03cced3"
+dependencies = [
+ "bech32",
+ "hex",
+ "lazy_static",
+ "radix-engine-common",
+ "radix-engine-interface",
+ "sbor",
+ "strum",
+ "utils",
+]
+
+[[package]]
 name = "typenum"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -828,10 +792,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e91b56cd4cadaeb79bbf1a5645f6b4f8dc5bde8834ad5894a8db35fda9efa1fe"
 
 [[package]]
-name = "unicode-width"
-version = "0.1.14"
+name = "unicode-xid"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
+checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+
+[[package]]
+name = "utils"
+version = "1.1.0-dev"
+source = "git+https://github.com/radixdlt/radixdlt-scrypto?rev=4887c5e4be2603433592ed290b70b1a0c03cced3#4887c5e4be2603433592ed290b70b1a0c03cced3"
+dependencies = [
+ "indexmap",
+ "serde",
+]
 
 [[package]]
 name = "version_check"

@@ -4,15 +4,16 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+radix-engine-interface = { workspace = true }
+sbor = { workspace = true }
 scrypto = { workspace = true }
 scrypto-interface = { path = "../../libraries/scrypto-interface/" }
-radix-engine-interface = { workspace = true }
-radix-transactions = { workspace = true, optional = true }
+transaction = { workspace = true, optional = true }
 
 [features]
 default = []
 test = []
-manifest-builder-stubs = ["dep:radix-transactions"]
+manifest-builder-stubs = ["dep:transaction"]
 
 [lib]
 crate-type = ["cdylib", "lib"]

@@ -108,8 +108,8 @@ mod radix_pump {
             unregister_hook => restrict_to: [OWNER];
             owner_enable_hook => restrict_to: [OWNER];
             owner_disable_hook => restrict_to: [OWNER];
-            creator_enable_hook => restrict_to: [OWNER];
-            creator_disable_hook => restrict_to: [OWNER];
+            creator_enable_hook => PUBLIC;
+            creator_disable_hook => PUBLIC;
             burn => PUBLIC;
         }
     }

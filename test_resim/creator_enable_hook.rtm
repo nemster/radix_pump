@@ -1,0 +1,21 @@
+CALL_METHOD
+    Address("${account}")
+    "lock_fee"
+    Decimal("1")
+;
+CALL_METHOD
+    Address("${account}")
+    "create_proof_of_non_fungibles"
+    Address("${creator_badge}")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("${creator_badge_id}"))
+;
+POP_FROM_AUTH_ZONE
+    Proof("creator_proof")
+;
+CALL_METHOD
+    Address("${radix_pump_component}")
+    "creator_enable_hook"
+    Proof("creator_proof")
+    "${hook_name}"
+    Array<String>(${enabled_operations})
+;

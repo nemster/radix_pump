@@ -8,8 +8,8 @@ sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be
 scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
 native-sdk = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
 transaction = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
-scrypto-interface = { path = "../scrypto-interface" }
 radix-engine-interface = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+scrypto-interface = { path = "../scrypto-interface" }
 hooks = { path = "../hooks" }
 
 [features]

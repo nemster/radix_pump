@@ -1,0 +1,18 @@
+CALL_METHOD
+    Address("${account}")
+    "lock_fee"
+    Decimal("1")
+;
+CALL_METHOD
+    Address("${account}")
+    "create_proof_of_non_fungibles"
+    Address("${owner_badge}")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("${owner_badge_id}"))
+;
+CALL_METHOD
+    Address("${radix_pump_component}")
+    "register_hook"
+    "${hook_name}"
+    Array<String>(${operations})
+    Address("${test_hook_component}")
+;

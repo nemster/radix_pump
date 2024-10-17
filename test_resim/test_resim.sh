@@ -65,6 +65,11 @@ resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
 
 echo
+export globally_disabled_operations='"PostFairLaunch"'
+resim run owner_disable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Globally disabled hook ${hook_name} for operations ${globally_disabled_operations}
+
+echo
 export symbol=QL
 export name=QuickLaunchedCoin
 export icon=https://media-cdn.tripadvisor.com/media/photo-s/1a/ce/31/66/photo-de-profil.jpg
@@ -80,11 +85,31 @@ export quick_launched_coin=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
 export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
 export quick_launched_coin_received=$(grep -A 1 "ResAddr: ${quick_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-echo -e "Quick launched ${quick_launched_coin}, receivd ${quick_launched_coin_received}\nCreator badge id: ${creator_badge_id}\nTest hook coin received: ${test_hook_coin_received}"
+echo -e "Quick launched ${quick_launched_coin}, received ${quick_launched_coin_received}\nCreator badge id: ${creator_badge_id}\nTest hook coin received: ${test_hook_coin_received}"
 
 echo
-enabled_operations='"PostBuy"'
-resim run creator_enable_hook.rtm
+export enabled_operations='"PostBuy", "PostSell", "PostReturnFlashLoan"'
+resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${quick_launched_coin}
+
+echo
+export disabled_operations='"PostSell"'
+resim run creator_disable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Disabled hook ${hook_name} for operations ${disabled_operations} on ${quick_launched_coin}
+
+echo
+export payment=1000
+resim call-method ${radix_pump_component} buy ${quick_launched_coin} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export quick_launched_coin_received=$(grep -A 1 "ResAddr: ${quick_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+echo -e "Bought ${quick_launched_coin_received} ${quick_launched_coin} for $payment ${base_coin}\n${test_hook_coin_received} test hook coin received"
+
+echo
+export payment=10
+resim call-method ${radix_pump_component} sell ${quick_launched_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export base_coin_received=$(grep -A 1 "ResAddr: ${base_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+echo -e "Sold $payment ${quick_launched_coin} for ${base_coin_received} ${base_coin}\n${test_hook_coin_received} test hook coin received"
 
 exit
 

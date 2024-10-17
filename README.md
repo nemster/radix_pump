@@ -632,6 +632,11 @@ CALL_METHOD
     <END_LAUNCH_TIME>i64
     <UNLOCKING_TIME>i64
 ;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
 ```
 
 `<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
@@ -640,6 +645,8 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<END_LAUNCH_TIME>` is the earliest time (expressed in seconds since Unix epoch) when the creator can close the launch phase.  
 `<UNLOCKING_TIME>` is the time (expressed in seconds since Unix epoch) when all creator coins will be claimable.  
+
+The `deposit_batch` at the end is generally not needed but some hook may cause it to be needed.
 
 ### terminate_launch
 
@@ -659,6 +666,11 @@ CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "terminate_launch"
     Proof("creator_proof")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
 ;
 ```
 

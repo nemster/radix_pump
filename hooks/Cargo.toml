@@ -4,12 +4,9 @@ version = "1.0.0"
 edition = "2021"
 
 [dependencies]
-sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
-scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
-native-sdk = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
-transaction = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+radix-common = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
 scrypto-interface = { path = "../scrypto-interface" }
-radix-engine-interface = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
 
 [features]
 default = []

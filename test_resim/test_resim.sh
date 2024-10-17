@@ -39,7 +39,7 @@ echo Symbols ${forbidden_symbols} forbidden
 
 echo
 export forbidden_names='"Radix"'
-resim run forbid_symbols.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+resim run forbid_names.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Names ${forbidden_names} forbidden
 
 echo
@@ -88,6 +88,34 @@ export quick_launched_coin_received=$(grep -A 1 "ResAddr: ${quick_launched_coin}
 echo -e "Quick launched ${quick_launched_coin}, received ${quick_launched_coin_received}\nCreator badge id: ${creator_badge_id}\nTest hook coin received: ${test_hook_coin_received}"
 
 echo
+export name=SameSymbolCoin
+resim call-method ${radix_pump_component} new_quick_launch ${base_coin}:${minimum_deposit} $symbol $name $icon "$description" "${info_url}" $supply $price $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Tried to create a new coin with the same symbol and the transaction failed as expected
+
+echo
+export symbol=QL2
+export name=QuickLaunchedCoin
+resim call-method ${radix_pump_component} new_quick_launch ${base_coin}:${minimum_deposit} $symbol $name $icon "$description" "${info_url}" $supply $price $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Tried to create a new coin with the same name and the transaction failed as expected
+
+echo
+export symbol=XRD
+export name=FakeRadix
+resim call-method ${radix_pump_component} new_quick_launch ${base_coin}:${minimum_deposit} $symbol $name $icon "$description" "${info_url}" $supply $price $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Tried to create a new coin with XRD as symbol and the transaction failed as expected
+
+echo
+export symbol=XXX
+export name=Radix
+resim call-method ${radix_pump_component} new_quick_launch ${base_coin}:${minimum_deposit} $symbol $name $icon "$description" "${info_url}" $supply $price $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Tried to create a new coin with Radix as name and the transaction failed as expected
+
+echo
+export name=YYY
+resim call-method ${radix_pump_component} new_quick_launch ${base_coin}:$((${minimum_deposit} - 1)) $symbol $name $icon "$description" "${info_url}" $supply $price $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Tried to create a new coin with an insufficient base coin deposit and the transaction failed as expected
+
+echo
 export enabled_operations='"PostBuy", "PostSell", "PostReturnFlashLoan"'
 resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${quick_launched_coin}
@@ -111,80 +139,122 @@ export base_coin_received=$(grep -A 1 "ResAddr: ${base_coin}" $OUTPUTFILE | tail
 export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
 echo -e "Sold $payment ${quick_launched_coin} for ${base_coin_received} ${base_coin}\n${test_hook_coin_received} test hook coin received"
 
-exit
-
-export coin=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
-export price_creator=$(grep 'price:' $OUTPUTFILE | cut -d '"' -f 2)
-export creator_allocation=$(grep 'creator_allocation:' $OUTPUTFILE | cut -d '"' -f 2)
-export coins_in_pool=$(grep 'coins_in_pool:' $OUTPUTFILE | cut -d '"' -f 2)
-echo Created coin $coin, received ${creator_allocation} coins, the price was ${price_creator}, there are ${coins_in_pool} coins in the pool
+echo
+export symbol=FL
+export name=FairLaunchedCoin
+export icon=https://fairitaly.org/fair/wp-content/uploads/2023/03/logofairtondo.png
+export description="Fair launched coin"
+export info_url=""
+export price=100
+export creator_locked_percentage=10
+export buy_pool_fee=5
+export sell_pool_fee=0.1
+export flash_loan_pool_fee=0.1
+resim call-method ${radix_pump_component} new_fair_launch $symbol $name $icon "$description" "${info_url}" $price $creator_locked_percentage $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export fair_launched_coin=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
+export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
+export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+export fair_launched_coin_received=$(grep -A 1 "ResAddr: ${fair_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+echo -e "Fair launched ${fair_launched_coin}, received ${fair_launched_coin_received}\nCreator badge id: ${creator_badge_id}\nTest hook coin received: ${test_hook_coin_received}"
 
 echo
-export base_coin_amount1=1000
-resim call-method $component buy $coin ${base_coin}:${base_coin_amount1} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export price1=$(grep 'price:' $OUTPUTFILE | cut -d '"' -f 2)
-export coin_amount1=$(grep -A 1 "ResAddr: $coin" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-export coins_in_pool=$(grep 'coins_in_pool:' $OUTPUTFILE | cut -d '"' -f 2)
-echo Bought ${coin_amount1} coin at $price1, paid ${base_coin_amount1} base coin, there are ${coins_in_pool} coins in the pool
-echo Check that price is not too far the one paid by the creator
+export min_launch_duration=604800
+export min_lock_duration=5184000
+resim call-method ${radix_pump_component} update_time_limits $min_launch_duration $min_lock_duration --proofs ${owner_badge}:${owner_badge_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Set limits min_launch_duration: 604800 min_lock_duration: 5184000
 
 echo
-export base_coin_amount2=500
-resim call-method $component buy $coin ${base_coin}:${base_coin_amount2} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export price2=$(grep 'price:' $OUTPUTFILE | cut -d '"' -f 2)
-export coin_amount2=$(grep -A 1 "ResAddr: $coin" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-export coins_in_pool=$(grep 'coins_in_pool:' $OUTPUTFILE | cut -d '"' -f 2)
-echo Bought ${coin_amount2} coin at $price2, paid ${base_coin_amount2} base coin, there are ${coins_in_pool} coins in the pool
-echo Check that the price increased a little bit
+export unix_epoch=1800000000
+date=$(date -u -d @${unix_epoch} +"%Y-%m-%dT%H:%M:%SZ")
+resim set-current-time $date
+echo Date is now $date
+
+export end_launch_time=$(($unix_epoch + $min_launch_duration -1))
+export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration))
+resim run launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Tried to launch with a launching perdiod too short, the transaction faild as expected
 
 echo
-export coin_amount3=${creator_allocation}
-resim call-method $component sell ${coin}:${coin_amount3} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export price3=$(grep 'price:' $OUTPUTFILE | cut -d '"' -f 2)
-export base_coin_amount3=$(grep -A 1 "ResAddr: ${base_coin}" $OUTPUTFILE | head -n 11 | tail -n 1 | cut -d ' ' -f 5)
-export coins_in_pool=$(grep 'coins_in_pool:' $OUTPUTFILE | cut -d '"' -f 2)
-echo Creator rugged ${coin_amount3} coin at $price3, received ${base_coin_amount3} base coin, there are ${coins_in_pool} coins in the pool
+export end_launch_time=$(($unix_epoch + $min_launch_duration))
+export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration - 1))
+resim run launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Tried to launch with an unlocking perdiod too short, the transaction faild as expected
 
 echo
-export coin_amount4=1
-resim call-method $component sell ${coin}:${coin_amount4} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export price4=$(grep 'price:' $OUTPUTFILE | cut -d '"' -f 2)
-export base_coin_amount4=$(grep -A 1 "ResAddr: ${base_coin}" $OUTPUTFILE | head -n 11 | tail -n 1 | cut -d ' ' -f 5)
-export coins_in_pool=$(grep 'coins_in_pool:' $OUTPUTFILE | cut -d '"' -f 2)
-echo Sold ${coin_amount4} coin at $price4, received ${base_coin_amount4} base coin, there are ${coins_in_pool} coins in the pool
-echo Check that price crashed
+export end_launch_time=$(($unix_epoch + $min_launch_duration))
+export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration))
+resim run launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+export fair_launched_coin_received=$(grep -A 1 "ResAddr: ${fair_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+echo -e "Fair sale launched for ${fair_launched_coin}, received ${fair_launched_coin_received}\nTest hook coin received: ${test_hook_coin_received}"
 
 echo
-resim call-method $component owner_set_liquidation_mode $coin --proofs "${owner_badge}:#1#" >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-echo Component owner set liquidation mode
+export payment=1000
+resim call-method ${radix_pump_component} buy ${fair_launched_coin} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export fair_launched_coin_received=$(grep -A 1 "ResAddr: ${fair_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+echo -e "Bought ${fair_launched_coin_received} ${fair_launched_coin} for $payment ${base_coin}\n${test_hook_coin_received} test hook coin received"
 
 echo
-export coin_amount5=${coin_amount2}
-resim call-method $component sell ${coin}:${coin_amount5} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export price5=$(grep 'price:' $OUTPUTFILE | cut -d '"' -f 2)
-export base_coin_amount5=$(grep -A 1 "ResAddr: ${base_coin}" $OUTPUTFILE | head -n 11 | tail -n 1 | cut -d ' ' -f 5)
-export coins_in_pool=$(grep 'coins_in_pool:' $OUTPUTFILE | cut -d '"' -f 2)
-echo Sold ${coin_amount5} coin at $price5, received ${base_coin_amount5} base coin, there are ${coins_in_pool} coins in the pool
-echo Check that the price is quite higher
+export payment=1000
+resim call-method ${radix_pump_component} buy ${fair_launched_coin} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export fair_launched_coin_received=$(grep -A 1 "ResAddr: ${fair_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+echo -e "Bought ${fair_launched_coin_received} ${fair_launched_coin} for $payment ${base_coin} (price should not have changed)\n${test_hook_coin_received} test hook coin received"
 
 echo
-export coin_amount6=$(echo ${coin_amount1} - 1 | bc)
-resim call-method $component sell ${coin}:${coin_amount6} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export price6=$(grep 'price:' $OUTPUTFILE | cut -d '"' -f 2)
-export base_coin_amount6=$(grep -A 1 "ResAddr: ${base_coin}" $OUTPUTFILE | head -n 11 | tail -n 1 | cut -d ' ' -f 5)
-export coins_in_pool=$(grep 'coins_in_pool:' $OUTPUTFILE | cut -d '"' -f 2)
-echo Sold ${coin_amount6} coin at $price6, received ${base_coin_amount6} base coin, there are ${coins_in_pool} coins in the pool
-echo Check that the price has not changed
+export payment=1
+resim call-method ${radix_pump_component} sell ${fair_launched_coin}:$payment >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Tried to sellf ${fair_launched_coin} during fair launch, it is forbidden so the transaction failed
 
 echo
-export base_coin_amount7=500
-resim call-method $component buy $coin ${base_coin}:${base_coin_amount7} >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; exit 1 )
-echo Tried to buy the coin, the transaction correctly failed
+date=$(date -u -d @$(($end_launch_time -1)) +"%Y-%m-%dT%H:%M:%SZ")
+resim set-current-time $date
+echo Date is now $date
+
+resim run terminate_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Tried to terminate launch ahead of time and the transaction failed as expected
 
 echo
-export base_coin_amount8=500
-resim call-method $component buy ${base_coin} ${base_coin}:${base_coin_amount7} >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; exit 1 )
-echo Tried to buy the base coin, the transaction correctly failed
+date=$(date -u -d @$end_launch_time +"%Y-%m-%dT%H:%M:%SZ")
+resim set-current-time $date
+echo Date is now $date
 
-#TODO: creator try to set liquidation mode
+resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export base_coin_received=$(grep -A 1 "ResAddr: ${base_coin}" $OUTPUTFILE | head -n 2 | tail -n 1 | cut -d ' ' -f 5)
+export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+echo -e "Fair launch terminated, received ${base_coin_received} ${base_coin}\n${test_hook_coin_received} test hook coin received"
 
+echo
+export payment=1
+resim call-method ${radix_pump_component} sell ${fair_launched_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export base_coin_received=$(grep -A 1 "ResAddr: ${base_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+echo -e "Sold $payment ${fair_launched_coin} for ${base_coin_received} ${base_coin}\n${test_hook_coin_received} test hook coin received"
+
+echo
+date=$(date -u -d @$(($end_launch_time + 604800)) +"%Y-%m-%dT%H:%M:%SZ")
+resim set-current-time $date
+echo Date is now $date
+
+export amount=100000
+export sell=false
+resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export fair_launched_coin_received=$(grep -A 1 "ResAddr: ${fair_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+echo Tried to unlock $amount $fair_launched_coin, $fair_launched_coin_received received
+
+echo
+export amount=100000
+export sell=false
+resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export fair_launched_coin_received=$(grep -A 1 "ResAddr: ${fair_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+echo Tried to unlock $amount $fair_launched_coin, $fair_launched_coin_received received
+
+echo
+date=$(date -u -d @$(($unlocking_time + 604800)) +"%Y-%m-%dT%H:%M:%SZ")
+resim set-current-time $date
+echo Date is now $date
+
+export amount=100000
+export sell=true
+resim run unlock.rtm

@@ -3,12 +3,16 @@ version = "1.0.0"
 edition = "2021"
 
 [workspace.dependencies]
-sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
-scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
-native-sdk = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
-transaction = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
-scrypto-interface = { path = "scrypto-interface" }
-radix-engine-interface = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "4887c5e4be2603433592ed290b70b1a0c03cced3" }
+#sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+#utils = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+#scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+#radix-common = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+#radix-transactions = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+#radix-engine = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+#radix-engine-interface = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+#radix-substate-store-interface = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+#scrypto-test = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+#state-manager = { git = "https://github.com/radixdlt/babylon-node", tag = "v1.2.1" }
 
 [profile.release]
 opt-level = 'z'        # Optimize for size.

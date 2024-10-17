@@ -280,12 +280,6 @@ impl Pool {
                     WithdrawStrategy::Rounded(RoundingMode::ToZero),
                 );
 
-                self.coin_vault.put(
-                    fair_launch.resource_manager.mint(
-                        self.base_coin_vault.amount() / self.last_price
-                    )
-                );
-
                 fair_launch.initial_locked_amount = fair_launch.resource_manager.total_supply().unwrap() *
                     fair_launch.creator_locked_percentage / (dec!(100) - fair_launch.creator_locked_percentage);
                 fair_launch.locked_vault.put(fair_launch.resource_manager.mint(fair_launch.initial_locked_amount));
@@ -323,13 +317,18 @@ impl Pool {
         match self.launch {
             LaunchType::Fair(ref mut fair_launch) => {
                 let now = min(Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch, fair_launch.unlocking_time);
-                let unlockable_amount = fair_launch.initial_locked_amount * (now - fair_launch.end_launch_time) /
-                    (fair_launch.unlocking_time - fair_launch.end_launch_time)- fair_launch.unlocked_amount;
+                let unlockable_amount =
+                    fair_launch.initial_locked_amount *
+                    (now - fair_launch.end_launch_time) / (fair_launch.unlocking_time - fair_launch.end_launch_time) -
+                    fair_launch.unlocked_amount;
 
-                let amount_to_unlock = match amount {
-                    None => min(unlockable_amount, fair_launch.locked_vault.amount()),
-                    Some(amount) => min(unlockable_amount, amount),
-                };
+                let amount_to_unlock = min(
+                    fair_launch.locked_vault.amount(),
+                    match amount {
+                        None => unlockable_amount,
+                        Some(amount) => min(unlockable_amount, amount),
+                    }
+                );
 
                 fair_launch.unlocked_amount += amount_to_unlock;
 

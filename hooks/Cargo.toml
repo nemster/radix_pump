@@ -1,0 +1,15 @@
+[package]
+name = "hooks"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+radix-common = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+scrypto-interface = { path = "../scrypto-interface" }
+
+[features]
+default = []
+
+[lib]
+crate-type = ["cdylib", "lib"]

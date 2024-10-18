@@ -1,0 +1,17 @@
+[package]
+name = "radix_pump"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+radix-common = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+scrypto-interface = { path = "../scrypto-interface" }
+#scrypto-test = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+hooks = { path = "../hooks" }
+
+[features]
+default = []
+
+[lib]
+crate-type = ["cdylib", "lib"]

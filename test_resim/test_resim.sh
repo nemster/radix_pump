@@ -231,6 +231,44 @@ echo
 get_pool_info ${quick_launched_coin}
 
 echo
+export burn_amount=100000000
+resim run burn.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo The creator tried to burn $burn_amount ${quick_launched_coin}
+
+echo
+get_pool_info ${quick_launched_coin}
+
+echo
+resim run burn.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo The creator tried to burn $burn_amount ${quick_launched_coin} but the transaction failed becaouse all of the excess coins have already been burned
+
+echo
+resim call-method ${radix_pump_component} owner_set_liquidation_mode ${quick_launched_coin} --proofs ${owner_badge}:${owner_badge_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Component owner set liquidation mode for ${quick_launched_coin}
+
+echo
+get_pool_info ${quick_launched_coin}
+
+echo
+update_wallet_amounts
+export payment=1
+increase_in_wallet ${base_coin} >/dev/null
+resim call-method ${radix_pump_component} sell ${quick_launched_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin}
+echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
+
+echo
+update_wallet_amounts
+export payment=1
+increase_in_wallet ${base_coin} >/dev/null
+resim call-method ${radix_pump_component} sell ${quick_launched_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo "Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin} (price should not change)"
+echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
+
+echo
+get_pool_info ${quick_launched_coin}
+
+echo
 update_wallet_amounts
 export symbol=FL
 export name=FairLaunchedCoin
@@ -346,7 +384,7 @@ update_wallet_amounts
 export amount=100000
 export sell=false
 resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-echo Tried to unlock $amount $fair_launched_coin, $(increase_in_wallet ${fair_launched_coin}) received
+echo Unlock up to $amount $fair_launched_coin, $(increase_in_wallet ${fair_launched_coin}) received
 
 echo
 get_pool_info ${fair_launched_coin}
@@ -356,7 +394,7 @@ update_wallet_amounts
 export amount=100000
 export sell=false
 resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-echo Tried to unlock $amount $fair_launched_coin, $(increase_in_wallet ${fair_launched_coin}) received
+echo Unlock up to $amount $fair_launched_coin, $(increase_in_wallet ${fair_launched_coin}) received
 
 echo
 unix_epoch=$(($unlocking_time + 604800))
@@ -364,13 +402,24 @@ date=$(date -u -d @$unix_epoch +"%Y-%m-%dT%H:%M:%SZ")
 resim set-current-time $date
 echo Date is now $unix_epoch
 update_wallet_amounts
-export amount=100000
+export amount=1
 export sell=true
 resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-echo Tried to unlock $amount $fair_launched_coin and sell them, $(increase_in_wallet ${fair_launched_coin}) received
+echo Unlock up to $amount $fair_launched_coin and sell them, $(increase_in_wallet ${fair_launched_coin}) received
 echo $(increase_in_wallet ${base_coin}) ${base_coin} received
 
 echo
 get_pool_info ${fair_launched_coin}
+
+echo
+resim run creator_set_liquidation_mode.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo The coin creator set liquidation mode for $fair_launched_coin
+
+echo
+get_pool_info ${fair_launched_coin}
+
+echo
+resim run unlock.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo The coin creator tried to unlock coins but the transaction failed because this is not allowed in Liquidation mode: creator coins are now locked forever
 
 

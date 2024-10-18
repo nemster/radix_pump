@@ -888,7 +888,6 @@ A `HookDisabledEvent` is issued; it contains the coin resource address, the hook
 ### burn
 
 This method allows the creator of a quick launched coin to burn (part of) the excess coins in the pool.  
-Two proofs are needed, it is not a mistake!  
 
 ```
 CALL_METHOD
@@ -899,12 +898,6 @@ CALL_METHOD
 ;
 POP_FROM_AUTH_ZONE
     Proof("creator_proof")
-;
-CALL_METHOD
-    Address("<ACCOUNT_ADDRESS>")
-    "create_proof_of_non_fungibles"
-    Address("<CREATOR_BADGE_ADDRESS>")
-    Array<NonFungibleLocalId>(NonFungibleLocalId("#<CREATOR_BADGE_ID>#"))
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")

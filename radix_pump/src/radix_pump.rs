@@ -944,15 +944,13 @@ mod radix_pump {
             creator_badge
         }
 
-        fn next_creator_badge_rule(&mut self) -> AccessRule {
-            AccessRule::Protected(
-                AccessRuleNode::ProofRule(
-                    ProofRule::Require (
-                        ResourceOrNonFungible::NonFungible (
-                            NonFungibleGlobalId::new(
-                                self.creator_badge_resource_manager.address(),
-                                NonFungibleLocalId::integer(self.next_creator_badge_id.into()),
-                            )
+        fn next_creator_badge_rule(&mut self) -> AccessRuleNode {
+            AccessRuleNode::ProofRule(
+                ProofRule::Require (
+                    ResourceOrNonFungible::NonFungible (
+                        NonFungibleGlobalId::new(
+                            self.creator_badge_resource_manager.address(),
+                            NonFungibleLocalId::integer(self.next_creator_badge_id.into()),
                         )
                     )
                 )

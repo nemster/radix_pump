@@ -106,13 +106,9 @@ impl Pool {
         coin_icon_url: String,
         coin_description: String,
         coin_info_url: String,
-        coin_creator_badge_rule: AccessRule,
+        coin_creator_badge_rule: AccessRuleNode,
     ) -> InProgressResourceBuilder<FungibleResourceType> {
-        let resource_manager = ResourceBuilder::new_fungible(OwnerRole::Fixed(coin_creator_badge_rule.clone()))
-        .burn_roles(burn_roles!(
-            burner => coin_creator_badge_rule.clone();
-            burner_updater => coin_creator_badge_rule.clone();
-        ))
+        let resource_manager = ResourceBuilder::new_fungible(OwnerRole::Fixed(AccessRule::Protected(coin_creator_badge_rule.clone())))
         .deposit_roles(deposit_roles!(
             depositor => rule!(allow_all);
             depositor_updater => rule!(deny_all);
@@ -135,10 +131,10 @@ impl Pool {
             0 => 
                 resource_manager.metadata(metadata!(
                     roles {
-                        metadata_setter => coin_creator_badge_rule.clone();
-                        metadata_setter_updater => coin_creator_badge_rule.clone();
-                        metadata_locker => coin_creator_badge_rule.clone();
-                        metadata_locker_updater => coin_creator_badge_rule;
+                        metadata_setter => AccessRule::Protected(coin_creator_badge_rule.clone());
+                        metadata_setter_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
+                        metadata_locker => AccessRule::Protected(coin_creator_badge_rule.clone());
+                        metadata_locker_updater => AccessRule::Protected(coin_creator_badge_rule);
                     },
                     init {
                         "symbol" => coin_symbol, locked;
@@ -150,10 +146,10 @@ impl Pool {
             _ => 
                 resource_manager.metadata(metadata!(
                     roles {
-                        metadata_setter => coin_creator_badge_rule.clone();
-                        metadata_setter_updater => coin_creator_badge_rule.clone();
-                        metadata_locker => coin_creator_badge_rule.clone();
-                        metadata_locker_updater => coin_creator_badge_rule;
+                        metadata_setter => AccessRule::Protected(coin_creator_badge_rule.clone());
+                        metadata_setter_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
+                        metadata_locker => AccessRule::Protected(coin_creator_badge_rule.clone());
+                        metadata_locker_updater => AccessRule::Protected(coin_creator_badge_rule);
                     },
                     init {
                         "symbol" => coin_symbol, locked;
@@ -177,7 +173,7 @@ impl Pool {
         buy_pool_fee_percentage: Decimal,
         sell_pool_fee_percentage: Decimal,
         flash_loan_pool_fee_percentage: Decimal,
-        coin_creator_badge_rule: AccessRule,
+        coin_creator_badge_rule: AccessRuleNode,
         base_coin_address: ResourceAddress,
         creator_id: u64,
     ) -> (Pool, ResourceAddress) {
@@ -189,8 +185,12 @@ impl Pool {
             coin_icon_url,
             coin_description,
             coin_info_url,
-            coin_creator_badge_rule,
+            coin_creator_badge_rule.clone(),
         )
+        .burn_roles(burn_roles!(
+            burner => AccessRule::Protected(coin_creator_badge_rule.clone());
+            burner_updater => AccessRule::Protected(coin_creator_badge_rule);
+        ))
         .mint_roles(mint_roles!(
             minter => rule!(require(global_caller(component_address)));
             minter_updater => rule!(require(global_caller(component_address)));
@@ -352,7 +352,7 @@ impl Pool {
         buy_pool_fee_percentage: Decimal,
         sell_pool_fee_percentage: Decimal,
         flash_loan_pool_fee_percentage: Decimal,
-        coin_creator_badge_rule: AccessRule,
+        coin_creator_badge_rule: AccessRuleNode,
         creator_id: u64,
     ) -> (Pool, Bucket) {
         let mut coin_bucket = Pool::start_resource_manager_creation(
@@ -361,8 +361,23 @@ impl Pool {
             coin_icon_url,
             coin_description,
             coin_info_url,
-            coin_creator_badge_rule,
+            coin_creator_badge_rule.clone()
         )
+        .burn_roles(burn_roles!(
+            burner => AccessRule::Protected(
+                AccessRuleNode::AnyOf(
+                    vec![
+                        coin_creator_badge_rule.clone(),
+                        AccessRuleNode::ProofRule(
+                            ProofRule::Require(
+                                global_caller(Runtime::global_address())
+                            )
+                        )
+                    ]
+                )
+            );
+            burner_updater => AccessRule::Protected(coin_creator_badge_rule);
+        ))
         .mint_roles(mint_roles!(
             minter => rule!(deny_all);
             minter_updater => rule!(deny_all);

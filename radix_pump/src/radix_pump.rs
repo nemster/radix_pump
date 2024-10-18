@@ -61,6 +61,7 @@ mod radix_pump {
             forbid_names => restrict_to: [OWNER];
             new_fair_launch => PUBLIC;
             new_quick_launch => PUBLIC;
+            new_random_launch => PUBLIC;
             buy => PUBLIC;
             sell => PUBLIC;
             get_fees => restrict_to: [OWNER];
@@ -91,6 +92,7 @@ mod radix_pump {
         forbid_names => Free;
         new_fair_launch => Usd(dec!("0.05"));
         new_quick_launch => Usd(dec!("0.05"));
+        new_random_launch => Usd(dec!("0.05"));
         buy => Usd(dec!("0.005"));
         sell => Usd(dec!("0.005"));
         get_fees => Free;
@@ -360,6 +362,54 @@ mod radix_pump {
             coin_info_url = coin_info_url.trim().to_string();
 
             (coin_symbol, coin_name, coin_icon_url, coin_info_url)
+        }
+
+        pub fn new_random_launch(
+            &mut self,
+            mut coin_symbol: String,
+            mut coin_name: String,
+            mut coin_icon_url: String,
+            coin_description: String,
+            mut coin_info_url: String,
+            ticket_price: Decimal,
+            winning_tickets: u32,
+            coins_per_winning_ticket: Decimal, 
+            buy_pool_fee_percentage: Decimal,
+            sell_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee_percentage: Decimal,
+        ) -> Bucket {
+            self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee_percentage);
+
+            (coin_symbol, coin_name, coin_icon_url, coin_info_url) =
+                self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
+
+            let (pool, coin_resource_address) = Pool::new_random_launch(
+                coin_symbol.clone(),
+                coin_name.clone(),
+                coin_icon_url,
+                coin_description,
+                coin_info_url,
+                ticket_price,
+                winning_tickets,
+                coins_per_winning_ticket,
+                buy_pool_fee_percentage,
+                sell_pool_fee_percentage,
+                flash_loan_pool_fee_percentage,
+                self.next_creator_badge_rule(),
+                self.base_coin_address,
+                self.next_creator_badge_id,
+            );
+            self.pools.insert(
+                coin_resource_address,
+                pool,
+            );
+
+            self.mint_creator_badge(
+                coin_resource_address,
+                coin_name,
+                coin_symbol,
+                PoolMode::WaitingForLaunch,
+            )
         }
 
         pub fn new_fair_launch(
@@ -680,7 +730,7 @@ mod radix_pump {
 
             // In order to avoid price manipulation affecting the fees, take the maximum among the
             // price at the moment the flash loan was granted and the current price.
-            let (_, _, mut price, _, _, _, mode, _, _, _, _) = pool.get_pool_info();
+            let (_, _, mut price, _, _, _, mode, _, _, _, _, _, _, _) = pool.get_pool_info();
             price = max(price, flash_loan_data.price);
 
             self.fee_vault.put(
@@ -750,6 +800,9 @@ mod radix_pump {
                 unlocking_time,
                 initial_locked_amount,
                 unlocked_amount,
+                ticket_price,
+                winning_tickets,
+                coins_per_winning_ticket,
             ) = self.pools.get(&coin_address).expect("Coin not found").get_pool_info();
 
             PoolInfo {
@@ -766,6 +819,9 @@ mod radix_pump {
                 unlocked_amount: unlocked_amount,
                 flash_loan_nft_resource_address: self.flash_loan_nft_resource_manager.address(),
                 hooks_badge_resource_address: self.hooks_badge_vault.resource_address(),
+                ticket_price: ticket_price,
+                winning_tickets: winning_tickets,
+                coins_per_winning_ticket: coins_per_winning_ticket,
             }
         }
 

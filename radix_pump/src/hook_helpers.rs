@@ -100,6 +100,8 @@ pub fn string_to_operation(operation: &String) -> HookableOperation {
         "PostFairLaunch" => HookableOperation::PostFairLaunch,
         "PostTerminateFairLaunch" => HookableOperation::PostTerminateFairLaunch,
         "PostQuickLaunch" => HookableOperation::PostQuickLaunch,
+        "PostRandomLaunch" => HookableOperation::PostRandomLaunch,
+        "PostTerminateRandomLaunch" => HookableOperation::PostTerminateRandomLaunch,
         "PostBuy" => HookableOperation::PostBuy,
         "PostSell" => HookableOperation::PostSell,
         "PostReturnFlashLoan" => HookableOperation::PostReturnFlashLoan,

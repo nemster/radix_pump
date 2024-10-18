@@ -61,7 +61,7 @@ No one can retrieve pool fees, the paid base coins just get into the pool itself
 Hooks are external components authomatically called by RadixPump when certain operations are performed.  
 
 The component owner can make hooks available by calling the `register_hook` method, he must specify the operations this hook can be attached to.  
-The available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostBuy`, `PostSell` and `PostReturnFlashLoan`. I avoided `Pre` hooks to prevent frontrunning and sandwitch attacks.  
+The available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell` and `PostReturnFlashLoan`. I avoided `Pre` hooks to prevent frontrunning and sandwitch attacks.  
 
 Once an hook is registered the component owner can attach it to one or more operation globally (i.e. for all pools) via the `owner_enable_hook` method.
 A coin owner can attach a registered hook to operations happening on his coin.
@@ -86,7 +86,7 @@ Use this functions to create a RadixPump and a TestHook component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("package_tdx_2_1p5rxnppg8ycgjkaz5s2zstfpn44sk3p9xlkkr37wz5h4zglwmezeyl")
+    Address("")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -98,7 +98,7 @@ CALL_FUNCTION
 ;
 
 CALL_FUNCTION
-    Address("package_tdx_2_1pkpu5ggtedpddz0g2e2yp9q2ffjd69ej6hynypwkn3x23glzg8ps3d")
+    Address("")
     "TestHook"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -740,7 +740,7 @@ CALL_METHOD
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<HOOK_NAME>` is the name that will be used to refer to this hook.  
-`<OPERATION>` is one of the operations the hooks can be attached to. Available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostBuy`, `PostSell` and `PostReturnFlashLoan`.  
+`<OPERATION>` is one of the operations the hooks can be attached to. Available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell` and `PostReturnFlashLoan`.  
 `<HOOK_ADDRESS>` is the component address of the hook.  
 
 ### unregister_hook

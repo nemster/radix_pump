@@ -26,7 +26,7 @@ increase_in_wallet() {
 get_pool_info () {
   echo PoolInfo for $1
   resim call-method $radix_pump_component get_pool_info $1 |
-    grep -A 22 '├─ Tuple(' | (
+    grep -A 50 '├─ Tuple(' | (
       read x
       read base_coin_amount
       echo base_coin_amount: $(echo $base_coin_amount | cut -d '"' -f 2)
@@ -44,8 +44,9 @@ get_pool_info () {
       case $pool_mode in 
         'Enum::[0],') echo pool_mode: WaitingForLaunch ;;
         'Enum::[1],') echo pool_mode: Launching ;;
-        'Enum::[2],') echo pool_mode: Normal ;;
-        'Enum::[3],') echo pool_mode: Liquidation ;;
+        'Enum::[2],') echo pool_mode: TerminatingLaunch ;;
+        'Enum::[3],') echo pool_mode: Normal ;;
+        'Enum::[4],') echo pool_mode: Liquidation ;;
       esac
       read end_launch_time
       if [ "$end_launch_time" = "Enum::[1](" ]
@@ -74,6 +75,27 @@ get_pool_info () {
 	read unlocked_amount
 	read x
 	echo unlocked_amount: $(echo $unlocked_amount | cut -d '"' -f 2)
+      fi
+      read ticket_price
+      if [ "$ticket_price" = "Enum::[1](" ]
+      then
+	read ticket_price
+	read x
+	echo ticket_price: $(echo $ticket_price | cut -d '"' -f 2)
+      fi
+      read winning_tickets
+      if [ "$winning_tickets" = "Enum::[1](" ]
+      then
+        read winning_tickets
+	read x
+        echo winning_tickets: $winning_tickets
+      fi
+      read coins_per_winning_ticket
+      if [ "$coins_per_winning_ticket" = "Enum::[1](" ]
+      then
+	read coins_per_winning_ticket
+	read x
+	echo coins_per_winning_ticket: $(echo $coins_per_winning_ticket | cut -d '"' -f 2)
       fi
     )
 }
@@ -134,7 +156,7 @@ echo -e "TestHook component: ${test_hook_component}\nTestHook coin: ${test_hook_
 
 echo
 export hook_name=TestHook
-export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan"'
+export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch", "PostTerminateRandomLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan"'
 resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
 
@@ -421,5 +443,33 @@ get_pool_info ${fair_launched_coin}
 echo
 resim run unlock.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo The coin creator tried to unlock coins but the transaction failed because this is not allowed in Liquidation mode: creator coins are now locked forever
+
+echo
+update_wallet_amounts
+export symbol=RL
+export name=RandomLaunchedCoin
+export icon=https://img.evients.com/images/f480x480/e7/b5/09/51/e7b50951be9149fe86e26f45e019d2af.jpg
+export description="Random launched coin"
+export info_url=""
+export ticket_price=100
+export winning_tickets=10
+export coins_per_winning_ticket=10
+export buy_pool_fee=5
+export sell_pool_fee=0.1
+export flash_loan_pool_fee=0.1
+resim call-method ${radix_pump_component} new_random_launch $symbol $name $icon "$description" "${info_url}" $ticket_price $winning_tickets $coins_per_winning_ticket $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export random_ticket=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
+export random_launched_coin=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)
+export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
+echo Random launch coin created $random_launched_coin
+echo ticket: $random_ticket
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+export payment=1000
+resim call-method ${radix_pump_component} buy ${random_launched_coin} ${base_coin}:$payment >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Someone tried to buy ${random_launched_coin} before it was launched, the transaction failed
 
 

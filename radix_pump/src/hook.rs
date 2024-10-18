@@ -7,6 +7,8 @@ pub enum HookableOperation {
     PostFairLaunch,
     PostTerminateFairLaunch,
     PostQuickLaunch,
+    PostRandomLaunch,
+    PostTerminateRandomLaunch, 
     PostBuy,
     PostSell,
     PostReturnFlashLoan,

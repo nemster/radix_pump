@@ -36,6 +36,19 @@ pub struct QuickLaunchEvent {
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
+pub struct RandomLaunchStartEvent {
+    resource_address: ResourceAddress,
+    ticket_price: Decimal,
+    winning_tickets: u32,
+    coins_per_winning_ticket: Decimal,
+    end_launch_time: i64,
+    unlocking_time: i64,
+    buy_pool_fee_percentage: Decimal,
+    sell_pool_fee_percentage: Decimal,
+    flash_loan_pool_fee_percentage: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
 pub struct BuyEvent {
     resource_address: ResourceAddress,
     mode: PoolMode,
@@ -79,9 +92,25 @@ struct FairLaunchDetails {
 }
 
 #[derive(Debug, ScryptoSbor, PartialEq)]
+struct RandomLaunchDetails {
+    end_launch_time: i64,
+    winners_vault: Vault,
+    locked_vault: Vault,
+    unlocking_time: i64,
+    ticket_price: Decimal,
+    winning_tickets: u32,
+    coins_per_winning_ticket: Decimal,
+    sold_tickets: u32,
+    resource_manager: ResourceManager,
+    ticket_resource_manager: ResourceManager,
+    unlocked_amount: Decimal,
+}
+
+#[derive(Debug, ScryptoSbor, PartialEq)]
 enum LaunchType {
     Quick,
     Fair(FairLaunchDetails),
+    Random(RandomLaunchDetails),
 }
 
 #[derive(ScryptoSbor)]
@@ -96,6 +125,13 @@ pub struct Pool {
     pub enabled_hooks: HooksPerOperation,
     launch: LaunchType,
     creator_id: u64,
+}
+
+#[derive(Debug, ScryptoSbor, NonFungibleData)]
+struct TicketData {
+    id: u64,
+    coin_resource_address: ResourceAddress,
+    buy_date: Instant,
 }
 
 impl Pool {
@@ -233,9 +269,10 @@ impl Pool {
             "Not allowed in this mode",
         );
 
+        self.mode = PoolMode::Launching;
+
         match self.launch {
             LaunchType::Fair(ref mut fair_launch) => {
-                self.mode = PoolMode::Launching;
                 fair_launch.end_launch_time = end_launch_time;
                 fair_launch.unlocking_time = unlocking_time;
 
@@ -244,6 +281,24 @@ impl Pool {
                         resource_address: fair_launch.resource_manager.address(),
                         price: self.last_price,
                         creator_locked_percentage: fair_launch.creator_locked_percentage,
+                        end_launch_time: end_launch_time,
+                        unlocking_time: unlocking_time,
+                        buy_pool_fee_percentage: self.buy_pool_fee_percentage,
+                        sell_pool_fee_percentage: self.sell_pool_fee_percentage,
+                        flash_loan_pool_fee_percentage: self.flash_loan_pool_fee_percentage,
+                    }
+                );
+            },
+            LaunchType::Random(ref mut random_launch) => {
+                random_launch.end_launch_time = end_launch_time;
+                random_launch.unlocking_time = unlocking_time;
+
+                Runtime::emit_event(
+                    RandomLaunchStartEvent {
+                        resource_address: random_launch.resource_manager.address(),
+                        ticket_price: random_launch.ticket_price,
+                        winning_tickets: random_launch.winning_tickets,
+                        coins_per_winning_ticket: random_launch.coins_per_winning_ticket,
                         end_launch_time: end_launch_time,
                         unlocking_time: unlocking_time,
                         buy_pool_fee_percentage: self.buy_pool_fee_percentage,
@@ -419,6 +474,114 @@ impl Pool {
         (pool, creator_coin_bucket.into())
     }
 
+    pub fn new_random_launch(
+        coin_symbol: String,
+        coin_name: String,
+        coin_icon_url: String,
+        coin_description: String,
+        coin_info_url: String,
+        ticket_price: Decimal,
+        winning_tickets: u32,
+        coins_per_winning_ticket: Decimal,
+        buy_pool_fee_percentage: Decimal,
+        sell_pool_fee_percentage: Decimal,
+        flash_loan_pool_fee_percentage: Decimal,
+        coin_creator_badge_rule: AccessRuleNode,
+        base_coin_address: ResourceAddress,
+        creator_id: u64,
+    ) -> (Pool, ResourceAddress) {
+        let component_address = Runtime::global_address();
+
+        let ticket_resource_manager = ResourceBuilder::new_integer_non_fungible::<TicketData>(
+            OwnerRole::Fixed(AccessRule::Protected(coin_creator_badge_rule.clone()))
+        )
+        .mint_roles(mint_roles!(
+            minter => rule!(require(global_caller(component_address)));
+            minter_updater => rule!(require(global_caller(component_address)));
+        ))
+        .burn_roles(burn_roles!(
+            burner => rule!(require(global_caller(component_address)));
+            burner_updater => rule!(deny_all);
+        ))
+        .deposit_roles(deposit_roles!(
+            depositor => rule!(allow_all);
+            depositor_updater => rule!(deny_all);
+        ))
+        .withdraw_roles(withdraw_roles!(
+            withdrawer => rule!(allow_all);
+            withdrawer_updater => rule!(deny_all);
+        ))
+        .recall_roles(recall_roles!(
+            recaller => rule!(deny_all);
+            recaller_updater => rule!(deny_all);
+        ))
+        .freeze_roles(freeze_roles!(
+            freezer => rule!(deny_all);
+            freezer_updater => rule!(deny_all);
+        ))
+        .metadata(metadata!(
+            roles {
+                metadata_setter => AccessRule::Protected(coin_creator_badge_rule.clone());
+                metadata_setter_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
+                metadata_locker => AccessRule::Protected(coin_creator_badge_rule.clone());
+                metadata_locker_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
+            },
+            init {
+                "name" => format!("Ticket for the launch of {}", coin_name), updatable;
+                "icon_url" => MetadataValue::Url(UncheckedUrl::of(coin_icon_url.clone())), updatable;
+                "description" => coin_description.clone(), updatable;
+            }
+        ))
+        .create_with_no_initial_supply();
+
+        let resource_manager = Pool::start_resource_manager_creation(
+            coin_symbol,
+            coin_name,
+            coin_icon_url,
+            coin_description,
+            coin_info_url,
+            coin_creator_badge_rule.clone(),
+        )
+        .burn_roles(burn_roles!(
+            burner => AccessRule::Protected(coin_creator_badge_rule.clone());
+            burner_updater => AccessRule::Protected(coin_creator_badge_rule);
+        ))
+        .mint_roles(mint_roles!(
+            minter => rule!(require(global_caller(component_address)));
+            minter_updater => rule!(require(global_caller(component_address)));
+        ))
+        .create_with_no_initial_supply();
+
+        let pool = Pool {
+            base_coin_vault: Vault::new(base_coin_address),
+            coin_vault: Vault::new(resource_manager.address()),
+            mode: PoolMode::WaitingForLaunch,
+            last_price: ticket_price / coins_per_winning_ticket,
+            buy_pool_fee_percentage: buy_pool_fee_percentage,
+            sell_pool_fee_percentage: sell_pool_fee_percentage,
+            flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
+            enabled_hooks: HooksPerOperation::new(),
+            launch: LaunchType::Random(
+                RandomLaunchDetails {
+                    end_launch_time: 0,
+                    winners_vault: Vault::new(resource_manager.address()),
+                    locked_vault: Vault::new(resource_manager.address()),
+                    unlocking_time: 0,
+                    ticket_price: ticket_price,
+                    winning_tickets: winning_tickets,
+                    coins_per_winning_ticket: coins_per_winning_ticket,
+                    sold_tickets: 0,
+                    resource_manager: resource_manager,
+                    ticket_resource_manager: ticket_resource_manager,
+                    unlocked_amount: Decimal::ZERO,
+                }
+            ),
+            creator_id: creator_id,
+        };
+
+        (pool, resource_manager.address())
+    }
+
     fn custom_costant_product(
         &self,
     ) -> (PreciseDecimal, PreciseDecimal) {
@@ -426,7 +589,7 @@ impl Pool {
         let coin_amount = PreciseDecimal::from(self.coin_vault.amount());
 
         match self.launch {
-            LaunchType::Quick => {
+            LaunchType::Quick | LaunchType::Random(_) => {
                 let expected_coin_amount = base_coin_amount / PreciseDecimal::from(self.last_price);
 
                 (
@@ -475,6 +638,34 @@ impl Pool {
                     );
 
                     (coin_bucket, self.coin_vault.amount())
+                },
+                LaunchType::Random(ref mut random_launch) => {
+                    let mut available = base_coin_bucket.amount() - fee;
+                    assert!(
+                        available >= random_launch.ticket_price,
+                        "Not enough to buy a ticket",
+                    );
+
+                    let coin_resource_address = self.coin_vault.resource_address();
+                    let mut ticket_bucket = Bucket::new(coin_resource_address);
+
+                    while available >= random_launch.ticket_price {
+                        available -= random_launch.ticket_price;
+                        random_launch.sold_tickets += 1;
+
+                        ticket_bucket.put(
+                            random_launch.ticket_resource_manager.mint_non_fungible(
+                                &NonFungibleLocalId::integer(random_launch.sold_tickets.into()),
+                                TicketData {
+                                    id: random_launch.sold_tickets.into(),
+                                    coin_resource_address: coin_resource_address,
+                                    buy_date: Clock::current_time_rounded_to_seconds(),
+                                },
+                            )
+                        );
+                    }
+
+                    (ticket_bucket, Decimal::ZERO)
                 },
                 _ => Runtime::panic("Not allowed for this launch type".to_string()),
             },
@@ -622,6 +813,9 @@ impl Pool {
         Option<i64>,
         Option<Decimal>,
         Option<Decimal>,
+        Option<Decimal>,
+        Option<u32>,
+        Option<Decimal>,
     ) {
         (
             self.base_coin_vault.amount(),
@@ -634,18 +828,34 @@ impl Pool {
             match &self.launch {
                 LaunchType::Quick => None,
                 LaunchType::Fair(fair_launch) => Some(fair_launch.end_launch_time),
+                LaunchType::Random(random_launch) => Some(random_launch.end_launch_time),
             },
             match &self.launch {
                 LaunchType::Quick => None,
                 LaunchType::Fair(fair_launch) => Some(fair_launch.unlocking_time),
+                LaunchType::Random(random_launch) => Some(random_launch.unlocking_time),
             },
             match &self.launch {
                 LaunchType::Quick => None,
                 LaunchType::Fair(fair_launch) => Some(fair_launch.initial_locked_amount),
+                LaunchType::Random(random_launch) => Some(random_launch.coins_per_winning_ticket),
             },
             match &self.launch {
                 LaunchType::Quick => None,
                 LaunchType::Fair(fair_launch) => Some(fair_launch.unlocked_amount),
+                LaunchType::Random(random_launch) => Some(random_launch.unlocked_amount),
+            },
+            match &self.launch {
+                LaunchType::Quick | LaunchType::Fair(_) => None,
+                LaunchType::Random(random_launch) => Some(random_launch.ticket_price),
+            },
+            match &self.launch {
+                LaunchType::Quick | LaunchType::Fair(_) => None,
+                LaunchType::Random(random_launch) => Some(random_launch.winning_tickets),
+            },
+            match &self.launch {
+                LaunchType::Quick | LaunchType::Fair(_) => None,
+                LaunchType::Random(random_launch) => Some(random_launch.coins_per_winning_ticket),
             },
         )
     }

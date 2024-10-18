@@ -78,23 +78,15 @@ An hook can never steal the buckets intended for the user; it can only add new b
 
 RadixPump uses a proof of a badge when calling an hook, so the hook can be sure about the caller.  
 
-## Verifiable Scrypto build
-
-Compiled with `radixdlt/scrypto-builder:v1.2.0`  
-
-This is the SHA256 of the package files:  
-`78963054e32cfa7bf6529f120b1c042a082a759cee734a7b9dc0f91372eb35d0`  `target/wasm32-unknown-unknown/release/radix_pump.rpd`  
-`01c7d1e97f7123e76b6eae6046b4d3a212a53dbb6972a00fe129c033d1a82afd`  `target/wasm32-unknown-unknown/release/radix_pump.wasm`  
-
 ## Transaction manifests
 
 ### Instantiate (Stokenet)
 
-Use this function to create a RadixPump component in Stokenet
+Use this functions to create a RadixPump and a TestHook component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("package_tdx_2_1pkq06qlxfw22ncyj7tttc7xxtdynpsvuwe8ws7u8mdru2ms9ktqp25")
+    Address("package_tdx_2_1p5rxnppg8ycgjkaz5s2zstfpn44sk3p9xlkkr37wz5h4zglwmezeyl")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -104,6 +96,14 @@ CALL_FUNCTION
     Decimal("<BUY_SELL_FEE_PERCENTAGE>")
     Decimal("<FLASH_LOAN_FEE_PERCENTAGE>")
 ;
+
+CALL_FUNCTION
+    Address("package_tdx_2_1pkpu5ggtedpddz0g2e2yp9q2ffjd69ej6hynypwkn3x23glzg8ps3d")
+    "TestHook"
+    "new"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Address("<HOOKS_BADGE>")
+;
 ```
 
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that can be later used to withdraw fees and other reserved operations.  
@@ -112,6 +112,7 @@ CALL_FUNCTION
 `<CREATION_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by the token creators to the component owner.  
 `<BUY_SELL_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the component owner.  
 `<FLASH_LOAN_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the component owner.  
+`<HOOKS_BADGE>` is the resource address of the badge created by RadixPump to authenticate towards the hooks; you can get it from `get_pool_info`.
 
 ### forbid_symbols
 

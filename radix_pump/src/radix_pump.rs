@@ -12,35 +12,6 @@ static CREATOR_BADGE_NAME: &str = "Coin creator badge";
 // Metadata for the flash loan transient NFT
 static TRANSIENT_NFT_NAME: &str = "Flash loan transient NFT";
 
-// Coin creator badge NFT data
-#[derive(Debug, ScryptoSbor, NonFungibleData)]
-struct CreatorData {
-    id: u64,
-    coin_resource_address: ResourceAddress,
-    coin_name: String,
-    coin_symbol: String,
-    creation_date: Instant,
-    #[mutable]
-    pool_mode: PoolMode,
-}
-
-#[derive(Debug, ScryptoSbor, PartialEq, Clone)]
-pub struct PoolInfo {
-    pub base_coin_amount: Decimal,
-    pub coin_amount: Decimal,
-    pub last_price: Decimal,
-    pub total_buy_fee_percentage: Decimal,
-    pub total_sell_fee_percentage: Decimal,
-    pub total_flash_loan_fee_percentage: Decimal,
-    pub pool_mode: PoolMode,
-    pub end_launch_time: Option<i64>,
-    pub unlocking_time: Option<i64>,
-    pub initial_locked_amount: Option<Decimal>,
-    pub unlocked_amount: Option<Decimal>,
-    pub flash_loan_nft_resource_address: ResourceAddress,
-    pub hooks_badge_resource_address: ResourceAddress,
-}
-
 // Flash loan transient NFT data
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
 struct FlashLoanData {

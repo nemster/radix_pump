@@ -1,8 +1,87 @@
 #!/bin/bash
 
-set -e
+update_wallet_amounts() {
+  resim show |
+    grep ' resource_sim' |
+    tr -d : |
+    awk '{print $2 " " $3}' >$WALLETFILE
+}
+
+increase_in_wallet() {
+  old_amount=$(grep $1 $WALLETFILE | cut -d ' ' -f 2)
+  if [ "$old_amount" = "" ]
+  then
+    old_amount=0
+  fi
+
+  amount=$(resim show | grep $1 | cut -d ' ' -f 3)
+  if [ "$amount" = "" ]
+  then
+    amount=0
+  fi
+
+  echo $amount - $old_amount | bc
+}
+
+get_pool_info () {
+  echo PoolInfo for $1
+  resim call-method $radix_pump_component get_pool_info $1 |
+    grep -A 22 '├─ Tuple(' | (
+      read x
+      read base_coin_amount
+      echo base_coin_amount: $(echo $base_coin_amount | cut -d '"' -f 2)
+      read coin_amount
+      echo coin_amount: $(echo $coin_amount | cut -d '"' -f 2)
+      read last_price
+      echo last_price: $(echo $last_price | cut -d '"' -f 2)
+      read total_buy_fee_percentage
+      echo total_buy_fee_percentage: $(echo $total_buy_fee_percentage | cut -d '"' -f 2)
+      read total_sell_fee_percentage
+      echo total_sell_fee_percentage: $(echo $total_sell_fee_percentage | cut -d '"' -f 2)
+      read total_flash_loan_fee_percentage
+      echo total_flash_loan_fee_percentage: $(echo $total_flash_loan_fee_percentage | cut -d '"' -f 2)
+      read pool_mode
+      case $pool_mode in 
+        'Enum::[0],') echo pool_mode: WaitingForLaunch ;;
+        'Enum::[1],') echo pool_mode: Launching ;;
+        'Enum::[2],') echo pool_mode: Normal ;;
+        'Enum::[3],') echo pool_mode: Liquidation ;;
+      esac
+      read end_launch_time
+      if [ "$end_launch_time" = "Enum::[1](" ]
+      then
+	read end_launch_time
+	read x
+	echo end_launch_time: $end_launch_time
+      fi
+      read unlocking_time
+      if [ "$unlocking_time" = "Enum::[1](" ]
+      then
+	read unlocking_time
+	read x
+	echo unlocking_time: $unlocking_time
+      fi
+      read initial_locked_amount
+      if [ "$initial_locked_amount" = "Enum::[1](" ]
+      then
+	read initial_locked_amount
+	read x
+	echo initial_locked_amount: $(echo $initial_locked_amount | cut -d '"' -f 2)
+      fi
+      read unlocked_amount
+      if [ "$unlocked_amount" = "Enum::[1](" ]
+      then
+	read unlocked_amount
+	read x
+	echo unlocked_amount: $(echo $unlocked_amount | cut -d '"' -f 2)
+      fi
+    )
+}
 
 OUTPUTFILE=$(mktemp)
+WALLETFILE=$(mktemp)
+
+set -e
 
 clear
 resim reset
@@ -70,6 +149,7 @@ resim run owner_disable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally disabled hook ${hook_name} for operations ${globally_disabled_operations}
 
 echo
+update_wallet_amounts
 export symbol=QL
 export name=QuickLaunchedCoin
 export icon=https://media-cdn.tripadvisor.com/media/photo-s/1a/ce/31/66/photo-de-profil.jpg
@@ -83,9 +163,13 @@ export flash_loan_pool_fee=0.1
 resim call-method ${radix_pump_component} new_quick_launch ${base_coin}:${minimum_deposit} $symbol $name $icon "$description" "${info_url}" $supply $price $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export quick_launched_coin=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
-export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
 export quick_launched_coin_received=$(grep -A 1 "ResAddr: ${quick_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-echo -e "Quick launched ${quick_launched_coin}, received ${quick_launched_coin_received}\nCreator badge id: ${creator_badge_id}\nTest hook coin received: ${test_hook_coin_received}"
+echo Quick launched ${quick_launched_coin}, received $(increase_in_wallet ${quick_launched_coin})
+echo Creator badge id: ${creator_badge_id}
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+
+echo
+get_pool_info ${quick_launched_coin}
 
 echo
 export name=SameSymbolCoin
@@ -126,20 +210,28 @@ resim run creator_disable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Disabled hook ${hook_name} for operations ${disabled_operations} on ${quick_launched_coin}
 
 echo
+update_wallet_amounts
 export payment=1000
 resim call-method ${radix_pump_component} buy ${quick_launched_coin} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export quick_launched_coin_received=$(grep -A 1 "ResAddr: ${quick_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-echo -e "Bought ${quick_launched_coin_received} ${quick_launched_coin} for $payment ${base_coin}\n${test_hook_coin_received} test hook coin received"
+echo Bought $(increase_in_wallet ${quick_launched_coin}) ${quick_launched_coin} for $payment ${base_coin}
+echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
 
 echo
+get_pool_info ${quick_launched_coin}
+
+echo
+update_wallet_amounts
 export payment=10
+increase_in_wallet ${base_coin} >/dev/null
 resim call-method ${radix_pump_component} sell ${quick_launched_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export base_coin_received=$(grep -A 1 "ResAddr: ${base_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-echo -e "Sold $payment ${quick_launched_coin} for ${base_coin_received} ${base_coin}\n${test_hook_coin_received} test hook coin received"
+echo Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin}
+echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
 
 echo
+get_pool_info ${quick_launched_coin}
+
+echo
+update_wallet_amounts
 export symbol=FL
 export name=FairLaunchedCoin
 export icon=https://fairitaly.org/fair/wp-content/uploads/2023/03/logofairtondo.png
@@ -153,9 +245,12 @@ export flash_loan_pool_fee=0.1
 resim call-method ${radix_pump_component} new_fair_launch $symbol $name $icon "$description" "${info_url}" $price $creator_locked_percentage $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export fair_launched_coin=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
-export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-export fair_launched_coin_received=$(grep -A 1 "ResAddr: ${fair_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-echo -e "Fair launched ${fair_launched_coin}, received ${fair_launched_coin_received}\nCreator badge id: ${creator_badge_id}\nTest hook coin received: ${test_hook_coin_received}"
+echo Fair launched ${fair_launched_coin}, received $(increase_in_wallet ${fair_launched_coin})
+echo Creator badge id: ${creator_badge_id}
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+
+echo
+get_pool_info ${fair_launched_coin}
 
 echo
 export min_launch_duration=604800
@@ -167,8 +262,7 @@ echo
 export unix_epoch=1800000000
 date=$(date -u -d @${unix_epoch} +"%Y-%m-%dT%H:%M:%SZ")
 resim set-current-time $date
-echo Date is now $date
-
+echo Date is now $unix_epoch
 export end_launch_time=$(($unix_epoch + $min_launch_duration -1))
 export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration))
 resim run launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
@@ -181,26 +275,32 @@ resim run launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fa
 echo Tried to launch with an unlocking perdiod too short, the transaction faild as expected
 
 echo
+update_wallet_amounts
 export end_launch_time=$(($unix_epoch + $min_launch_duration))
 export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration))
 resim run launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-export fair_launched_coin_received=$(grep -A 1 "ResAddr: ${fair_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-echo -e "Fair sale launched for ${fair_launched_coin}, received ${fair_launched_coin_received}\nTest hook coin received: ${test_hook_coin_received}"
+echo Fair sale launched for ${fair_launched_coin}, received $(increase_in_wallet ${fair_launched_coin})
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
 
 echo
-export payment=1000
-resim call-method ${radix_pump_component} buy ${fair_launched_coin} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export fair_launched_coin_received=$(grep -A 1 "ResAddr: ${fair_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-echo -e "Bought ${fair_launched_coin_received} ${fair_launched_coin} for $payment ${base_coin}\n${test_hook_coin_received} test hook coin received"
+get_pool_info ${fair_launched_coin}
 
 echo
+update_wallet_amounts
 export payment=1000
 resim call-method ${radix_pump_component} buy ${fair_launched_coin} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export fair_launched_coin_received=$(grep -A 1 "ResAddr: ${fair_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-echo -e "Bought ${fair_launched_coin_received} ${fair_launched_coin} for $payment ${base_coin} (price should not have changed)\n${test_hook_coin_received} test hook coin received"
+echo Bought $(increase_in_wallet ${fair_launched_coin}) ${fair_launched_coin} for $payment ${base_coin}
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+
+echo
+update_wallet_amounts
+export payment=1000
+resim call-method ${radix_pump_component} buy ${fair_launched_coin} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Bought $(increase_in_wallet ${fair_launched_coin}) ${fair_launched_coin} for $payment ${base_coin}
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+
+echo
+get_pool_info ${fair_launched_coin}
 
 echo
 export payment=1
@@ -208,53 +308,69 @@ resim call-method ${radix_pump_component} sell ${fair_launched_coin}:$payment >$
 echo Tried to sellf ${fair_launched_coin} during fair launch, it is forbidden so the transaction failed
 
 echo
-date=$(date -u -d @$(($end_launch_time -1)) +"%Y-%m-%dT%H:%M:%SZ")
+unix_epoch=$(($end_launch_time -1))
+date=$(date -u -d @$unix_epoch +"%Y-%m-%dT%H:%M:%SZ")
 resim set-current-time $date
-echo Date is now $date
-
+echo Date is now $unix_epoch
 resim run terminate_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to terminate launch ahead of time and the transaction failed as expected
 
 echo
 date=$(date -u -d @$end_launch_time +"%Y-%m-%dT%H:%M:%SZ")
 resim set-current-time $date
-echo Date is now $date
-
+echo Date is now $end_launch_time
+update_wallet_amounts
 resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export base_coin_received=$(grep -A 1 "ResAddr: ${base_coin}" $OUTPUTFILE | head -n 2 | tail -n 1 | cut -d ' ' -f 5)
-export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-echo -e "Fair launch terminated, received ${base_coin_received} ${base_coin}\n${test_hook_coin_received} test hook coin received"
+echo Fair launch terminated for ${fair_launched_coin}, received $(increase_in_wallet ${fair_launched_coin})
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
 
 echo
+get_pool_info ${fair_launched_coin}
+
+echo
+update_wallet_amounts
 export payment=1
 resim call-method ${radix_pump_component} sell ${fair_launched_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export base_coin_received=$(grep -A 1 "ResAddr: ${base_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-export test_hook_coin_received=$(grep -A 1 "ResAddr: ${test_hook_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-echo -e "Sold $payment ${fair_launched_coin} for ${base_coin_received} ${base_coin}\n${test_hook_coin_received} test hook coin received"
+echo Sold $payment ${fair_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin}
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
 
 echo
-date=$(date -u -d @$(($end_launch_time + 604800)) +"%Y-%m-%dT%H:%M:%SZ")
-resim set-current-time $date
-echo Date is now $date
+get_pool_info ${fair_launched_coin}
 
+echo
+unix_epoch=$(($end_launch_time + 604800))
+date=$(date -u -d @$unix_epoch +"%Y-%m-%dT%H:%M:%SZ")
+resim set-current-time $date
+echo Date is now $unix_epoch
+update_wallet_amounts
 export amount=100000
 export sell=false
 resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export fair_launched_coin_received=$(grep -A 1 "ResAddr: ${fair_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-echo Tried to unlock $amount $fair_launched_coin, $fair_launched_coin_received received
+echo Tried to unlock $amount $fair_launched_coin, $(increase_in_wallet ${fair_launched_coin}) received
 
 echo
+get_pool_info ${fair_launched_coin}
+
+echo
+update_wallet_amounts
 export amount=100000
 export sell=false
 resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export fair_launched_coin_received=$(grep -A 1 "ResAddr: ${fair_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
-echo Tried to unlock $amount $fair_launched_coin, $fair_launched_coin_received received
+echo Tried to unlock $amount $fair_launched_coin, $(increase_in_wallet ${fair_launched_coin}) received
 
 echo
-date=$(date -u -d @$(($unlocking_time + 604800)) +"%Y-%m-%dT%H:%M:%SZ")
+unix_epoch=$(($unlocking_time + 604800))
+date=$(date -u -d @$unix_epoch +"%Y-%m-%dT%H:%M:%SZ")
 resim set-current-time $date
-echo Date is now $date
-
+echo Date is now $unix_epoch
+update_wallet_amounts
 export amount=100000
 export sell=true
-resim run unlock.rtm
+resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Tried to unlock $amount $fair_launched_coin and sell them, $(increase_in_wallet ${fair_launched_coin}) received
+echo $(increase_in_wallet ${base_coin}) ${base_coin} received
+
+echo
+get_pool_info ${fair_launched_coin}
+
+

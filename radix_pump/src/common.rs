@@ -39,3 +39,19 @@ pub struct CreatorData {
     #[mutable]
     pub pool_mode: PoolMode,
 }
+
+#[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
+pub enum HookableOperation {
+    PostFairLaunch,
+    PostTerminateFairLaunch,
+    PostQuickLaunch,
+    PostRandomLaunch,
+    PostTerminateRandomLaunch,
+    PostBuy,
+    PostSell,
+    PostReturnFlashLoan,
+    PostBuyTicket,
+    PostRedeemWinningTicket,
+    PostRedeemLousingTicket,
+}
+

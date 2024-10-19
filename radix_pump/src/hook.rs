@@ -2,18 +2,6 @@ use scrypto::prelude::*;
 use scrypto_interface::*;
 use crate::common::*;
 
-#[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
-pub enum HookableOperation {
-    PostFairLaunch,
-    PostTerminateFairLaunch,
-    PostQuickLaunch,
-    PostRandomLaunch,
-    PostTerminateRandomLaunch, 
-    PostBuy,
-    PostSell,
-    PostReturnFlashLoan,
-}
-
 #[derive(Debug, ScryptoSbor, PartialEq, Clone)]
 pub struct HookArgument {
     pub coin_address: ResourceAddress,

@@ -156,12 +156,12 @@ echo -e "TestHook component: ${test_hook_component}\nTestHook coin: ${test_hook_
 
 echo
 export hook_name=TestHook
-export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch", "PostTerminateRandomLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan"'
+export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch", "PostTerminateRandomLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan", "PostBuyTicket", "PostRedeemWinningTicket", "PostRedeemLousingTicket"'
 resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
 
 echo
-export globally_enabled_operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch"'
+export globally_enabled_operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch"'
 resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
 
@@ -451,7 +451,7 @@ export name=RandomLaunchedCoin
 export icon=https://img.evients.com/images/f480x480/e7/b5/09/51/e7b50951be9149fe86e26f45e019d2af.jpg
 export description="Random launched coin"
 export info_url=""
-export ticket_price=100
+export ticket_price=10
 export winning_tickets=10
 export coins_per_winning_ticket=10
 export buy_pool_fee=5
@@ -472,4 +472,31 @@ export payment=1000
 resim call-method ${radix_pump_component} buy ${random_launched_coin} ${base_coin}:$payment >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Someone tried to buy ${random_launched_coin} before it was launched, the transaction failed
 
+echo
+update_wallet_amounts
+export end_launch_time=$(($unix_epoch + $min_launch_duration))
+export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration))
+resim run launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Random sale launched for ${random_launched_coin}, received $(increase_in_wallet ${random_launched_coin})
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+export amount=50
+export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${amount} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee})) - 0.0000001" | bc)
+resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} $amount ${base_coin}:$payment >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Failed attempt to buy one ticket without paying ticket_price + total_buy_fee
+
+echo
+update_wallet_amounts
+export amount=50
+export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${amount} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee}))" | bc)
+resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} $amount ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Bought $(increase_in_wallet ${random_ticket}) tickets for $payment $base_coin
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+
+echo
+get_pool_info ${random_launched_coin}
 

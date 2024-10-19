@@ -80,6 +80,16 @@ pub struct FlashLoanEvent {
     fee_paid_to_the_pool: Decimal,
 }
 
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct BuyTicketEvent {
+    coin_resource_address: ResourceAddress,
+    amount: u32,
+    price: Decimal,
+    ticket_resource_address: ResourceAddress,
+    sold_tickets: u32,
+    fee_paid_to_the_pool: Decimal,
+}
+
 #[derive(Debug, ScryptoSbor, PartialEq)]
 struct FairLaunchDetails {
     end_launch_time: i64,
@@ -128,11 +138,13 @@ pub struct Pool {
 }
 
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
-struct TicketData {
-    id: u64,
-    coin_resource_address: ResourceAddress,
+pub struct TicketData {
+    id: u32,
+    pub coin_resource_address: ResourceAddress,
     buy_date: Instant,
 }
+
+static MAX_TICKETS_PER_OPERATION: u32 = 50;
 
 impl Pool {
 
@@ -639,34 +651,7 @@ impl Pool {
 
                     (coin_bucket, self.coin_vault.amount())
                 },
-                LaunchType::Random(ref mut random_launch) => {
-                    let mut available = base_coin_bucket.amount() - fee;
-                    assert!(
-                        available >= random_launch.ticket_price,
-                        "Not enough to buy a ticket",
-                    );
-
-                    let coin_resource_address = self.coin_vault.resource_address();
-                    let mut ticket_bucket = Bucket::new(coin_resource_address);
-
-                    while available >= random_launch.ticket_price {
-                        available -= random_launch.ticket_price;
-                        random_launch.sold_tickets += 1;
-
-                        ticket_bucket.put(
-                            random_launch.ticket_resource_manager.mint_non_fungible(
-                                &NonFungibleLocalId::integer(random_launch.sold_tickets.into()),
-                                TicketData {
-                                    id: random_launch.sold_tickets.into(),
-                                    coin_resource_address: coin_resource_address,
-                                    buy_date: Clock::current_time_rounded_to_seconds(),
-                                },
-                            )
-                        );
-                    }
-
-                    (ticket_bucket, Decimal::ZERO)
-                },
+                LaunchType::Random(_) => Runtime::panic("Use buy_ticket instead".to_string()),
                 _ => Runtime::panic("Not allowed for this launch type".to_string()),
             },
             _ => Runtime::panic("Not allowed in this mode".to_string()),
@@ -896,6 +881,68 @@ impl Pool {
                 );
 
                 self.coin_vault.take(amount).burn();
+            },
+            _ => Runtime::panic("Not allowed for this launch type".to_string()),
+        }
+    }
+
+    pub fn buy_ticket(
+        &mut self,
+        amount: u32,
+        base_coin_bucket: Bucket,
+    ) -> (Bucket, Decimal) {
+        assert!(
+            self.mode == PoolMode::Launching,
+            "Not allowed in this mode",
+        );
+        assert!(
+            amount <= MAX_TICKETS_PER_OPERATION,
+            "It is not allowed to buy more than {} tickets in a single operation",
+            MAX_TICKETS_PER_OPERATION,
+        );
+        
+        match self.launch {
+            LaunchType::Random(ref mut random_launch) => {
+                let fee = base_coin_bucket.amount() * self.buy_pool_fee_percentage / 100;
+                let available_base_coin_amount = base_coin_bucket.amount() - fee;
+info!("base_coin_bucket.amount(): {}, self.buy_pool_fee_percentage: {}, fee: {}, available_base_coin_amount: {}, Decimal::try_from(amount).unwrap(): {}, random_launch.ticket_price: {}", base_coin_bucket.amount(), self.buy_pool_fee_percentage, fee, available_base_coin_amount, Decimal::try_from(amount).unwrap(), random_launch.ticket_price);
+                assert!(
+                    available_base_coin_amount >= Decimal::try_from(amount).unwrap() * random_launch.ticket_price,
+                    "Not enough cois to buy that amount of tickets",
+                );
+
+                let mut ticket_bucket = Bucket::new(random_launch.ticket_resource_manager.address());
+                for i in 0..amount {
+                    let ticket_number = random_launch.sold_tickets + i;
+
+                    ticket_bucket.put(
+                        random_launch.ticket_resource_manager.mint_non_fungible(
+                            &NonFungibleLocalId::integer(ticket_number.into()),
+                            TicketData {
+                                id: ticket_number,
+                                coin_resource_address: self.coin_vault.resource_address(),
+                                buy_date: Clock::current_time_rounded_to_seconds(),
+                            },
+                        )
+                    );
+
+                }
+                random_launch.sold_tickets += amount;
+
+                self.base_coin_vault.put(base_coin_bucket);
+
+                Runtime::emit_event(
+                    BuyTicketEvent {
+                        coin_resource_address: self.coin_vault.resource_address(),
+                        amount: amount,
+                        price: random_launch.ticket_price,
+                        ticket_resource_address: random_launch.ticket_resource_manager.address(),
+                        sold_tickets: random_launch.sold_tickets,
+                        fee_paid_to_the_pool: fee,
+                    }
+                );
+
+                (ticket_bucket, random_launch.ticket_price)
             },
             _ => Runtime::panic("Not allowed for this launch type".to_string()),
         }

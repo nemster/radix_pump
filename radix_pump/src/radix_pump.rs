@@ -41,12 +41,14 @@ pub struct HookDisabledEvent {
     FairLaunchStartEvent,
     FairLaunchEndEvent,
     QuickLaunchEvent,
+    RandomLaunchStartEvent,
     BuyEvent,
     SellEvent,
     LiquidationEvent,
     FlashLoanEvent,
     HookEnabledEvent,
     HookDisabledEvent,
+    BuyTicketEvent,
 )]
 #[types(
     u64,
@@ -83,6 +85,7 @@ mod radix_pump {
             creator_enable_hook => PUBLIC;
             creator_disable_hook => PUBLIC;
             burn => PUBLIC;
+            buy_ticket => PUBLIC;
         }
     }
 
@@ -114,6 +117,7 @@ mod radix_pump {
         creator_enable_hook => Free;
         creator_disable_hook => Free;
         burn => Free;
+        buy_ticket => Usd(dec!("0.005"));
     }
 
     struct RadixPump {
@@ -809,7 +813,7 @@ mod radix_pump {
                 base_coin_amount: base_coin_amount,
                 coin_amount: coin_amount,
                 last_price: last_price,
-                total_buy_fee_percentage: self.buy_sell_fee_percentage + buy_pool_fee_percentage * (100 - self.buy_sell_fee_percentage) / dec!(100),
+                total_buy_fee_percentage: dec!(1000000) / ((100 - buy_pool_fee_percentage) * (100 - self.buy_sell_fee_percentage)) - dec!(100),
                 total_sell_fee_percentage: sell_pool_fee_percentage + self.buy_sell_fee_percentage * (100 - sell_pool_fee_percentage) / dec!(100),
                 total_flash_loan_fee_percentage: flash_loan_pool_fee_percentage + self.flash_loan_fee_percentage,
                 pool_mode: pool_mode,
@@ -1189,6 +1193,52 @@ mod radix_pump {
         ) {
             let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
             self.pools.get_mut(&coin_address).unwrap().burn(amount);
+        }
+
+        pub fn buy_ticket(
+            &mut self,
+            coin_address: ResourceAddress,
+            amount: u32,
+            mut base_coin_bucket: Bucket,
+        ) -> (Bucket, Vec<Bucket>) {
+            assert!(
+                base_coin_bucket.resource_address() == self.base_coin_address,
+                "Wrong base coin",
+            ); 
+            assert!(
+                amount > 0,
+                "Can't buy zero tickets",
+            );
+
+            self.fee_vault.put(
+                base_coin_bucket.take_advanced(
+                    base_coin_bucket.amount() * self.buy_sell_fee_percentage / dec!(100),
+                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                )
+            );
+
+            let mut pool = self.pools.get_mut(&coin_address).expect("Coin not found");
+
+            let (ticket_bucket, price) = pool.buy_ticket(
+                amount,
+                base_coin_bucket
+            );
+ 
+            let hook_argument = HookArgument {
+                coin_address: coin_address,
+                operation: HookableOperation::PostBuyTicket,
+                amount: Some(amount.into()),
+                mode: PoolMode::Launching,
+                price: Some(price),
+            };
+            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            drop(pool);
+            let buckets = self.execute_hooks(
+                &pool_enabled_hooks,
+                &hook_argument,
+            );
+ 
+            (ticket_bucket, buckets)
         }
     }
 }

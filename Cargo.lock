@@ -530,6 +530,13 @@ version = "0.1.0"
 source = "git+https://github.com/dot-random/dot-random?rev=v0.1-scrypto-1.2.0#a76a56de5342208b3ff4eab263bddc529df86a61"
 
 [[package]]
+name = "random_component"
+version = "1.0.0"
+dependencies = [
+ "scrypto",
+]
+
+[[package]]
 name = "regex"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

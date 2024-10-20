@@ -1,0 +1,13 @@
+[package]
+name = "random_component"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
+
+[features]
+default = []
+
+[lib]
+crate-type = ["cdylib", "lib"]

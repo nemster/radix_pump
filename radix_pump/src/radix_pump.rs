@@ -57,6 +57,25 @@ pub struct HookDisabledEvent {
 )]
 mod radix_pump {
 
+    extern_blueprint!(
+        "package_sim1pk3cmat8st4ja2ms8mjqy2e9ptk8y6cx40v4qnfrkgnxcp2krkpr92",
+        RandomComponent {
+            fn request_random(
+                &self, address: ComponentAddress,
+                method_name: String,
+                on_error: String,
+                key: u32,
+                badge_opt:
+                Option<FungibleBucket>,
+                expected_fee: u8
+            ) -> u32;
+        }
+    );
+    const RNG: Global<RandomComponent> = global_component!(
+        RandomComponent,
+        "component_sim1crmulhl5yrk6hh4jsyldps5sdrp08r5v9wusupvzxgqvhlp4k00px7"
+    );
+
     enable_method_auth! {
         methods {
             forbid_symbols => restrict_to: [OWNER];
@@ -86,6 +105,9 @@ mod radix_pump {
             creator_disable_hook => PUBLIC;
             burn => PUBLIC;
             buy_ticket => PUBLIC;
+            random_callback => PUBLIC;
+            random_on_error => PUBLIC;
+            redeem_ticket => PUBLIC;
         }
     }
 
@@ -118,6 +140,9 @@ mod radix_pump {
         creator_disable_hook => Free;
         burn => Free;
         buy_ticket => Usd(dec!("0.005"));
+        random_callback => Free;
+        random_on_error => Free;
+        redeem_ticket => Free;
     }
 
     struct RadixPump {
@@ -942,42 +967,66 @@ mod radix_pump {
         pub fn terminate_launch(
             &mut self,
             creator_proof: Proof,
-        ) -> (Bucket, Vec<Bucket>) {
+        ) -> (Option<Bucket>, Option<Vec<Bucket>>) {
             let creator_data = self.get_creator_data(creator_proof);
             let coin_address = creator_data.coin_resource_address;
 
             let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
-            let (mut base_coin_bucket, price, supply) = pool.terminate_launch();
+            let (mut bucket, price, supply, operation) = pool.terminate_launch();
 
-            self.fee_vault.put(
-                base_coin_bucket.take_advanced(
-                    self.creation_fee_percentage * base_coin_bucket.amount() / 100,
-                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
-                )
-            );
+            match operation {
+                None => {
+                    let mut key: u32 = 1;
 
-            self.creator_badge_resource_manager.update_non_fungible_data(
-                &NonFungibleLocalId::integer(creator_data.id.into()),
-                "pool_mode",
-                PoolMode::Normal,
-            );
+                    while bucket.amount() >= Decimal::ONE {
+                        RNG.request_random(
+                            Runtime::global_address(),
+                            "random_callback".to_string(),
+                            "random_on_error".to_string(),
+                            key,
+                            Some(bucket.take(Decimal::ONE).as_fungible()),
+                            0, // TODO: try to find a value
+                        );
 
-            let hook_argument = HookArgument {
-                coin_address: coin_address,
-                operation: HookableOperation::PostTerminateFairLaunch,
-                amount: Some(supply),
-                mode: PoolMode::Normal,
-                price: Some(price),
-            };
-            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
-            drop(pool);
-            let buckets = self.execute_hooks(
-                &pool_enabled_hooks,
-                &hook_argument,
-            );
+                        key += 1;
+                    }
 
-            (base_coin_bucket, buckets)
+                    bucket.burn();
+
+                    (None, None)
+                },
+                Some(operation) => {
+                    self.fee_vault.put(
+                        bucket.take_advanced(
+                            self.creation_fee_percentage * bucket.amount() / 100,
+                            WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                        )
+                    );
+
+                    self.creator_badge_resource_manager.update_non_fungible_data(
+                        &NonFungibleLocalId::integer(creator_data.id.into()),
+                        "pool_mode",
+                        PoolMode::Normal,
+                    );
+
+                    let hook_argument = HookArgument {
+                        coin_address: coin_address,
+                        operation: operation,
+                        amount: Some(supply),
+                        mode: PoolMode::Normal,
+                        price: Some(price),
+                    };
+                    let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+                    drop(pool);
+                        let buckets = self.execute_hooks(
+                        &pool_enabled_hooks,
+                        &hook_argument,
+                    );
+
+                    (Some(bucket), Some(buckets))
+                }
+            }
         }
 
         fn mint_creator_badge(
@@ -1239,6 +1288,88 @@ mod radix_pump {
             );
  
             (ticket_bucket, buckets)
+        }
+
+        pub fn random_callback(
+            &mut self,
+            _key: u32,
+            badge: FungibleBucket,
+            random_seed: Vec<u8>
+        ) {
+            let mut pool = self.pools.get_mut(&badge.resource_address()).expect("Coin not found");
+            pool.extract_tickets(random_seed);
+
+            badge.burn();
+        }
+
+        pub fn random_on_error(
+            &self,
+            _key: u32,
+            badge: FungibleBucket
+        ) {
+            badge.burn();
+        }
+
+        pub fn redeem_ticket(
+            &mut self,
+            ticket_bucket: Bucket,
+        ) -> (
+            Bucket,
+            Bucket,
+            Option<Vec<Bucket>>,
+            Option<Vec<Bucket>>,
+        ) {
+            let ticket_id = &ticket_bucket.as_non_fungible().non_fungible_local_ids()[0];
+            let ticket_data = ResourceManager::from_address(ticket_bucket.resource_address()).get_non_fungible_data::<TicketData>(ticket_id);
+            let mut pool = self.pools.get_mut(&ticket_data.coin_resource_address).expect("Coin not found");
+            let (base_coin_bucket, coin_bucket, lose, win, mode) = pool.redeem_ticket(ticket_bucket);
+
+            let pool_enabled_hooks_lose = pool.enabled_hooks.get_hooks(HookableOperation::PostRedeemLousingTicket);
+            let hook_argument_lose = HookArgument {
+                coin_address: coin_bucket.resource_address(),
+                operation: HookableOperation::PostRedeemLousingTicket,
+                amount: Some(Decimal::try_from(lose).unwrap()),
+                mode: mode,
+                price: None,
+            };
+
+            let pool_enabled_hooks_win = pool.enabled_hooks.get_hooks(HookableOperation::PostRedeemWinningTicket);
+            let hook_argument_win = HookArgument {
+                coin_address: coin_bucket.resource_address(),
+                operation: HookableOperation::PostRedeemWinningTicket,
+                amount: Some(Decimal::try_from(win).unwrap()),
+                mode: mode,
+                price: None,
+            };
+
+            drop(pool);
+
+            let lose_buckets: Option<Vec<Bucket>>;
+            if lose > 0 {
+                lose_buckets = Some(
+                    self.execute_hooks(
+                        &pool_enabled_hooks_lose,
+                        &hook_argument_lose,
+                    )
+                );
+            } else {
+                lose_buckets = None;
+            }
+
+            let win_buckets: Option<Vec<Bucket>>;
+            if win > 0 {
+                win_buckets = Some(
+                    self.execute_hooks(
+                        &pool_enabled_hooks_win,
+                        &hook_argument_win,
+                    )
+                );
+            } else {
+                win_buckets = None;
+            }
+
+
+            (base_coin_bucket, coin_bucket, lose_buckets, win_buckets)
         }
     }
 }

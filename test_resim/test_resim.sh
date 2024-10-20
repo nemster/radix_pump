@@ -116,6 +116,16 @@ export owner_badge_id=$(grep 'Owner badge:' $OUTPUTFILE | cut -d ':' -f 3)
 echo -e "Account address: $account\nOwner badge: $owner_badge\nOwner badge id: ${owner_badge_id}"
 
 echo
+resim publish ../random_component >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export random_component_package=$(grep 'Success! New Package:' $OUTPUTFILE | cut -d ' ' -f 4)
+echo RandomComponent package: ${random_component_package}
+
+echo
+resim call-function ${random_component_package} RandomComponent new >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export random_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
+echo RandomComponent: ${random_component}
+
+echo
 resim publish ../radix_pump >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export radix_pump_package=$(grep 'Success! New Package:' $OUTPUTFILE | cut -d ' ' -f 4)
 echo RadixPump package: ${radix_pump_package}
@@ -491,8 +501,8 @@ echo Failed attempt to buy one ticket without paying ticket_price + total_buy_fe
 
 echo
 update_wallet_amounts
-export amount=50
-export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${amount} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee}))" | bc)
+export bought_tickets=50
+export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${bought_tickets} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee}))" | bc)
 resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} $amount ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${random_ticket}) tickets for $payment $base_coin
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
@@ -500,3 +510,42 @@ echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
 echo
 get_pool_info ${random_launched_coin}
 
+echo
+unix_epoch=$(($unix_epoch + 604800))
+date=$(date -u -d @$unix_epoch +"%Y-%m-%dT%H:%M:%SZ")
+resim set-current-time $date
+resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Random launch termination started for ${random_launched_coin}
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+resim call-method ${random_component} do_callback $(($RANDOM * $RANDOM * $RANDOM * $RANDOM)) >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Called the do_callback method of the random component
+
+echo
+update_wallet_amounts
+resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Random launch termination started for ${random_launched_coin}
+echo $(increase_in_wallet ${base_coin}) ${base_coin} received
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+export enabled_operations='"PostRedeemLousingTicket"'
+resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${random_launched_coin}
+
+resim show | grep -A ${bought_tickets} ${random_ticket} | grep -v ${random_ticket} | while read x ticket_id
+do
+  echo
+  update_wallet_amounts
+  resim call-method ${radix_pump_component} redeem_ticket ${random_ticket}:${ticket_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+  echo Ticket ${ticket_id} redeemed
+  echo $(increase_in_wallet ${random_launched_coin}) ${random_launched_coin} received
+  echo $(increase_in_wallet ${base_coin}) ${base_coin} received
+  echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+done

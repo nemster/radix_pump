@@ -94,7 +94,7 @@ Use this functions to create a RadixPump and a TestHook component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("")
+    Address("package_tdx_2_1p4wc400jfqe22p00nd73uq85zkdnvzhhuhjjg97n3exlg75ks9h9j4")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -106,7 +106,7 @@ CALL_FUNCTION
 ;
 
 CALL_FUNCTION
-    Address("")
+    Address("package_tdx_2_1p4qu2jqthaa5d64tu7ed0al0x65l7fjl5tqzq996pm8f5eclr6y6z7")
     "TestHook"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")

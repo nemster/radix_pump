@@ -4,7 +4,7 @@ This blueprint implements a marketplace where people can create, buy, sell and t
 
 ## Launch types
 
-RadixPump supports two coin lauch types: FairLaunch and QuickLaunch.  
+RadixPump supports three coin lauch types: FairLaunch, QuickLaunch and RandomLaunch.  
 
 ### FairLaunch
 
@@ -26,6 +26,14 @@ A user could easily buy great part of the supply for few base coins.
 This is why a modified version of the constant product formula is used. This modified version just ignores part of the coins in the pool so that bot sides of the pool have equal value.  
 Everytime a user buys the coin, the number of ignored coins decreases. 
 The coin creator can also burn the currently ignored coins by calling the `burn` method.
+
+### RandomLaunch
+
+A RandomLaunch happens in multiple steps just like a FairLaunch but, during the launch phase users buy tickets, not the coin itself.  
+
+At the end of the launch phase a predefined number of winning tickets is extracted by using an external random source: [https://github.com/dot-random/dot-random/](https://github.com/dot-random/dot-random/)
+
+Winners and losers can then redeem their tickets; winners receive the new coin while losers get back the base coins they paid the ticket (fees excluded).  
 
 ## Liquidation mode
 
@@ -61,7 +69,7 @@ No one can retrieve pool fees, the paid base coins just get into the pool itself
 Hooks are external components authomatically called by RadixPump when certain operations are performed.  
 
 The component owner can make hooks available by calling the `register_hook` method, he must specify the operations this hook can be attached to.  
-The available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostBuy`, `PostSell` and `PostReturnFlashLoan`. I avoided `Pre` hooks to prevent frontrunning and sandwitch attacks.  
+The available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket` and `PostRedeemLousingTicket`. I avoided `Pre` hooks to prevent frontrunning and sandwitch attacks.  
 
 Once an hook is registered the component owner can attach it to one or more operation globally (i.e. for all pools) via the `owner_enable_hook` method.
 A coin owner can attach a registered hook to operations happening on his coin.
@@ -86,7 +94,7 @@ Use this functions to create a RadixPump and a TestHook component in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("package_tdx_2_1p5rxnppg8ycgjkaz5s2zstfpn44sk3p9xlkkr37wz5h4zglwmezeyl")
+    Address("")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -98,7 +106,7 @@ CALL_FUNCTION
 ;
 
 CALL_FUNCTION
-    Address("package_tdx_2_1pkpu5ggtedpddz0g2e2yp9q2ffjd69ej6hynypwkn3x23glzg8ps3d")
+    Address("")
     "TestHook"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -740,7 +748,7 @@ CALL_METHOD
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<HOOK_NAME>` is the name that will be used to refer to this hook.  
-`<OPERATION>` is one of the operations the hooks can be attached to. Available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostBuy`, `PostSell` and `PostReturnFlashLoan`.  
+`<OPERATION>` is one of the operations the hooks can be attached to. Available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket` and `PostRedeemLousingTicket`.  
 `<HOOK_ADDRESS>` is the component address of the hook.  
 
 ### unregister_hook
@@ -913,6 +921,79 @@ CALL_METHOD
 `<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<AMOUNT>` is the maximum amount of coins the creator wants to burn. The actual amount depends on the number of currently ignored coins too.  
+
+### buy_ticket
+
+This method allows to buy one or more tickets during a random launch.
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw"
+    Address("<BASE_COIN_ADDRESS>")
+    Decimal("<BASE_COIN_AMOUNT>")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("<BASE_COIN_ADDRESS>")
+    Bucket("base_coin_bucket")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "buy_ticket"
+    Address("<COIN_ADDRESS>")
+    <AMOUNT>u32
+    Bucket("base_coin_bucket")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account of the user buying the tickets.
+`<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).
+`<BASE_COIN_AMOUNT>` is the base coin amount to buy the tickets.
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.
+`<COIN_ADDRESS>` is the resource address of the random launched coin the user wants to buy the tickets for.
+`<AMOUNT>` is the number of coins the user wants to buy.
+
+### redeem_ticket
+
+This method allows users to redeem the coins launched via a RandomLaunch or get a refund.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw_non_fungibles"
+    Address("<TICKET_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<TICKET_ID>#"), NonFungibleLocalId("#<TICKET_ID>#")...)
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("<TICKET_ADDRESS>")
+    Bucket("ticket_bucket")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "redeem_ticket"
+    Bucket("ticket_bucket")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+```
+`<ACCOUNT_ADDRESS>` is the account of the user redeeming the tickets.  
+`<TICKET_ADDRESS>` is the resource address of the tickets.  
+`<TICKET_ID>` is one of the numeric ids of the tickets to redeem.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+
+## Special thanks to:
+
+- Mleekko for the dot-random service  
+- razi90 for updating the scrypto-interface library to Scrypto 1.2.0  
+- The HIT & FOMO teams for supporting me during the development of this project
 
 ## Copyright
 

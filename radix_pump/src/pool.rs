@@ -1,5 +1,6 @@
 use scrypto::prelude::*;
 use scrypto::prelude::rust::cmp::*;
+use random::Random;
 use crate::common::*;
 use crate::hook_helpers::*;
 
@@ -30,6 +31,19 @@ pub struct QuickLaunchEvent {
     price: Decimal,
     coins_in_pool: Decimal,
     creator_allocation: Decimal,
+    buy_pool_fee_percentage: Decimal,
+    sell_pool_fee_percentage: Decimal,
+    flash_loan_pool_fee_percentage: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct RandomLaunchStartEvent {
+    resource_address: ResourceAddress,
+    ticket_price: Decimal,
+    winning_tickets: u32,
+    coins_per_winning_ticket: Decimal,
+    end_launch_time: i64,
+    unlocking_time: i64,
     buy_pool_fee_percentage: Decimal,
     sell_pool_fee_percentage: Decimal,
     flash_loan_pool_fee_percentage: Decimal,
@@ -67,6 +81,16 @@ pub struct FlashLoanEvent {
     fee_paid_to_the_pool: Decimal,
 }
 
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct BuyTicketEvent {
+    coin_resource_address: ResourceAddress,
+    amount: u32,
+    price: Decimal,
+    ticket_resource_address: ResourceAddress,
+    sold_tickets: u32,
+    fee_paid_to_the_pool: Decimal,
+}
+
 #[derive(Debug, ScryptoSbor, PartialEq)]
 struct FairLaunchDetails {
     end_launch_time: i64,
@@ -78,10 +102,29 @@ struct FairLaunchDetails {
     resource_manager: ResourceManager,
 }
 
-#[derive(Debug, ScryptoSbor, PartialEq)]
+#[derive(ScryptoSbor, PartialEq)]
+struct RandomLaunchDetails {
+    end_launch_time: i64,
+    winners_vault: Vault,
+    locked_vault: Vault,
+    unlocking_time: i64,
+    ticket_price: Decimal,
+    winning_tickets: u32,
+    coins_per_winning_ticket: Decimal,
+    sold_tickets: u32,
+    resource_manager: ResourceManager,
+    ticket_resource_manager: ResourceManager,
+    unlocked_amount: Decimal,
+    extract_winners: bool,
+    number_of_extracted_tickets: u32,
+    refunds_vault: Vault,
+}
+
+#[derive(ScryptoSbor, PartialEq)]
 enum LaunchType {
     Quick,
     Fair(FairLaunchDetails),
+    Random(RandomLaunchDetails),
 }
 
 #[derive(ScryptoSbor)]
@@ -96,7 +139,20 @@ pub struct Pool {
     pub enabled_hooks: HooksPerOperation,
     launch: LaunchType,
     creator_id: u64,
+
+    // This is only needed by RandomLaunch but unfortunately I can't put it into RandomLaunchDetails
+    // because KeyValueStore doesn't implement PartialEq
+    extracted_tickets: KeyValueStore<NonFungibleLocalId, bool>,
 }
+
+#[derive(Debug, ScryptoSbor, NonFungibleData)]
+pub struct TicketData {
+    pub coin_resource_address: ResourceAddress,
+    buy_date: Instant,
+}
+
+static MAX_TICKETS_PER_OPERATION: u32 = 50;
+static MAX_CALLS_TO_RANDOM: u32 = 10;
 
 impl Pool {
 
@@ -218,6 +274,7 @@ impl Pool {
                 }
             ),
             creator_id: creator_id,
+            extracted_tickets: KeyValueStore::new(),
         };
 
         (pool, resource_manager.address())
@@ -233,9 +290,10 @@ impl Pool {
             "Not allowed in this mode",
         );
 
+        self.mode = PoolMode::Launching;
+
         match self.launch {
             LaunchType::Fair(ref mut fair_launch) => {
-                self.mode = PoolMode::Launching;
                 fair_launch.end_launch_time = end_launch_time;
                 fair_launch.unlocking_time = unlocking_time;
 
@@ -252,15 +310,38 @@ impl Pool {
                     }
                 );
             },
+            LaunchType::Random(ref mut random_launch) => {
+                random_launch.end_launch_time = end_launch_time;
+                random_launch.unlocking_time = unlocking_time;
+
+                Runtime::emit_event(
+                    RandomLaunchStartEvent {
+                        resource_address: random_launch.resource_manager.address(),
+                        ticket_price: random_launch.ticket_price,
+                        winning_tickets: random_launch.winning_tickets,
+                        coins_per_winning_ticket: random_launch.coins_per_winning_ticket,
+                        end_launch_time: end_launch_time,
+                        unlocking_time: unlocking_time,
+                        buy_pool_fee_percentage: self.buy_pool_fee_percentage,
+                        sell_pool_fee_percentage: self.sell_pool_fee_percentage,
+                        flash_loan_pool_fee_percentage: self.flash_loan_pool_fee_percentage,
+                    }
+                );
+            },
             _ => Runtime::panic("Not allowed for this launch type".to_string()),
         };
 
         self.last_price
     }
 
-    pub fn terminate_launch(&mut self) -> (Bucket, Decimal, Decimal) {
+    pub fn terminate_launch(&mut self) -> (
+        Bucket,
+        Decimal,
+        Decimal,
+        Option<HookableOperation>,
+    ) {
         assert!(
-            self.mode == PoolMode::Launching,
+            self.mode == PoolMode::Launching || self.mode == PoolMode::TerminatingLaunch,
             "Not allowed in this mode",
         );
 
@@ -299,9 +380,124 @@ impl Pool {
                     }
                 );
 
-                (base_coin_bucket, self.last_price, supply)
+                (base_coin_bucket, self.last_price, supply, Some(HookableOperation::PostTerminateFairLaunch))
+            },
+            LaunchType::Random(ref mut random_launch) => {
+                match self.mode {
+                    PoolMode::Launching => {
+                        let now = Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch;
+                        assert!(
+                            now >= random_launch.end_launch_time,
+                            "Too soon",
+                        );
+                        random_launch.end_launch_time = now;
+
+                        random_launch.winning_tickets = min(random_launch.winning_tickets, random_launch.sold_tickets);
+
+                        if random_launch.winning_tickets == random_launch.sold_tickets {
+                            random_launch.extract_winners = false;
+
+                            self.terminate_random_launch()
+                        } else {
+                            self.mode = PoolMode::TerminatingLaunch;
+
+                            self.prepare_tickets_extraction()
+                        }
+                    },
+                    PoolMode::TerminatingLaunch => {
+                        if random_launch.extract_winners && random_launch.number_of_extracted_tickets < random_launch.winning_tickets ||
+                           !random_launch.extract_winners && random_launch.sold_tickets - random_launch.winning_tickets < random_launch.number_of_extracted_tickets {
+                            self.prepare_tickets_extraction()
+                        } else {
+                            random_launch.refunds_vault.put(
+                                self.base_coin_vault.take_advanced(
+                                    (random_launch.sold_tickets - random_launch.winning_tickets) * random_launch.ticket_price,
+                                    WithdrawStrategy::Rounded(RoundingMode::AwayFromZero),
+                                )
+                            );
+
+                            self.terminate_random_launch()
+                        }
+                    },
+                    _ => Runtime::panic("Should not happen".to_string()),
+                }
             },
             _ => Runtime::panic("Not allowed for this launch type".to_string()),
+        }
+    }
+
+    fn terminate_random_launch(&mut self) -> (
+        Bucket,
+        Decimal,
+        Decimal,
+        Option<HookableOperation>,
+    ) {
+        self.mode = PoolMode::Normal;
+
+        match self.launch {
+            LaunchType::Random(ref mut random_launch) => {
+                let amount = random_launch.coins_per_winning_ticket * (random_launch.winning_tickets + 2);
+                let mut coin_bucket = random_launch.resource_manager.mint(amount);
+                random_launch.locked_vault.put(
+                    coin_bucket.take(random_launch.coins_per_winning_ticket)
+                );
+                self.coin_vault.put(
+                    coin_bucket.take(random_launch.coins_per_winning_ticket)
+                );
+                random_launch.winners_vault.put(coin_bucket);
+
+                random_launch.resource_manager.set_mintable(rule!(deny_all));
+                random_launch.resource_manager.lock_mintable();
+
+                (
+                    self.base_coin_vault.take_advanced(
+                        random_launch.winning_tickets * random_launch.ticket_price,
+                        WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                    ),
+                    self.last_price,
+                    amount,
+                    Some(HookableOperation::PostTerminateRandomLaunch),
+                )
+            },
+            _ => Runtime::panic("Should not happen".to_string()),
+        }
+    }
+
+    fn prepare_tickets_extraction(&mut self) -> (
+        Bucket,
+        Decimal,
+        Decimal,
+        Option<HookableOperation>,
+    ) {
+        let mut calls_to_random: u32;
+        let remainder: u32;
+
+        match self.launch {
+            LaunchType::Random(ref mut random_launch) => {
+                if random_launch.winning_tickets < random_launch.sold_tickets / 2 {
+                    random_launch.extract_winners = true;
+
+                    calls_to_random = (random_launch.winning_tickets - random_launch.number_of_extracted_tickets) / MAX_TICKETS_PER_OPERATION;
+                    remainder = (random_launch.winning_tickets - random_launch.number_of_extracted_tickets) % MAX_TICKETS_PER_OPERATION;
+                } else {
+                    random_launch.extract_winners = false;
+
+                    calls_to_random = (random_launch.sold_tickets - random_launch.winning_tickets - random_launch.number_of_extracted_tickets) / MAX_TICKETS_PER_OPERATION;
+                    remainder = (random_launch.sold_tickets - random_launch.winning_tickets - random_launch.number_of_extracted_tickets) % MAX_TICKETS_PER_OPERATION;
+                }
+                if remainder > 0 {
+                    calls_to_random += 1;
+                }
+                calls_to_random = min(calls_to_random, MAX_CALLS_TO_RANDOM);
+
+                (
+                    random_launch.resource_manager.mint(Decimal::try_from(calls_to_random).unwrap()),
+                    self.last_price,
+                    Decimal::ZERO,
+                    None
+                )
+            },
+            _ => Runtime::panic("Should not happen".to_string()),
         }
     }
 
@@ -414,9 +610,133 @@ impl Pool {
             enabled_hooks: HooksPerOperation::new(),
             launch: LaunchType::Quick,
             creator_id: creator_id,
+            extracted_tickets: KeyValueStore::new(),
         };
 
         (pool, creator_coin_bucket.into())
+    }
+
+    pub fn new_random_launch(
+        coin_symbol: String,
+        coin_name: String,
+        coin_icon_url: String,
+        coin_description: String,
+        coin_info_url: String,
+        ticket_price: Decimal,
+        winning_tickets: u32,
+        coins_per_winning_ticket: Decimal,
+        buy_pool_fee_percentage: Decimal,
+        sell_pool_fee_percentage: Decimal,
+        flash_loan_pool_fee_percentage: Decimal,
+        coin_creator_badge_rule: AccessRuleNode,
+        base_coin_address: ResourceAddress,
+        creator_id: u64,
+    ) -> (Pool, ResourceAddress) {
+        let component_address = Runtime::global_address();
+
+        let ticket_resource_manager = ResourceBuilder::new_integer_non_fungible::<TicketData>(
+            OwnerRole::Fixed(AccessRule::Protected(coin_creator_badge_rule.clone()))
+        )
+        .mint_roles(mint_roles!(
+            minter => rule!(require(global_caller(component_address)));
+            minter_updater => rule!(require(global_caller(component_address)));
+        ))
+        .burn_roles(burn_roles!(
+            burner => rule!(require(global_caller(component_address)));
+            burner_updater => rule!(deny_all);
+        ))
+        .deposit_roles(deposit_roles!(
+            depositor => rule!(allow_all);
+            depositor_updater => rule!(deny_all);
+        ))
+        .withdraw_roles(withdraw_roles!(
+            withdrawer => rule!(allow_all);
+            withdrawer_updater => rule!(deny_all);
+        ))
+        .recall_roles(recall_roles!(
+            recaller => rule!(deny_all);
+            recaller_updater => rule!(deny_all);
+        ))
+        .freeze_roles(freeze_roles!(
+            freezer => rule!(deny_all);
+            freezer_updater => rule!(deny_all);
+        ))
+        .metadata(metadata!(
+            roles {
+                metadata_setter => AccessRule::Protected(coin_creator_badge_rule.clone());
+                metadata_setter_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
+                metadata_locker => AccessRule::Protected(coin_creator_badge_rule.clone());
+                metadata_locker_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
+            },
+            init {
+                "name" => format!("Ticket for the launch of {}", coin_name), updatable;
+                "icon_url" => MetadataValue::Url(UncheckedUrl::of(coin_icon_url.clone())), updatable;
+                "description" => coin_description.clone(), updatable;
+            }
+        ))
+        .create_with_no_initial_supply();
+
+        let resource_manager = Pool::start_resource_manager_creation(
+            coin_symbol,
+            coin_name,
+            coin_icon_url,
+            coin_description,
+            coin_info_url,
+            coin_creator_badge_rule.clone(),
+        )
+        .burn_roles(burn_roles!(
+            burner => AccessRule::Protected(
+                AccessRuleNode::AnyOf(
+                    vec![
+                        coin_creator_badge_rule.clone(),
+                        AccessRuleNode::ProofRule(
+                            ProofRule::Require(
+                                global_caller(Runtime::global_address())
+                            )
+                        )
+                    ]
+                )
+            );
+            burner_updater => AccessRule::Protected(coin_creator_badge_rule);
+        ))
+        .mint_roles(mint_roles!(
+            minter => rule!(require(global_caller(component_address)));
+            minter_updater => rule!(require(global_caller(component_address)));
+        ))
+        .create_with_no_initial_supply();
+
+        let pool = Pool {
+            base_coin_vault: Vault::new(base_coin_address),
+            coin_vault: Vault::new(resource_manager.address()),
+            mode: PoolMode::WaitingForLaunch,
+            last_price: ticket_price / coins_per_winning_ticket,
+            buy_pool_fee_percentage: buy_pool_fee_percentage,
+            sell_pool_fee_percentage: sell_pool_fee_percentage,
+            flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
+            enabled_hooks: HooksPerOperation::new(),
+            launch: LaunchType::Random(
+                RandomLaunchDetails {
+                    end_launch_time: 0,
+                    winners_vault: Vault::new(resource_manager.address()),
+                    locked_vault: Vault::new(resource_manager.address()),
+                    unlocking_time: 0,
+                    ticket_price: ticket_price,
+                    winning_tickets: winning_tickets,
+                    coins_per_winning_ticket: coins_per_winning_ticket,
+                    sold_tickets: 0,
+                    resource_manager: resource_manager,
+                    ticket_resource_manager: ticket_resource_manager,
+                    unlocked_amount: Decimal::ZERO,
+                    extract_winners: true,
+                    number_of_extracted_tickets: 0,
+                    refunds_vault: Vault::new(base_coin_address),
+                }
+            ),
+            creator_id: creator_id,
+            extracted_tickets: KeyValueStore::new(),
+        };
+
+        (pool, resource_manager.address())
     }
 
     fn custom_costant_product(
@@ -426,7 +746,7 @@ impl Pool {
         let coin_amount = PreciseDecimal::from(self.coin_vault.amount());
 
         match self.launch {
-            LaunchType::Quick => {
+            LaunchType::Quick | LaunchType::Random(_) => {
                 let expected_coin_amount = base_coin_amount / PreciseDecimal::from(self.last_price);
 
                 (
@@ -476,6 +796,7 @@ impl Pool {
 
                     (coin_bucket, self.coin_vault.amount())
                 },
+                LaunchType::Random(_) => Runtime::panic("Use buy_ticket instead".to_string()),
                 _ => Runtime::panic("Not allowed for this launch type".to_string()),
             },
             _ => Runtime::panic("Not allowed in this mode".to_string()),
@@ -622,6 +943,9 @@ impl Pool {
         Option<i64>,
         Option<Decimal>,
         Option<Decimal>,
+        Option<Decimal>,
+        Option<u32>,
+        Option<Decimal>,
     ) {
         (
             self.base_coin_vault.amount(),
@@ -634,18 +958,34 @@ impl Pool {
             match &self.launch {
                 LaunchType::Quick => None,
                 LaunchType::Fair(fair_launch) => Some(fair_launch.end_launch_time),
+                LaunchType::Random(random_launch) => Some(random_launch.end_launch_time),
             },
             match &self.launch {
                 LaunchType::Quick => None,
                 LaunchType::Fair(fair_launch) => Some(fair_launch.unlocking_time),
+                LaunchType::Random(random_launch) => Some(random_launch.unlocking_time),
             },
             match &self.launch {
                 LaunchType::Quick => None,
                 LaunchType::Fair(fair_launch) => Some(fair_launch.initial_locked_amount),
+                LaunchType::Random(random_launch) => Some(random_launch.coins_per_winning_ticket),
             },
             match &self.launch {
                 LaunchType::Quick => None,
                 LaunchType::Fair(fair_launch) => Some(fair_launch.unlocked_amount),
+                LaunchType::Random(random_launch) => Some(random_launch.unlocked_amount),
+            },
+            match &self.launch {
+                LaunchType::Quick | LaunchType::Fair(_) => None,
+                LaunchType::Random(random_launch) => Some(random_launch.ticket_price),
+            },
+            match &self.launch {
+                LaunchType::Quick | LaunchType::Fair(_) => None,
+                LaunchType::Random(random_launch) => Some(random_launch.winning_tickets),
+            },
+            match &self.launch {
+                LaunchType::Quick | LaunchType::Fair(_) => None,
+                LaunchType::Random(random_launch) => Some(random_launch.coins_per_winning_ticket),
             },
         )
     }
@@ -687,6 +1027,146 @@ impl Pool {
 
                 self.coin_vault.take(amount).burn();
             },
+            _ => Runtime::panic("Not allowed for this launch type".to_string()),
+        }
+    }
+
+    pub fn buy_ticket(
+        &mut self,
+        amount: u32,
+        base_coin_bucket: Bucket,
+    ) -> (Bucket, Decimal) {
+        assert!(
+            self.mode == PoolMode::Launching,
+            "Not allowed in this mode",
+        );
+        assert!(
+            amount <= MAX_TICKETS_PER_OPERATION,
+            "It is not allowed to buy more than {} tickets in a single operation",
+            MAX_TICKETS_PER_OPERATION,
+        );
+        
+        match self.launch {
+            LaunchType::Random(ref mut random_launch) => {
+                let fee = base_coin_bucket.amount() * self.buy_pool_fee_percentage / 100;
+                let available_base_coin_amount = base_coin_bucket.amount() - fee;
+                assert!(
+                    available_base_coin_amount >= Decimal::try_from(amount).unwrap() * random_launch.ticket_price,
+                    "Not enough cois to buy that amount of tickets",
+                );
+
+                let mut ticket_bucket = Bucket::new(random_launch.ticket_resource_manager.address());
+                for i in 0..amount {
+                    let ticket_number = random_launch.sold_tickets + i;
+
+                    ticket_bucket.put(
+                        random_launch.ticket_resource_manager.mint_non_fungible(
+                            &NonFungibleLocalId::integer(ticket_number.into()),
+                            TicketData {
+                                coin_resource_address: self.coin_vault.resource_address(),
+                                buy_date: Clock::current_time_rounded_to_seconds(),
+                            },
+                        )
+                    );
+
+                }
+                random_launch.sold_tickets += amount;
+
+                self.base_coin_vault.put(base_coin_bucket);
+
+                Runtime::emit_event(
+                    BuyTicketEvent {
+                        coin_resource_address: self.coin_vault.resource_address(),
+                        amount: amount,
+                        price: random_launch.ticket_price,
+                        ticket_resource_address: random_launch.ticket_resource_manager.address(),
+                        sold_tickets: random_launch.sold_tickets,
+                        fee_paid_to_the_pool: fee,
+                    }
+                );
+
+                (ticket_bucket, random_launch.ticket_price)
+            },
+            _ => Runtime::panic("Not allowed for this launch type".to_string()),
+        }
+    }
+
+    pub fn extract_tickets(
+        &mut self,
+        random_seed: Vec<u8>
+    ) {
+        match self.launch {
+            LaunchType::Random(ref mut random_launch) => {
+                let tickets_to_extract = min(
+                    MAX_TICKETS_PER_OPERATION,
+                    match random_launch.extract_winners {
+                        true => random_launch.winning_tickets,
+                        false => random_launch.sold_tickets - random_launch.winning_tickets,
+                    } - random_launch.number_of_extracted_tickets,
+                );
+                // Fail quietly if there's nothing left to do
+                if self.mode != PoolMode::TerminatingLaunch ||
+                    tickets_to_extract == 0 {
+                    return;
+                }
+
+                let mut random: Random = Random::new(&random_seed);
+                for _i in 0..tickets_to_extract {
+                    let mut ticket_id = NonFungibleLocalId::integer(random.in_range::<u32>(0, random_launch.sold_tickets).into());
+                    while self.extracted_tickets.get(&ticket_id).is_some() {
+                        ticket_id = NonFungibleLocalId::integer(random.in_range::<u32>(0, random_launch.sold_tickets).into());
+                    }
+                    self.extracted_tickets.insert(ticket_id, random_launch.extract_winners);
+                }
+
+                random_launch.number_of_extracted_tickets += tickets_to_extract;
+
+            },
+            _ => Runtime::panic("Not allowed for this launch type".to_string()),
+        }
+    }
+
+    pub fn redeem_ticket(
+        &mut self,
+        ticket_bucket: Bucket,
+    ) -> (
+        Bucket,
+        Bucket,
+        u32,
+        u32,
+        PoolMode,
+    ) {
+        assert!(
+            self.mode == PoolMode::Normal || self.mode == PoolMode::Liquidation,
+            "Not allowed in this mode"
+        );
+
+        match self.launch {
+            LaunchType::Random(ref mut random_launch) => {
+                assert!(
+                    ticket_bucket.resource_address() == random_launch.ticket_resource_manager.address(),
+                    "Unknown ticket",
+                );
+
+                let mut base_coin_bucket = Bucket::new(self.base_coin_vault.resource_address());
+                let mut coin_bucket = Bucket::new(self.coin_vault.resource_address());
+                let mut win = 0u32;
+                let mut lose = 0u32;
+
+                for ticket_id in ticket_bucket.as_non_fungible().non_fungible_local_ids().iter() {
+                    if self.extracted_tickets.get(ticket_id).is_some()  && random_launch.extract_winners {
+                        coin_bucket.put(random_launch.winners_vault.take(random_launch.coins_per_winning_ticket));
+                        win += 1;
+                    } else {
+                        base_coin_bucket.put(random_launch.refunds_vault.take(random_launch.ticket_price));
+                        lose += 1;
+                    }
+                }
+
+                ticket_bucket.burn();
+
+                (base_coin_bucket, coin_bucket, lose, win, self.mode)
+            }
             _ => Runtime::panic("Not allowed for this launch type".to_string()),
         }
     }

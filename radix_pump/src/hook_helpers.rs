@@ -1,4 +1,5 @@
 use scrypto::prelude::*;
+use crate::common::*;
 use crate::hook::*;
 
 pub type HookByName = KeyValueStore<String, HookInterfaceScryptoStub>;
@@ -100,9 +101,14 @@ pub fn string_to_operation(operation: &String) -> HookableOperation {
         "PostFairLaunch" => HookableOperation::PostFairLaunch,
         "PostTerminateFairLaunch" => HookableOperation::PostTerminateFairLaunch,
         "PostQuickLaunch" => HookableOperation::PostQuickLaunch,
+        "PostRandomLaunch" => HookableOperation::PostRandomLaunch,
+        "PostTerminateRandomLaunch" => HookableOperation::PostTerminateRandomLaunch,
         "PostBuy" => HookableOperation::PostBuy,
         "PostSell" => HookableOperation::PostSell,
         "PostReturnFlashLoan" => HookableOperation::PostReturnFlashLoan,
+        "PostBuyTicket" => HookableOperation::PostBuyTicket,
+        "PostRedeemWinningTicket" => HookableOperation::PostRedeemWinningTicket,
+        "PostRedeemLousingTicket" => HookableOperation::PostRedeemLousingTicket,
         _ => Runtime::panic("Operation not found".to_string()),
     }
 }

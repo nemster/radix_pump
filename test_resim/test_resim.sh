@@ -26,7 +26,7 @@ increase_in_wallet() {
 get_pool_info () {
   echo PoolInfo for $1
   resim call-method $radix_pump_component get_pool_info $1 |
-    grep -A 22 '├─ Tuple(' | (
+    grep -A 50 '├─ Tuple(' | (
       read x
       read base_coin_amount
       echo base_coin_amount: $(echo $base_coin_amount | cut -d '"' -f 2)
@@ -44,8 +44,9 @@ get_pool_info () {
       case $pool_mode in 
         'Enum::[0],') echo pool_mode: WaitingForLaunch ;;
         'Enum::[1],') echo pool_mode: Launching ;;
-        'Enum::[2],') echo pool_mode: Normal ;;
-        'Enum::[3],') echo pool_mode: Liquidation ;;
+        'Enum::[2],') echo pool_mode: TerminatingLaunch ;;
+        'Enum::[3],') echo pool_mode: Normal ;;
+        'Enum::[4],') echo pool_mode: Liquidation ;;
       esac
       read end_launch_time
       if [ "$end_launch_time" = "Enum::[1](" ]
@@ -75,6 +76,27 @@ get_pool_info () {
 	read x
 	echo unlocked_amount: $(echo $unlocked_amount | cut -d '"' -f 2)
       fi
+      read ticket_price
+      if [ "$ticket_price" = "Enum::[1](" ]
+      then
+	read ticket_price
+	read x
+	echo ticket_price: $(echo $ticket_price | cut -d '"' -f 2)
+      fi
+      read winning_tickets
+      if [ "$winning_tickets" = "Enum::[1](" ]
+      then
+        read winning_tickets
+	read x
+        echo winning_tickets: $winning_tickets
+      fi
+      read coins_per_winning_ticket
+      if [ "$coins_per_winning_ticket" = "Enum::[1](" ]
+      then
+	read coins_per_winning_ticket
+	read x
+	echo coins_per_winning_ticket: $(echo $coins_per_winning_ticket | cut -d '"' -f 2)
+      fi
     )
 }
 
@@ -92,6 +114,16 @@ export account=$(grep 'Account component address:' $OUTPUTFILE | cut -d ' ' -f 4
 export owner_badge=$(grep 'Owner badge:' $OUTPUTFILE | cut -d ':' -f 2 | tr -d '[:space:]')
 export owner_badge_id=$(grep 'Owner badge:' $OUTPUTFILE | cut -d ':' -f 3)
 echo -e "Account address: $account\nOwner badge: $owner_badge\nOwner badge id: ${owner_badge_id}"
+
+echo
+resim publish ../random_component >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export random_component_package=$(grep 'Success! New Package:' $OUTPUTFILE | cut -d ' ' -f 4)
+echo RandomComponent package: ${random_component_package}
+
+echo
+resim call-function ${random_component_package} RandomComponent new >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export random_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
+echo RandomComponent: ${random_component}
 
 echo
 resim publish ../radix_pump >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
@@ -134,12 +166,12 @@ echo -e "TestHook component: ${test_hook_component}\nTestHook coin: ${test_hook_
 
 echo
 export hook_name=TestHook
-export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan"'
+export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch", "PostTerminateRandomLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan", "PostBuyTicket", "PostRedeemWinningTicket", "PostRedeemLousingTicket"'
 resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
 
 echo
-export globally_enabled_operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch"'
+export globally_enabled_operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch"'
 resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
 
@@ -422,4 +454,98 @@ echo
 resim run unlock.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo The coin creator tried to unlock coins but the transaction failed because this is not allowed in Liquidation mode: creator coins are now locked forever
 
+echo
+update_wallet_amounts
+export symbol=RL
+export name=RandomLaunchedCoin
+export icon=https://img.evients.com/images/f480x480/e7/b5/09/51/e7b50951be9149fe86e26f45e019d2af.jpg
+export description="Random launched coin"
+export info_url=""
+export ticket_price=10
+export winning_tickets=10
+export coins_per_winning_ticket=10
+export buy_pool_fee=5
+export sell_pool_fee=0.1
+export flash_loan_pool_fee=0.1
+resim call-method ${radix_pump_component} new_random_launch $symbol $name $icon "$description" "${info_url}" $ticket_price $winning_tickets $coins_per_winning_ticket $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export random_ticket=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
+export random_launched_coin=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)
+export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
+echo Random launch coin created $random_launched_coin
+echo ticket: $random_ticket
 
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+export payment=1000
+resim call-method ${radix_pump_component} buy ${random_launched_coin} ${base_coin}:$payment >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Someone tried to buy ${random_launched_coin} before it was launched, the transaction failed
+
+echo
+update_wallet_amounts
+export end_launch_time=$(($unix_epoch + $min_launch_duration))
+export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration))
+resim run launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Random sale launched for ${random_launched_coin}, received $(increase_in_wallet ${random_launched_coin})
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+export amount=50
+export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${amount} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee})) - 0.0000001" | bc)
+resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} $amount ${base_coin}:$payment >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Failed attempt to buy one ticket without paying ticket_price + total_buy_fee
+
+echo
+update_wallet_amounts
+export bought_tickets=50
+export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${bought_tickets} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee}))" | bc)
+resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} $amount ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Bought $(increase_in_wallet ${random_ticket}) tickets for $payment $base_coin
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+unix_epoch=$(($unix_epoch + 604800))
+date=$(date -u -d @$unix_epoch +"%Y-%m-%dT%H:%M:%SZ")
+resim set-current-time $date
+resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Random launch termination started for ${random_launched_coin}
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+resim call-method ${random_component} do_callback $(($RANDOM * $RANDOM * $RANDOM * $RANDOM)) >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Called the do_callback method of the random component
+
+echo
+update_wallet_amounts
+resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Random launch termination started for ${random_launched_coin}
+echo $(increase_in_wallet ${base_coin}) ${base_coin} received
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+export enabled_operations='"PostRedeemLousingTicket"'
+resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${random_launched_coin}
+
+resim show | grep -A ${bought_tickets} ${random_ticket} | grep -v ${random_ticket} | while read x ticket_id
+do
+  echo
+  update_wallet_amounts
+  resim call-method ${radix_pump_component} redeem_ticket ${random_ticket}:${ticket_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+  echo Ticket ${ticket_id} redeemed
+  echo $(increase_in_wallet ${random_launched_coin}) ${random_launched_coin} received
+  echo $(increase_in_wallet ${base_coin}) ${base_coin} received
+  echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+done

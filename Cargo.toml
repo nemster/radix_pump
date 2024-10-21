@@ -24,7 +24,7 @@ overflow-checks = true # Panic in the case of an overflow.
 
 [workspace]
 resolver = "2"
-members= ["radix_pump", "hooks"]
+members= ["radix_pump", "hooks", "random_component"]
 
 [workspace.lints.clippy]
 arithmetic_side_effects = "warn"

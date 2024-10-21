@@ -41,12 +41,14 @@ pub struct HookDisabledEvent {
     FairLaunchStartEvent,
     FairLaunchEndEvent,
     QuickLaunchEvent,
+    RandomLaunchStartEvent,
     BuyEvent,
     SellEvent,
     LiquidationEvent,
     FlashLoanEvent,
     HookEnabledEvent,
     HookDisabledEvent,
+    BuyTicketEvent,
 )]
 #[types(
     u64,
@@ -55,12 +57,32 @@ pub struct HookDisabledEvent {
 )]
 mod radix_pump {
 
+    extern_blueprint!(
+        "package_sim1pk3cmat8st4ja2ms8mjqy2e9ptk8y6cx40v4qnfrkgnxcp2krkpr92",
+        RandomComponent {
+            fn request_random(
+                &self, address: ComponentAddress,
+                method_name: String,
+                on_error: String,
+                key: u32,
+                badge_opt:
+                Option<FungibleBucket>,
+                expected_fee: u8
+            ) -> u32;
+        }
+    );
+    const RNG: Global<RandomComponent> = global_component!(
+        RandomComponent,
+        "component_sim1crmulhl5yrk6hh4jsyldps5sdrp08r5v9wusupvzxgqvhlp4k00px7"
+    );
+
     enable_method_auth! {
         methods {
             forbid_symbols => restrict_to: [OWNER];
             forbid_names => restrict_to: [OWNER];
             new_fair_launch => PUBLIC;
             new_quick_launch => PUBLIC;
+            new_random_launch => PUBLIC;
             buy => PUBLIC;
             sell => PUBLIC;
             get_fees => restrict_to: [OWNER];
@@ -82,6 +104,10 @@ mod radix_pump {
             creator_enable_hook => PUBLIC;
             creator_disable_hook => PUBLIC;
             burn => PUBLIC;
+            buy_ticket => PUBLIC;
+            random_callback => PUBLIC;
+            random_on_error => PUBLIC;
+            redeem_ticket => PUBLIC;
         }
     }
 
@@ -91,6 +117,7 @@ mod radix_pump {
         forbid_names => Free;
         new_fair_launch => Usd(dec!("0.05"));
         new_quick_launch => Usd(dec!("0.05"));
+        new_random_launch => Usd(dec!("0.05"));
         buy => Usd(dec!("0.005"));
         sell => Usd(dec!("0.005"));
         get_fees => Free;
@@ -112,6 +139,10 @@ mod radix_pump {
         creator_enable_hook => Free;
         creator_disable_hook => Free;
         burn => Free;
+        buy_ticket => Usd(dec!("0.005"));
+        random_callback => Free;
+        random_on_error => Free;
+        redeem_ticket => Free;
     }
 
     struct RadixPump {
@@ -360,6 +391,54 @@ mod radix_pump {
             coin_info_url = coin_info_url.trim().to_string();
 
             (coin_symbol, coin_name, coin_icon_url, coin_info_url)
+        }
+
+        pub fn new_random_launch(
+            &mut self,
+            mut coin_symbol: String,
+            mut coin_name: String,
+            mut coin_icon_url: String,
+            coin_description: String,
+            mut coin_info_url: String,
+            ticket_price: Decimal,
+            winning_tickets: u32,
+            coins_per_winning_ticket: Decimal, 
+            buy_pool_fee_percentage: Decimal,
+            sell_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee_percentage: Decimal,
+        ) -> Bucket {
+            self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee_percentage);
+
+            (coin_symbol, coin_name, coin_icon_url, coin_info_url) =
+                self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
+
+            let (pool, coin_resource_address) = Pool::new_random_launch(
+                coin_symbol.clone(),
+                coin_name.clone(),
+                coin_icon_url,
+                coin_description,
+                coin_info_url,
+                ticket_price,
+                winning_tickets,
+                coins_per_winning_ticket,
+                buy_pool_fee_percentage,
+                sell_pool_fee_percentage,
+                flash_loan_pool_fee_percentage,
+                self.next_creator_badge_rule(),
+                self.base_coin_address,
+                self.next_creator_badge_id,
+            );
+            self.pools.insert(
+                coin_resource_address,
+                pool,
+            );
+
+            self.mint_creator_badge(
+                coin_resource_address,
+                coin_name,
+                coin_symbol,
+                PoolMode::WaitingForLaunch,
+            )
         }
 
         pub fn new_fair_launch(
@@ -680,7 +759,7 @@ mod radix_pump {
 
             // In order to avoid price manipulation affecting the fees, take the maximum among the
             // price at the moment the flash loan was granted and the current price.
-            let (_, _, mut price, _, _, _, mode, _, _, _, _) = pool.get_pool_info();
+            let (_, _, mut price, _, _, _, mode, _, _, _, _, _, _, _) = pool.get_pool_info();
             price = max(price, flash_loan_data.price);
 
             self.fee_vault.put(
@@ -750,13 +829,16 @@ mod radix_pump {
                 unlocking_time,
                 initial_locked_amount,
                 unlocked_amount,
+                ticket_price,
+                winning_tickets,
+                coins_per_winning_ticket,
             ) = self.pools.get(&coin_address).expect("Coin not found").get_pool_info();
 
             PoolInfo {
                 base_coin_amount: base_coin_amount,
                 coin_amount: coin_amount,
                 last_price: last_price,
-                total_buy_fee_percentage: self.buy_sell_fee_percentage + buy_pool_fee_percentage * (100 - self.buy_sell_fee_percentage) / dec!(100),
+                total_buy_fee_percentage: dec!(1000000) / ((100 - buy_pool_fee_percentage) * (100 - self.buy_sell_fee_percentage)) - dec!(100),
                 total_sell_fee_percentage: sell_pool_fee_percentage + self.buy_sell_fee_percentage * (100 - sell_pool_fee_percentage) / dec!(100),
                 total_flash_loan_fee_percentage: flash_loan_pool_fee_percentage + self.flash_loan_fee_percentage,
                 pool_mode: pool_mode,
@@ -766,6 +848,9 @@ mod radix_pump {
                 unlocked_amount: unlocked_amount,
                 flash_loan_nft_resource_address: self.flash_loan_nft_resource_manager.address(),
                 hooks_badge_resource_address: self.hooks_badge_vault.resource_address(),
+                ticket_price: ticket_price,
+                winning_tickets: winning_tickets,
+                coins_per_winning_ticket: coins_per_winning_ticket,
             }
         }
 
@@ -882,42 +967,66 @@ mod radix_pump {
         pub fn terminate_launch(
             &mut self,
             creator_proof: Proof,
-        ) -> (Bucket, Vec<Bucket>) {
+        ) -> (Option<Bucket>, Option<Vec<Bucket>>) {
             let creator_data = self.get_creator_data(creator_proof);
             let coin_address = creator_data.coin_resource_address;
 
             let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
-            let (mut base_coin_bucket, price, supply) = pool.terminate_launch();
+            let (mut bucket, price, supply, operation) = pool.terminate_launch();
 
-            self.fee_vault.put(
-                base_coin_bucket.take_advanced(
-                    self.creation_fee_percentage * base_coin_bucket.amount() / 100,
-                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
-                )
-            );
+            match operation {
+                None => {
+                    let mut key: u32 = 1;
 
-            self.creator_badge_resource_manager.update_non_fungible_data(
-                &NonFungibleLocalId::integer(creator_data.id.into()),
-                "pool_mode",
-                PoolMode::Normal,
-            );
+                    while bucket.amount() >= Decimal::ONE {
+                        RNG.request_random(
+                            Runtime::global_address(),
+                            "random_callback".to_string(),
+                            "random_on_error".to_string(),
+                            key,
+                            Some(bucket.take(Decimal::ONE).as_fungible()),
+                            0, // TODO: try to find a value
+                        );
 
-            let hook_argument = HookArgument {
-                coin_address: coin_address,
-                operation: HookableOperation::PostTerminateFairLaunch,
-                amount: Some(supply),
-                mode: PoolMode::Normal,
-                price: Some(price),
-            };
-            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
-            drop(pool);
-            let buckets = self.execute_hooks(
-                &pool_enabled_hooks,
-                &hook_argument,
-            );
+                        key += 1;
+                    }
 
-            (base_coin_bucket, buckets)
+                    bucket.burn();
+
+                    (None, None)
+                },
+                Some(operation) => {
+                    self.fee_vault.put(
+                        bucket.take_advanced(
+                            self.creation_fee_percentage * bucket.amount() / 100,
+                            WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                        )
+                    );
+
+                    self.creator_badge_resource_manager.update_non_fungible_data(
+                        &NonFungibleLocalId::integer(creator_data.id.into()),
+                        "pool_mode",
+                        PoolMode::Normal,
+                    );
+
+                    let hook_argument = HookArgument {
+                        coin_address: coin_address,
+                        operation: operation,
+                        amount: Some(supply),
+                        mode: PoolMode::Normal,
+                        price: Some(price),
+                    };
+                    let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+                    drop(pool);
+                        let buckets = self.execute_hooks(
+                        &pool_enabled_hooks,
+                        &hook_argument,
+                    );
+
+                    (Some(bucket), Some(buckets))
+                }
+            }
         }
 
         fn mint_creator_badge(
@@ -1133,6 +1242,134 @@ mod radix_pump {
         ) {
             let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
             self.pools.get_mut(&coin_address).unwrap().burn(amount);
+        }
+
+        pub fn buy_ticket(
+            &mut self,
+            coin_address: ResourceAddress,
+            amount: u32,
+            mut base_coin_bucket: Bucket,
+        ) -> (Bucket, Vec<Bucket>) {
+            assert!(
+                base_coin_bucket.resource_address() == self.base_coin_address,
+                "Wrong base coin",
+            ); 
+            assert!(
+                amount > 0,
+                "Can't buy zero tickets",
+            );
+
+            self.fee_vault.put(
+                base_coin_bucket.take_advanced(
+                    base_coin_bucket.amount() * self.buy_sell_fee_percentage / dec!(100),
+                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                )
+            );
+
+            let mut pool = self.pools.get_mut(&coin_address).expect("Coin not found");
+
+            let (ticket_bucket, price) = pool.buy_ticket(
+                amount,
+                base_coin_bucket
+            );
+ 
+            let hook_argument = HookArgument {
+                coin_address: coin_address,
+                operation: HookableOperation::PostBuyTicket,
+                amount: Some(amount.into()),
+                mode: PoolMode::Launching,
+                price: Some(price),
+            };
+            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            drop(pool);
+            let buckets = self.execute_hooks(
+                &pool_enabled_hooks,
+                &hook_argument,
+            );
+ 
+            (ticket_bucket, buckets)
+        }
+
+        pub fn random_callback(
+            &mut self,
+            _key: u32,
+            badge: FungibleBucket,
+            random_seed: Vec<u8>
+        ) {
+            let mut pool = self.pools.get_mut(&badge.resource_address()).expect("Coin not found");
+            pool.extract_tickets(random_seed);
+
+            badge.burn();
+        }
+
+        pub fn random_on_error(
+            &self,
+            _key: u32,
+            badge: FungibleBucket
+        ) {
+            badge.burn();
+        }
+
+        pub fn redeem_ticket(
+            &mut self,
+            ticket_bucket: Bucket,
+        ) -> (
+            Bucket,
+            Bucket,
+            Option<Vec<Bucket>>,
+            Option<Vec<Bucket>>,
+        ) {
+            let ticket_id = &ticket_bucket.as_non_fungible().non_fungible_local_ids()[0];
+            let ticket_data = ResourceManager::from_address(ticket_bucket.resource_address()).get_non_fungible_data::<TicketData>(ticket_id);
+            let mut pool = self.pools.get_mut(&ticket_data.coin_resource_address).expect("Coin not found");
+            let (base_coin_bucket, coin_bucket, lose, win, mode) = pool.redeem_ticket(ticket_bucket);
+
+            let pool_enabled_hooks_lose = pool.enabled_hooks.get_hooks(HookableOperation::PostRedeemLousingTicket);
+            let hook_argument_lose = HookArgument {
+                coin_address: coin_bucket.resource_address(),
+                operation: HookableOperation::PostRedeemLousingTicket,
+                amount: Some(Decimal::try_from(lose).unwrap()),
+                mode: mode,
+                price: None,
+            };
+
+            let pool_enabled_hooks_win = pool.enabled_hooks.get_hooks(HookableOperation::PostRedeemWinningTicket);
+            let hook_argument_win = HookArgument {
+                coin_address: coin_bucket.resource_address(),
+                operation: HookableOperation::PostRedeemWinningTicket,
+                amount: Some(Decimal::try_from(win).unwrap()),
+                mode: mode,
+                price: None,
+            };
+
+            drop(pool);
+
+            let lose_buckets: Option<Vec<Bucket>>;
+            if lose > 0 {
+                lose_buckets = Some(
+                    self.execute_hooks(
+                        &pool_enabled_hooks_lose,
+                        &hook_argument_lose,
+                    )
+                );
+            } else {
+                lose_buckets = None;
+            }
+
+            let win_buckets: Option<Vec<Bucket>>;
+            if win > 0 {
+                win_buckets = Some(
+                    self.execute_hooks(
+                        &pool_enabled_hooks_win,
+                        &hook_argument_win,
+                    )
+                );
+            } else {
+                win_buckets = None;
+            }
+
+
+            (base_coin_bucket, coin_bucket, lose_buckets, win_buckets)
         }
     }
 }

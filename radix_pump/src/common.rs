@@ -4,6 +4,7 @@ use scrypto::prelude::*;
 pub enum PoolMode {
     WaitingForLaunch,
     Launching,
+    TerminatingLaunch,
     Normal,
     Liquidation,
 }
@@ -21,6 +22,9 @@ pub struct PoolInfo {
     pub unlocking_time: Option<i64>,
     pub initial_locked_amount: Option<Decimal>,
     pub unlocked_amount: Option<Decimal>,
+    pub ticket_price: Option<Decimal>,
+    pub winning_tickets: Option<u32>,
+    pub coins_per_winning_ticket: Option<Decimal>,
     pub flash_loan_nft_resource_address: ResourceAddress,
     pub hooks_badge_resource_address: ResourceAddress,
 }
@@ -35,3 +39,19 @@ pub struct CreatorData {
     #[mutable]
     pub pool_mode: PoolMode,
 }
+
+#[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
+pub enum HookableOperation {
+    PostFairLaunch,
+    PostTerminateFairLaunch,
+    PostQuickLaunch,
+    PostRandomLaunch,
+    PostTerminateRandomLaunch,
+    PostBuy,
+    PostSell,
+    PostReturnFlashLoan,
+    PostBuyTicket,
+    PostRedeemWinningTicket,
+    PostRedeemLousingTicket,
+}
+

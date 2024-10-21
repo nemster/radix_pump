@@ -1,4 +1,5 @@
 use scrypto::prelude::*;
+use scrypto_interface::*;
 
 #[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
 pub enum PoolMode {
@@ -11,6 +12,7 @@ pub enum PoolMode {
 
 #[derive(Debug, ScryptoSbor, PartialEq, Clone)]
 pub struct PoolInfo {
+    pub component: ComponentAddress,
     pub base_coin_amount: Decimal,
     pub coin_amount: Decimal,
     pub last_price: Decimal,
@@ -55,3 +57,154 @@ pub enum HookableOperation {
     PostRedeemLousingTicket,
 }
 
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct FairLaunchStartEvent {
+    pub resource_address: ResourceAddress,
+    pub price: Decimal,
+    pub creator_locked_percentage: Decimal,
+    pub end_launch_time: i64,
+    pub unlocking_time: i64,
+    pub buy_pool_fee_percentage: Decimal,
+    pub sell_pool_fee_percentage: Decimal,
+    pub flash_loan_pool_fee_percentage: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct FairLaunchEndEvent {
+    pub resource_address: ResourceAddress,
+    pub creator_proceeds: Decimal,
+    pub creator_locked_allocation: Decimal,
+    pub supply: Decimal,
+    pub coins_in_pool: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct QuickLaunchEvent {
+    pub resource_address: ResourceAddress,
+    pub price: Decimal,
+    pub coins_in_pool: Decimal,
+    pub creator_allocation: Decimal,
+    pub buy_pool_fee_percentage: Decimal,
+    pub sell_pool_fee_percentage: Decimal,
+    pub flash_loan_pool_fee_percentage: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct RandomLaunchStartEvent {
+    pub resource_address: ResourceAddress,
+    pub ticket_price: Decimal,
+    pub winning_tickets: u32,
+    pub coins_per_winning_ticket: Decimal,
+    pub end_launch_time: i64,
+    pub unlocking_time: i64,
+    pub buy_pool_fee_percentage: Decimal,
+    pub sell_pool_fee_percentage: Decimal,
+    pub flash_loan_pool_fee_percentage: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct RandomLaunchEndEvent {
+    pub resource_address: ResourceAddress,
+    pub creator_proceeds: Decimal,
+    pub creator_locked_allocation: Decimal,
+    pub supply: Decimal,
+    pub coins_in_pool: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct BuyEvent {
+    pub resource_address: ResourceAddress,
+    pub mode: PoolMode,
+    pub amount: Decimal,
+    pub price: Decimal,
+    pub coins_in_pool: Decimal,
+    pub fee_paid_to_the_pool: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct SellEvent {
+    pub resource_address: ResourceAddress,
+    pub mode: PoolMode,
+    pub amount: Decimal,
+    pub price: Decimal,
+    pub coins_in_pool: Decimal,
+    pub fee_paid_to_the_pool: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct LiquidationEvent {
+    pub resource_address: ResourceAddress,
+    pub price: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct FlashLoanEvent {
+    pub resource_address: ResourceAddress,
+    pub amount: Decimal,
+    pub fee_paid_to_the_pool: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct BuyTicketEvent {
+    pub resource_address: ResourceAddress,
+    pub amount: u32,
+    pub price: Decimal,
+    pub ticket_resource_address: ResourceAddress,
+    pub sold_tickets: u32,
+    pub fee_paid_to_the_pool: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct FeeUpdateEvent {
+    pub resource_address: ResourceAddress,
+    pub buy_pool_fee_percentage: Decimal,
+    pub sell_pool_fee_percentage: Decimal,
+    pub flash_loan_pool_fee_percentage: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+pub struct BurnEvent {
+    pub resource_address: ResourceAddress,
+    pub amount: Decimal,
+}
+
+#[derive(ScryptoSbor)]
+pub enum AnyPoolEvent {
+    FairLaunchStartEvent(FairLaunchStartEvent),
+    FairLaunchEndEvent(FairLaunchEndEvent),
+    QuickLaunchEvent(QuickLaunchEvent),
+    RandomLaunchStartEvent(RandomLaunchStartEvent),
+    RandomLaunchEndEvent(RandomLaunchEndEvent),
+    BuyEvent(BuyEvent),
+    SellEvent(SellEvent),
+    LiquidationEvent(LiquidationEvent),
+    FlashLoanEvent(FlashLoanEvent),
+    BuyTicketEvent(BuyTicketEvent),
+    FeeUpdateEvent(FeeUpdateEvent),
+    BurnEvent(BurnEvent),
+}
+
+#[derive(Debug, ScryptoSbor, NonFungibleData)]
+pub struct TicketData {
+    pub coin_resource_address: ResourceAddress,
+    pub buy_date: Instant,
+}
+
+#[derive(Debug, ScryptoSbor, PartialEq, Clone)]
+pub struct HookArgument {
+    pub component: ComponentAddress,
+    pub coin_address: ResourceAddress,
+    pub operation: HookableOperation,
+    pub amount: Option<Decimal>,
+    pub mode: PoolMode,
+    pub price: Option<Decimal>,
+}
+
+define_interface! {
+    Hook impl [ScryptoStub, Trait, ScryptoTestStub] {
+        fn hook(
+            &self,
+            argument: HookArgument,
+        ) -> Option<Bucket>;
+    }
+}

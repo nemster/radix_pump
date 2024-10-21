@@ -1,6 +1,5 @@
 use scrypto::prelude::*;
 use crate::common::*;
-use crate::hook::*;
 
 pub type HookByName = KeyValueStore<String, HookInterfaceScryptoStub>;
 

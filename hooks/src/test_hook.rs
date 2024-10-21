@@ -1,6 +1,5 @@
 use scrypto::prelude::*;
 use crate::common::*;
-use crate::hook::*;
 use scrypto_interface::*;
 
 #[derive(ScryptoSbor, ScryptoEvent)]

@@ -2,8 +2,7 @@ use std::ops::Deref;
 use scrypto::prelude::*;
 use scrypto::prelude::rust::cmp::*;
 use crate::common::*;
-use crate::pool::*;
-use crate::hook::*;
+use crate::pool::pool::*;
 use crate::hook_helpers::*;
 
 // Metadata for the coin creator badge
@@ -21,7 +20,7 @@ struct FlashLoanData {
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
-pub struct HookEnabledEvent {
+struct HookEnabledEvent {
     resource_address: Option<ResourceAddress>,
     hook_name: String,
     hook_address: HookInterfaceScryptoStub,
@@ -29,11 +28,18 @@ pub struct HookEnabledEvent {
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
-pub struct HookDisabledEvent {
+struct HookDisabledEvent {
     resource_address: Option<ResourceAddress>,
     hook_name: String,
     hook_address: HookInterfaceScryptoStub,
     operations: Vec<String>,
+}
+
+#[derive(ScryptoSbor)]
+struct PoolStruct {
+    component_address: Global<Pool>,
+    pool_enabled_hooks: HooksPerOperation,
+    creator_id: u64,
 }
 
 #[blueprint]
@@ -42,40 +48,24 @@ pub struct HookDisabledEvent {
     FairLaunchEndEvent,
     QuickLaunchEvent,
     RandomLaunchStartEvent,
+    RandomLaunchEndEvent,
     BuyEvent,
     SellEvent,
     LiquidationEvent,
     FlashLoanEvent,
+    BuyTicketEvent,
+    FeeUpdateEvent,
+    BurnEvent,
     HookEnabledEvent,
     HookDisabledEvent,
-    BuyTicketEvent,
 )]
 #[types(
     u64,
     CreatorData,
     FlashLoanData,
+    PoolStruct,
 )]
 mod radix_pump {
-
-    extern_blueprint!(
-        "package_sim1pk3cmat8st4ja2ms8mjqy2e9ptk8y6cx40v4qnfrkgnxcp2krkpr92",
-        RandomComponent {
-            fn request_random(
-                &self, address: ComponentAddress,
-                method_name: String,
-                on_error: String,
-                key: u32,
-                badge_opt:
-                Option<FungibleBucket>,
-                expected_fee: u8
-            ) -> u32;
-        }
-    );
-    const RNG: Global<RandomComponent> = global_component!(
-        RandomComponent,
-        "component_sim1crmulhl5yrk6hh4jsyldps5sdrp08r5v9wusupvzxgqvhlp4k00px7"
-    );
-
     enable_method_auth! {
         methods {
             forbid_symbols => restrict_to: [OWNER];
@@ -105,8 +95,6 @@ mod radix_pump {
             creator_disable_hook => PUBLIC;
             burn => PUBLIC;
             buy_ticket => PUBLIC;
-            random_callback => PUBLIC;
-            random_on_error => PUBLIC;
             redeem_ticket => PUBLIC;
         }
     }
@@ -140,8 +128,6 @@ mod radix_pump {
         creator_disable_hook => Free;
         burn => Free;
         buy_ticket => Usd(dec!("0.005"));
-        random_callback => Free;
-        random_on_error => Free;
         redeem_ticket => Free;
     }
 
@@ -154,7 +140,7 @@ mod radix_pump {
         last_transient_nft_id: u64,
         forbidden_symbols: KeyValueStore<String, u64>,
         forbidden_names: KeyValueStore<String, u64>,
-        pools: KeyValueStore<ResourceAddress, Pool>,
+        pools: KeyValueStore<ResourceAddress, PoolStruct>,
         creation_fee_percentage: Decimal,
         buy_sell_fee_percentage: Decimal,
         flash_loan_fee_percentage: Decimal,
@@ -163,6 +149,7 @@ mod radix_pump {
         max_flash_loan_pool_fee_percentage: Decimal,
         min_launch_duration: i64,
         min_lock_duration: i64,
+        proxy_badge_vault: Vault,
         hooks_badge_vault: Vault,
         registered_hooks: HookByName,
         registered_hooks_operations: HooksPerOperation,
@@ -284,6 +271,29 @@ mod radix_pump {
                 burner => rule!(deny_all);
                 burner_updater => rule!(require(owner_badge_address));
             ))
+            .deposit_roles(deposit_roles!(
+                depositor => rule!(require(global_caller(component_address)));
+                depositor_updater => rule!(require(owner_badge_address));
+            ))
+            .mint_initial_supply(dec![1]);
+
+            let proxy_badge_bucket = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            .divisibility(0)
+            .metadata(metadata!(
+                roles {
+                    metadata_setter => rule!(require(owner_badge_address));
+                    metadata_setter_updater => rule!(require(owner_badge_address));
+                    metadata_locker => rule!(require(owner_badge_address));
+                    metadata_locker_updater => rule!(require(owner_badge_address));
+                },
+                init {
+                    "name" => "Proxy badge", updatable;
+                }
+            ))
+            .mint_roles(mint_roles!(
+                minter => rule!(deny_all);
+                minter_updater => rule!(require(owner_badge_address));
+            ))
             .mint_initial_supply(dec![1]);
 
             // Instantiate the component
@@ -305,6 +315,7 @@ mod radix_pump {
                 max_flash_loan_pool_fee_percentage: dec!(10),
                 min_launch_duration: 604800, // One week
                 min_lock_duration: 7776000, // Three months
+                proxy_badge_vault: Vault::with_bucket(proxy_badge_bucket.into()),
                 hooks_badge_vault: Vault::with_bucket(hooks_badge_bucket.into()),
                 registered_hooks: KeyValueStore::new(),
                 registered_hooks_operations: HooksPerOperation::new(),
@@ -977,22 +988,6 @@ mod radix_pump {
 
             match operation {
                 None => {
-                    let mut key: u32 = 1;
-
-                    while bucket.amount() >= Decimal::ONE {
-                        RNG.request_random(
-                            Runtime::global_address(),
-                            "random_callback".to_string(),
-                            "random_on_error".to_string(),
-                            key,
-                            Some(bucket.take(Decimal::ONE).as_fungible()),
-                            0, // TODO: try to find a value
-                        );
-
-                        key += 1;
-                    }
-
-                    bucket.burn();
 
                     (None, None)
                 },
@@ -1288,26 +1283,6 @@ mod radix_pump {
             );
  
             (ticket_bucket, buckets)
-        }
-
-        pub fn random_callback(
-            &mut self,
-            _key: u32,
-            badge: FungibleBucket,
-            random_seed: Vec<u8>
-        ) {
-            let mut pool = self.pools.get_mut(&badge.resource_address()).expect("Coin not found");
-            pool.extract_tickets(random_seed);
-
-            badge.burn();
-        }
-
-        pub fn random_on_error(
-            &self,
-            _key: u32,
-            badge: FungibleBucket
-        ) {
-            badge.burn();
         }
 
         pub fn redeem_ticket(

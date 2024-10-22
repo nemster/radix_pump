@@ -38,7 +38,7 @@ struct HookDisabledEvent {
 #[derive(ScryptoSbor)]
 struct PoolStruct {
     component_address: Global<Pool>,
-    pool_enabled_hooks: HooksPerOperation,
+    enabled_hooks: HooksPerOperation,
     creator_id: u64,
 }
 
@@ -132,6 +132,7 @@ mod radix_pump {
     }
 
     struct RadixPump {
+        owner_badge_address: ResourceAddress,
         base_coin_address: ResourceAddress,
         minimum_deposit: Decimal,
         creator_badge_resource_manager: ResourceManager,
@@ -149,8 +150,8 @@ mod radix_pump {
         max_flash_loan_pool_fee_percentage: Decimal,
         min_launch_duration: i64,
         min_lock_duration: i64,
-        proxy_badge_vault: Vault,
-        hooks_badge_vault: Vault,
+        proxy_badge_vault: FungibleVault,
+        hook_badge_vault: FungibleVault,
         registered_hooks: HookByName,
         registered_hooks_operations: HooksPerOperation,
         globally_enabled_hooks: HooksPerOperation,
@@ -250,7 +251,7 @@ mod radix_pump {
             ))
             .create_with_no_initial_supply();
 
-            let hooks_badge_bucket = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            let hook_badge_bucket = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
             .divisibility(0)
             .metadata(metadata!(
                 roles {
@@ -260,7 +261,7 @@ mod radix_pump {
                     metadata_locker_updater => rule!(require(owner_badge_address));
                 },
                 init {
-                    "name" => "Hooks badge", updatable;
+                    "name" => "Hook badge", updatable;
                 }
             ))
             .mint_roles(mint_roles!(
@@ -298,6 +299,7 @@ mod radix_pump {
 
             // Instantiate the component
             Self {
+                owner_badge_address: owner_badge_address,
                 base_coin_address: base_coin_address.clone(),
                 minimum_deposit: minimum_deposit,
                 creator_badge_resource_manager: creator_badge_resource_manager,
@@ -315,8 +317,8 @@ mod radix_pump {
                 max_flash_loan_pool_fee_percentage: dec!(10),
                 min_launch_duration: 604800, // One week
                 min_lock_duration: 7776000, // Three months
-                proxy_badge_vault: Vault::with_bucket(proxy_badge_bucket.into()),
-                hooks_badge_vault: Vault::with_bucket(hooks_badge_bucket.into()),
+                proxy_badge_vault: FungibleVault::with_bucket(proxy_badge_bucket),
+                hook_badge_vault: FungibleVault::with_bucket(hook_badge_bucket),
                 registered_hooks: KeyValueStore::new(),
                 registered_hooks_operations: HooksPerOperation::new(),
                 globally_enabled_hooks: HooksPerOperation::new(),
@@ -424,6 +426,9 @@ mod radix_pump {
                 self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
 
             let (pool, coin_resource_address) = Pool::new_random_launch(
+                self.owner_badge_address,
+                self.proxy_badge_vault.resource_address(),
+                self.hook_badge_vault.resource_address(),
                 coin_symbol.clone(),
                 coin_name.clone(),
                 coin_icon_url,
@@ -437,11 +442,14 @@ mod radix_pump {
                 flash_loan_pool_fee_percentage,
                 self.next_creator_badge_rule(),
                 self.base_coin_address,
-                self.next_creator_badge_id,
             );
             self.pools.insert(
                 coin_resource_address,
-                pool,
+                PoolStruct {
+                    component_address: pool,
+                    enabled_hooks: HooksPerOperation::new(),
+                    creator_id: self.next_creator_badge_id,
+                }
             );
 
             self.mint_creator_badge(
@@ -471,6 +479,9 @@ mod radix_pump {
                 self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
 
             let (pool, coin_resource_address) = Pool::new_fair_launch(
+                self.owner_badge_address,
+                self.proxy_badge_vault.resource_address(),
+                self.hook_badge_vault.resource_address(),
                 coin_symbol.clone(),
                 coin_name.clone(),
                 coin_icon_url,
@@ -483,11 +494,14 @@ mod radix_pump {
                 flash_loan_pool_fee_percentage,
                 self.next_creator_badge_rule(),
                 self.base_coin_address,
-                self.next_creator_badge_id,
             );
             self.pools.insert(
                 coin_resource_address,
-                pool,
+                PoolStruct {
+                    component_address: pool,
+                    enabled_hooks: HooksPerOperation::new(),
+                    creator_id: self.next_creator_badge_id,
+                }
             );
 
             self.mint_creator_badge(
@@ -533,7 +547,10 @@ mod radix_pump {
             (coin_symbol, coin_name, coin_icon_url, coin_info_url) =
                 self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
 
-            let (pool, creator_coin_bucket) = Pool::new_quick_launch(
+            let (pool, creator_coin_bucket, hook_argument, event) = Pool::new_quick_launch(
+                self.owner_badge_address,
+                self.proxy_badge_vault.resource_address(),
+                self.hook_badge_vault.resource_address(),
                 base_coin_bucket,
                 coin_symbol.clone(),
                 coin_name.clone(),
@@ -546,12 +563,18 @@ mod radix_pump {
                 sell_pool_fee_percentage,
                 flash_loan_pool_fee_percentage,
                 self.next_creator_badge_rule(),
-                self.next_creator_badge_id,
             );
+
+            self.emit_pool_event(event);
+
             let coin_address = creator_coin_bucket.resource_address();
             self.pools.insert(
                 coin_address,
-                pool,
+                PoolStruct {
+                    component_address: pool,
+                    enabled_hooks: HooksPerOperation::new(),
+                    creator_id: self.next_creator_badge_id,
+                }
             );
 
             let creator_badge_bucket = self.mint_creator_badge(
@@ -561,19 +584,32 @@ mod radix_pump {
                 PoolMode::Normal,
             );
 
-            let hook_argument = HookArgument {
-                coin_address: coin_address,
-                operation: HookableOperation::PostQuickLaunch,
-                amount: Some(coin_supply),
-                mode: PoolMode::Normal,
-                price: Some(coin_price),
-            };
             let buckets = self.execute_hooks(
                 &vec![],
                 &hook_argument,
             );
 
             (creator_badge_bucket, creator_coin_bucket, buckets)
+        }
+
+        fn emit_pool_event(
+            &self,
+            event: AnyPoolEvent,
+        ) {
+            match event {
+                AnyPoolEvent::FairLaunchStartEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::FairLaunchEndEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::QuickLaunchEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::RandomLaunchStartEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::RandomLaunchEndEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::BuyEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::SellEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::LiquidationEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::FlashLoanEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::BuyTicketEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::FeeUpdateEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::BurnEvent(event) => Runtime::emit_event(event),
+            }
         }
 
         pub fn buy(
@@ -593,21 +629,17 @@ mod radix_pump {
                 )
             );
 
-            let mut pool = self.pools.get_mut(&coin_address).expect("Coin not found");
+            let pool = self.pools.get(&coin_address).expect("Coin not found");
 
-            let (coin_bucket, price, mode) = pool.buy(base_coin_bucket);
+            let (coin_bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.buy(base_coin_bucket)
+            );
 
-            let hook_argument = HookArgument {
-                coin_address: coin_address,
-                operation: HookableOperation::PostBuy,
-                amount: Some(coin_bucket.amount()),
-                mode: mode,
-                price: Some(price),
-            };
-            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
-            drop(pool);
+            self.emit_pool_event(event);
+
             let buckets = self.execute_hooks(
-                &pool_enabled_hooks,
+                &pool.enabled_hooks.get_hooks(hook_argument.operation),
                 &hook_argument,
             );
 
@@ -618,11 +650,13 @@ mod radix_pump {
             &mut self,
             coin_bucket: Bucket,
         ) -> (Bucket, Vec<Bucket>) {
-            let amount = coin_bucket.amount();
             let coin_address = coin_bucket.resource_address();
-            let mut pool = self.pools.get_mut(&coin_address).expect("Coin not found");
+            let pool = self.pools.get(&coin_address).expect("Coin not found");
 
-            let (mut base_coin_bucket, price, mode) = pool.sell(coin_bucket);
+            let (mut base_coin_bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.sell(coin_bucket)
+            );
 
             self.fee_vault.put(
                 base_coin_bucket.take_advanced(
@@ -631,17 +665,10 @@ mod radix_pump {
                 )
             );
 
-            let hook_argument = HookArgument {
-                coin_address: coin_address,
-                operation: HookableOperation::PostSell,
-                amount: Some(amount),
-                mode: mode,
-                price: Some(price),
-            };
-            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
-            drop(pool);
+            self.emit_pool_event(event);
+
             let buckets = self.execute_hooks(
-                &pool_enabled_hooks,
+                &pool.enabled_hooks.get_hooks(hook_argument.operation),
                 &hook_argument,
             );
 
@@ -694,12 +721,18 @@ mod radix_pump {
             &mut self,
             coin_address: ResourceAddress,
         ) {
-            let creator_id = self.pools.get_mut(&coin_address).expect("Coin not found").set_liquidation_mode();
+            let pool = self.pools.get(&coin_address).expect("Coin not found");
+            let (mode, event) = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.set_liquidation_mode()
+            );
+
+            self.emit_pool_event(event);
 
             self.creator_badge_resource_manager.update_non_fungible_data(
-                &NonFungibleLocalId::integer(creator_id.into()),
+                &NonFungibleLocalId::integer(pool.creator_id.into()),
                 "pool_mode",
-                PoolMode::Liquidation,
+                mode,
             );
         }
 
@@ -709,13 +742,19 @@ mod radix_pump {
         ) {
             let creator_data = self.get_creator_data(creator_proof);
 
+            let pool = self.pools.get(&creator_data.coin_resource_address).expect("Coin not found");
+            let (mode, event) = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.set_liquidation_mode()
+            );
+
+            self.emit_pool_event(event);
+
             self.creator_badge_resource_manager.update_non_fungible_data(
                 &NonFungibleLocalId::integer(creator_data.id.into()),
                 "pool_mode",
-                PoolMode::Liquidation,
+                mode,
             );
-
-            self.pools.get_mut(&creator_data.coin_resource_address).unwrap().set_liquidation_mode();
         }
 
         pub fn get_flash_loan(
@@ -723,7 +762,11 @@ mod radix_pump {
             coin_address: ResourceAddress,
             amount: Decimal
         ) -> (Bucket, Bucket) {
-            let (coin_bucket, price) = self.pools.get_mut(&coin_address).expect("Coin not found").get_flash_loan(amount);
+            let pool = self.pools.get_mut(&coin_address).expect("Coin not found");
+            let (coin_bucket, price) = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.get_flash_loan(amount)
+            );
 
             self.last_transient_nft_id += 1;
 
@@ -766,11 +809,12 @@ mod radix_pump {
 
             transient_nft_bucket.burn();
 
-            let mut pool = self.pools.get_mut(&coin_bucket.resource_address()).unwrap();
+            let pool = self.pools.get(&coin_bucket.resource_address()).unwrap();
 
             // In order to avoid price manipulation affecting the fees, take the maximum among the
             // price at the moment the flash loan was granted and the current price.
-            let (_, _, mut price, _, _, _, mode, _, _, _, _, _, _, _) = pool.get_pool_info();
+            let (_, _, mut price, _, _, _, _, _, _, _, _, _, _, _) =
+                pool.component_address.get_pool_info();
             price = max(price, flash_loan_data.price);
 
             self.fee_vault.put(
@@ -780,23 +824,19 @@ mod radix_pump {
                 )
             );
 
-            pool.return_flash_loan(
-                base_coin_bucket,
-                coin_bucket,
-                price,
+            let (hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.return_flash_loan(
+                    base_coin_bucket,
+                    coin_bucket,
+                    price,
+                )
             );
 
-            let hook_argument = HookArgument {
-                coin_address: flash_loan_data.coin_resource_address,
-                operation: HookableOperation::PostReturnFlashLoan,
-                amount: Some(flash_loan_data.coin_amount),
-                mode: mode,
-                price: Some(price),
-            };
-            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
-            drop(pool);
+            self.emit_pool_event(event);
+
             self.execute_hooks(
-                &pool_enabled_hooks,
+                &pool.enabled_hooks.get_hooks(hook_argument.operation),
                 &hook_argument,
             )
         }
@@ -816,18 +856,26 @@ mod radix_pump {
 
             let creator_data = self.get_creator_data(creator_proof);
 
-            self.pools.get_mut(&creator_data.coin_resource_address).unwrap()
-            .update_pool_fee_percentage(
-                buy_pool_fee_percentage,
-                sell_pool_fee_percentage,
-                flash_loan_pool_fee_percentage,
+            let pool = self.pools.get(&creator_data.coin_resource_address).unwrap();
+
+            let event = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.update_pool_fee_percentage(
+                    buy_pool_fee_percentage,
+                    sell_pool_fee_percentage,
+                    flash_loan_pool_fee_percentage,
+                )
             );
+
+            self.emit_pool_event(event);
         }
 
         pub fn get_pool_info(
             &self,
             coin_address: ResourceAddress,
         ) -> PoolInfo {
+            let pool = self.pools.get(&coin_address).expect("Coin not found");
+
             let (
                 base_coin_amount,
                 coin_amount,
@@ -843,9 +891,10 @@ mod radix_pump {
                 ticket_price,
                 winning_tickets,
                 coins_per_winning_ticket,
-            ) = self.pools.get(&coin_address).expect("Coin not found").get_pool_info();
+            ) = pool.component_address.get_pool_info();
 
             PoolInfo {
+                component: pool.component_address,
                 base_coin_amount: base_coin_amount,
                 coin_amount: coin_amount,
                 last_price: last_price,
@@ -858,7 +907,7 @@ mod radix_pump {
                 initial_locked_amount: initial_locked_amount,
                 unlocked_amount: unlocked_amount,
                 flash_loan_nft_resource_address: self.flash_loan_nft_resource_manager.address(),
-                hooks_badge_resource_address: self.hooks_badge_vault.resource_address(),
+                hooks_badge_resource_address: self.hook_badge_vault.resource_address(),
                 ticket_price: ticket_price,
                 winning_tickets: winning_tickets,
                 coins_per_winning_ticket: coins_per_winning_ticket,
@@ -914,27 +963,23 @@ mod radix_pump {
 
             let creator_data = self.get_creator_data(creator_proof);
             let coin_address = creator_data.coin_resource_address;
-            let mut pool = self.pools.get_mut(&coin_address).unwrap();
+            let pool = self.pools.get(&coin_address).unwrap();
 
-            let price = pool.launch(end_launch_time, unlocking_time);
+            let (mode, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.launch(end_launch_time, unlocking_time)
+            );
+
+            self.emit_pool_event(event);
 
             self.creator_badge_resource_manager.update_non_fungible_data(
                 &NonFungibleLocalId::integer(creator_data.id.into()),
                 "pool_mode",
-                PoolMode::Launching,
+                mode,
             );
 
-            let hook_argument = HookArgument {
-                coin_address: coin_address,
-                operation: HookableOperation::PostFairLaunch,
-                amount: None,
-                mode: PoolMode::Launching,
-                price: Some(price),
-            };
-            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
-            drop(pool);
             self.execute_hooks(
-                &pool_enabled_hooks,
+                &pool.enabled_hooks.get_hooks(hook_argument.operation),
                 &hook_argument,
             )
         }
@@ -961,7 +1006,7 @@ mod radix_pump {
                     continue;
                 }
 
-                let hook_output = self.hooks_badge_vault.as_fungible().authorize_with_amount(
+                let hook_output = self.hook_badge_vault.as_fungible().authorize_with_amount(
                     1,
                     || { hook_address.unwrap().deref().hook(hook_argument.clone()) }
                 );
@@ -982,46 +1027,46 @@ mod radix_pump {
             let creator_data = self.get_creator_data(creator_proof);
             let coin_address = creator_data.coin_resource_address;
 
-            let mut pool = self.pools.get_mut(&coin_address).unwrap();
+            let pool = self.pools.get(&coin_address).unwrap();
 
-            let (mut bucket, price, supply, operation) = pool.terminate_launch();
+            let (mut bucket, mode, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.terminate_launch()
+            );
 
-            match operation {
-                None => {
-
-                    (None, None)
-                },
-                Some(operation) => {
-                    self.fee_vault.put(
-                        bucket.take_advanced(
-                            self.creation_fee_percentage * bucket.amount() / 100,
-                            WithdrawStrategy::Rounded(RoundingMode::ToZero),
-                        )
-                    );
-
-                    self.creator_badge_resource_manager.update_non_fungible_data(
-                        &NonFungibleLocalId::integer(creator_data.id.into()),
-                        "pool_mode",
-                        PoolMode::Normal,
-                    );
-
-                    let hook_argument = HookArgument {
-                        coin_address: coin_address,
-                        operation: operation,
-                        amount: Some(supply),
-                        mode: PoolMode::Normal,
-                        price: Some(price),
-                    };
-                    let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
-                    drop(pool);
-                        let buckets = self.execute_hooks(
-                        &pool_enabled_hooks,
-                        &hook_argument,
-                    );
-
-                    (Some(bucket), Some(buckets))
-                }
+            if event.is_some() {
+                self.emit_pool_event(event.unwrap());
             }
+
+            if mode.is_some() {
+                self.creator_badge_resource_manager.update_non_fungible_data(
+                    &NonFungibleLocalId::integer(creator_data.id.into()),
+                    "pool_mode",
+                    mode.unwrap(),
+                );
+            }
+
+            match bucket {
+                None => {},
+                Some(ref mut bucket) => self.fee_vault.put(
+                    bucket.take_advanced(
+                        self.creation_fee_percentage * bucket.amount() / 100,
+                        WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                    )
+                ),
+            }
+
+            let buckets = match hook_argument {
+                None => None,
+                Some(hook_argument) => Some(
+                    self.execute_hooks(
+                        &pool.enabled_hooks.get_hooks(hook_argument.operation),
+                        &hook_argument,
+                    )
+                ),
+            };
+
+            (bucket, buckets)
         }
 
         fn mint_creator_badge(
@@ -1068,15 +1113,21 @@ mod radix_pump {
             sell: bool,
         ) -> (Bucket, Vec<Bucket>) {
             let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
-            let mut pool = self.pools.get_mut(&coin_address).unwrap();
+            let pool = self.pools.get(&coin_address).unwrap();
 
-            let coin_bucket = pool.unlock(amount);
-            let unlocked_amount = coin_bucket.amount();
+            let coin_bucket = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.unlock(amount)
+            );
 
             match sell {
                 false => (coin_bucket, vec![]),
                 true => {
-                    let (mut base_coin_bucket, price, mode) =  pool.sell(coin_bucket);
+                    let (mut base_coin_bucket, hook_argument, event) =
+                        self.proxy_badge_vault.authorize_with_amount(
+                            1,
+                            || pool.component_address.sell(coin_bucket)
+                        );
 
                     self.fee_vault.put(
                         base_coin_bucket.take_advanced(
@@ -1085,17 +1136,10 @@ mod radix_pump {
                         )
                      );
 
-                    let hook_argument = HookArgument {
-                        coin_address: coin_address,
-                        operation: HookableOperation::PostSell,
-                        amount: Some(unlocked_amount),
-                        mode: mode,
-                        price: Some(price),
-                    };
-                    let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
-                    drop(pool);
+                    self.emit_pool_event(event);
+
                     let buckets = self.execute_hooks(
-                        &pool_enabled_hooks,
+                        &pool.enabled_hooks.get_hooks(hook_argument.operation),
                         &hook_argument,
                     );
 
@@ -1236,7 +1280,14 @@ mod radix_pump {
             amount: Decimal,
         ) {
             let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
-            self.pools.get_mut(&coin_address).unwrap().burn(amount);
+            let pool = self.pools.get(&coin_address).unwrap();
+
+            let event = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.burn(amount)
+            );
+
+            self.emit_pool_event(event);
         }
 
         pub fn buy_ticket(
@@ -1261,27 +1312,24 @@ mod radix_pump {
                 )
             );
 
-            let mut pool = self.pools.get_mut(&coin_address).expect("Coin not found");
+            let pool = self.pools.get(&coin_address).expect("Coin not found");
 
-            let (ticket_bucket, price) = pool.buy_ticket(
-                amount,
-                base_coin_bucket
-            );
- 
-            let hook_argument = HookArgument {
-                coin_address: coin_address,
-                operation: HookableOperation::PostBuyTicket,
-                amount: Some(amount.into()),
-                mode: PoolMode::Launching,
-                price: Some(price),
-            };
-            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
-            drop(pool);
+            let (ticket_bucket, hook_argument, event) =
+                self.proxy_badge_vault.authorize_with_amount(
+                    1,
+                    || pool.component_address.buy_ticket(
+                        amount,
+                        base_coin_bucket
+                    )
+                );
+
+            self.emit_pool_event(event);
+
             let buckets = self.execute_hooks(
-                &pool_enabled_hooks,
+                &pool.enabled_hooks.get_hooks(hook_argument.operation),
                 &hook_argument,
             );
- 
+
             (ticket_bucket, buckets)
         }
 
@@ -1290,59 +1338,38 @@ mod radix_pump {
             ticket_bucket: Bucket,
         ) -> (
             Bucket,
-            Bucket,
+            Option<Bucket>,
             Option<Vec<Bucket>>,
             Option<Vec<Bucket>>,
         ) {
             let ticket_id = &ticket_bucket.as_non_fungible().non_fungible_local_ids()[0];
             let ticket_data = ResourceManager::from_address(ticket_bucket.resource_address()).get_non_fungible_data::<TicketData>(ticket_id);
-            let mut pool = self.pools.get_mut(&ticket_data.coin_resource_address).expect("Coin not found");
-            let (base_coin_bucket, coin_bucket, lose, win, mode) = pool.redeem_ticket(ticket_bucket);
+            let pool = self.pools.get(&ticket_data.coin_resource_address).expect("Coin not found");
 
-            let pool_enabled_hooks_lose = pool.enabled_hooks.get_hooks(HookableOperation::PostRedeemLousingTicket);
-            let hook_argument_lose = HookArgument {
-                coin_address: coin_bucket.resource_address(),
-                operation: HookableOperation::PostRedeemLousingTicket,
-                amount: Some(Decimal::try_from(lose).unwrap()),
-                mode: mode,
-                price: None,
+            let (base_coin_bucket, coin_bucket, hook_argument_lose, hook_argument_win) = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.redeem_ticket(ticket_bucket)
+            );
+
+            let lose_buckets = match hook_argument_lose {
+                None => None,
+                Some(hook_argument) => Some(
+                    self.execute_hooks(
+                        &pool.enabled_hooks.get_hooks(hook_argument.operation),
+                        &hook_argument,
+                    )
+                ),
             };
 
-            let pool_enabled_hooks_win = pool.enabled_hooks.get_hooks(HookableOperation::PostRedeemWinningTicket);
-            let hook_argument_win = HookArgument {
-                coin_address: coin_bucket.resource_address(),
-                operation: HookableOperation::PostRedeemWinningTicket,
-                amount: Some(Decimal::try_from(win).unwrap()),
-                mode: mode,
-                price: None,
+            let win_buckets = match hook_argument_win {
+                None => None,
+                Some(hook_argument) => Some(
+                    self.execute_hooks(
+                        &pool.enabled_hooks.get_hooks(hook_argument.operation),
+                        &hook_argument,
+                    )
+                ),
             };
-
-            drop(pool);
-
-            let lose_buckets: Option<Vec<Bucket>>;
-            if lose > 0 {
-                lose_buckets = Some(
-                    self.execute_hooks(
-                        &pool_enabled_hooks_lose,
-                        &hook_argument_lose,
-                    )
-                );
-            } else {
-                lose_buckets = None;
-            }
-
-            let win_buckets: Option<Vec<Bucket>>;
-            if win > 0 {
-                win_buckets = Some(
-                    self.execute_hooks(
-                        &pool_enabled_hooks_win,
-                        &hook_argument_win,
-                    )
-                );
-            } else {
-                win_buckets = None;
-            }
-
 
             (base_coin_bucket, coin_bucket, lose_buckets, win_buckets)
         }

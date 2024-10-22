@@ -1,5 +1,6 @@
 use scrypto::prelude::*;
 use scrypto_interface::*;
+use crate::pool::pool::*;
 
 #[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
 pub enum PoolMode {
@@ -10,9 +11,9 @@ pub enum PoolMode {
     Liquidation,
 }
 
-#[derive(Debug, ScryptoSbor, PartialEq, Clone)]
+#[derive(ScryptoSbor)]
 pub struct PoolInfo {
-    pub component: ComponentAddress,
+    pub component: Global<Pool>,
     pub base_coin_amount: Decimal,
     pub coin_amount: Decimal,
     pub last_price: Decimal,
@@ -190,9 +191,9 @@ pub struct TicketData {
     pub buy_date: Instant,
 }
 
-#[derive(Debug, ScryptoSbor, PartialEq, Clone)]
+#[derive(ScryptoSbor, Clone)]
 pub struct HookArgument {
-    pub component: ComponentAddress,
+    pub component: Global<Pool>,
     pub coin_address: ResourceAddress,
     pub operation: HookableOperation,
     pub amount: Option<Decimal>,

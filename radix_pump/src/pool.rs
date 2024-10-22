@@ -270,7 +270,7 @@ mod pool {
                     (
                         PoolMode::Launching,
                         HookArgument {
-                            component: Runtime::global_address(),
+                            component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
                             operation: HookableOperation::PostFairLaunch,
                             amount: None,
@@ -298,7 +298,7 @@ mod pool {
                     (
                         PoolMode::Launching,
                         HookArgument {
-                            component: Runtime::global_address(),
+                            component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
                             operation: HookableOperation::PostRandomLaunch,
                             amount: None,
@@ -350,6 +350,7 @@ mod pool {
                         self.base_coin_vault.amount() * (100 - self.buy_pool_fee_percentage) / 100,
                         WithdrawStrategy::Rounded(RoundingMode::ToZero),
                     );
+                    let base_coin_bucket_amount = base_coin_bucket.amount();
 
                     fair_launch.initial_locked_amount = fair_launch.resource_manager.total_supply().unwrap() *
                         fair_launch.creator_locked_percentage / (dec!(100) - fair_launch.creator_locked_percentage);
@@ -365,7 +366,7 @@ mod pool {
                         Some(PoolMode::Normal),
                         Some(
                             HookArgument {
-                                component: Runtime::global_address(),
+                                component: Runtime::global_address().into(),
                                 coin_address: self.coin_vault.resource_address(),
                                 operation: HookableOperation::PostTerminateFairLaunch,
                                 amount: supply,
@@ -377,7 +378,7 @@ mod pool {
                             AnyPoolEvent::FairLaunchEndEvent(
                                 FairLaunchEndEvent {
                                     resource_address: fair_launch.resource_manager.address(),
-                                    creator_proceeds: base_coin_bucket.amount(),
+                                    creator_proceeds: base_coin_bucket_amount,
                                     creator_locked_allocation: fair_launch.locked_vault.amount(),
                                     supply: supply.unwrap(),
                                     coins_in_pool: self.coin_vault.amount(),
@@ -475,7 +476,7 @@ mod pool {
                         Some(PoolMode::Normal),
                         Some(
                             HookArgument {
-                                component: Runtime::global_address(),
+                                component: Runtime::global_address().into(),
                                 coin_address: self.coin_vault.resource_address(),
                                 operation: HookableOperation::PostTerminateRandomLaunch,
                                 amount: supply,
@@ -527,7 +528,7 @@ mod pool {
                     }
                     calls_to_random = min(calls_to_random, MAX_CALLS_TO_RANDOM);
 
-                    let random_badge_bucket = random_launch.random_badge_resource_manager.mint(Decimal::try_from(calls_to_random).unwrap());
+                    let mut random_badge_bucket = random_launch.random_badge_resource_manager.mint(Decimal::try_from(calls_to_random).unwrap());
                     while random_badge_bucket.amount() >= Decimal::ONE {
                         RNG.request_random(
                             Runtime::global_address(),
@@ -613,7 +614,12 @@ mod pool {
             sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee_percentage: Decimal,
             coin_creator_badge_rule: AccessRuleNode,
-        ) -> (Global<Pool>, Bucket, AnyPoolEvent) {
+        ) -> (
+            Global<Pool>,
+            Bucket,
+            HookArgument,
+            AnyPoolEvent
+        ) {
             let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
 
             let mut coin_bucket = Pool::start_resource_manager_creation(
@@ -682,6 +688,14 @@ mod pool {
             (
                 pool,
                 creator_coin_bucket.into(),
+                HookArgument {
+                    component: component_address.into(),
+                    coin_address: coin_address,
+                    operation: HookableOperation::PostQuickLaunch,
+                    amount: Some(coin_supply),
+                    mode: PoolMode::Normal,
+                    price: Some(coin_price),
+                },
                 AnyPoolEvent::QuickLaunchEvent(
                     QuickLaunchEvent {
                         resource_address: coin_address,
@@ -862,7 +876,7 @@ mod pool {
             let coin_amount = PreciseDecimal::from(self.coin_vault.amount());
 
             match self.launch {
-                LaunchType::Quick(quick_launch) => {
+                LaunchType::Quick(ref mut quick_launch) => {
                     if quick_launch.ignored_coins == PreciseDecimal::ZERO {
                         (coin_amount * base_coin_amount, PreciseDecimal::ZERO)
                     } else {
@@ -874,7 +888,7 @@ mod pool {
                         )
                     }
                 },
-                LaunchType::Random(random_launch) => {
+                LaunchType::Random(ref mut random_launch) => {
                     if random_launch.ignored_coins == PreciseDecimal::ZERO {
                         (coin_amount * base_coin_amount, PreciseDecimal::ZERO)
                     } else {
@@ -921,7 +935,7 @@ mod pool {
                     (
                         self.coin_vault.take(coin_amount_bought),
                         HookArgument {
-                            component: Runtime::global_address(),
+                            component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
                             operation: HookableOperation::PostBuy,
                             amount: Some(coin_amount_bought),
@@ -959,7 +973,7 @@ mod pool {
                         (
                             coin_bucket,
                             HookArgument {
-                                component: Runtime::global_address(),
+                                component: Runtime::global_address().into(),
                                 coin_address: self.coin_vault.resource_address(),
                                 operation: HookableOperation::PostBuy,
                                 amount: Some(coin_bucket_amount),
@@ -1020,7 +1034,7 @@ mod pool {
                     (
                         base_coin_bucket,
                         HookArgument {
-                            component: Runtime::global_address(),
+                            component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
                             operation: HookableOperation::PostSell,
                             amount: Some(coin_bucket_amount),
@@ -1050,7 +1064,7 @@ mod pool {
                             WithdrawStrategy::Rounded(RoundingMode::ToZero),
                         ),
                         HookArgument {
-                            component: Runtime::global_address(),
+                            component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
                             operation: HookableOperation::PostSell,
                             amount: Some(coin_bucket_amount),
@@ -1089,7 +1103,7 @@ mod pool {
             let coin_resource_manager = ResourceManager::from_address(
                 self.coin_vault.resource_address()
             );
-            let coin_circulating_supply = match self.launch {
+            let coin_circulating_supply = match &self.launch {
                 LaunchType::Random(random_launch) =>
                     coin_resource_manager.total_supply().unwrap() +
                     random_launch.coins_per_winning_ticket * random_launch.ticket_resource_manager.total_supply().unwrap() -
@@ -1153,7 +1167,7 @@ mod pool {
 
             (
                 HookArgument { 
-                    component: Runtime::global_address(),
+                    component: Runtime::global_address().into(),
                     coin_address: self.coin_vault.resource_address(),
                     operation: HookableOperation::PostReturnFlashLoan,
                     amount: Some(coin_bucket_amount),
@@ -1339,7 +1353,7 @@ mod pool {
                     (
                         ticket_bucket,
                         HookArgument { 
-                            component: Runtime::global_address(),
+                            component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
                             operation: HookableOperation::PostBuyTicket,
                             amount: Some(Decimal::try_from(amount).unwrap()),
@@ -1413,8 +1427,8 @@ mod pool {
             _key: u32,
             badge: FungibleBucket
         ) {
-            match self.launch {
-                LaunchType::Random(ref mut random_launch) => {
+            match &self.launch {
+                LaunchType::Random(random_launch) => {
                     assert!(
                         badge.resource_address() == random_launch.random_badge_resource_manager.address() &&
                         badge.amount() == Decimal::ONE,
@@ -1475,7 +1489,7 @@ mod pool {
                                     0 => None,
                                     _ => Some(
                                         HookArgument { 
-                                            component: Runtime::global_address(),
+                                            component: Runtime::global_address().into(),
                                             coin_address: self.coin_vault.resource_address(),
                                             operation: HookableOperation::PostRedeemLousingTicket,
                                             amount: Some(Decimal::try_from(lose).unwrap()),
@@ -1488,7 +1502,7 @@ mod pool {
                                     0 => None,
                                     _ => Some(
                                         HookArgument { 
-                                            component: Runtime::global_address(),
+                                            component: Runtime::global_address().into(),
                                             coin_address: self.coin_vault.resource_address(),
                                             operation: HookableOperation::PostRedeemWinningTicket,
                                             amount: Some(Decimal::try_from(win).unwrap()),
@@ -1513,7 +1527,7 @@ mod pool {
                                 None,
                                 Some(
                                     HookArgument { 
-                                        component: Runtime::global_address(),
+                                        component: Runtime::global_address().into(),
                                         coin_address: self.coin_vault.resource_address(),
                                         operation: HookableOperation::PostRedeemLousingTicket,
                                         amount: Some(number_of_tickets),

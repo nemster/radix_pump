@@ -817,8 +817,7 @@ mod radix_pump {
 
             // In order to avoid price manipulation affecting the fees, take the maximum among the
             // price at the moment the flash loan was granted and the current price.
-            let (_, _, mut price, _, _, _, _, _, _, _, _, _, _, _) =
-                pool.component_address.get_pool_info();
+            let mut price = pool.component_address.get_pool_info().last_price;
             price = max(price, flash_loan_data.price);
 
             self.fee_vault.put(
@@ -881,43 +880,15 @@ mod radix_pump {
             coin_address: ResourceAddress,
         ) -> PoolInfo {
             let pool = self.pools.get(&coin_address).expect("Coin not found");
+            let mut pool_info = pool.component_address.get_pool_info();
 
-            let (
-                base_coin_amount,
-                coin_amount,
-                last_price,
-                buy_pool_fee_percentage,
-                sell_pool_fee_percentage,
-                flash_loan_pool_fee_percentage,
-                pool_mode,
-                end_launch_time,
-                unlocking_time,
-                initial_locked_amount,
-                unlocked_amount,
-                ticket_price,
-                winning_tickets,
-                coins_per_winning_ticket,
-            ) = pool.component_address.get_pool_info();
+            pool_info.total_buy_fee_percentage = dec!(1000000) / ((100 - pool_info.total_buy_fee_percentage) * (100 - self.buy_sell_fee_percentage)) - dec!(100);
+            pool_info.total_sell_fee_percentage = pool_info.total_sell_fee_percentage + self.buy_sell_fee_percentage * (100 - pool_info.total_sell_fee_percentage) / dec!(100);
+            pool_info.total_flash_loan_fee_percentage = pool_info.total_flash_loan_fee_percentage + self.flash_loan_fee_percentage;
+            pool_info.flash_loan_nft_resource_address = Some(self.flash_loan_nft_resource_manager.address());
+            pool_info.hooks_badge_resource_address = Some(self.hook_badge_vault.resource_address());
 
-            PoolInfo {
-                component: pool.component_address,
-                base_coin_amount: base_coin_amount,
-                coin_amount: coin_amount,
-                last_price: last_price,
-                total_buy_fee_percentage: dec!(1000000) / ((100 - buy_pool_fee_percentage) * (100 - self.buy_sell_fee_percentage)) - dec!(100),
-                total_sell_fee_percentage: sell_pool_fee_percentage + self.buy_sell_fee_percentage * (100 - sell_pool_fee_percentage) / dec!(100),
-                total_flash_loan_fee_percentage: flash_loan_pool_fee_percentage + self.flash_loan_fee_percentage,
-                pool_mode: pool_mode,
-                end_launch_time: end_launch_time,
-                unlocking_time: unlocking_time,
-                initial_locked_amount: initial_locked_amount,
-                unlocked_amount: unlocked_amount,
-                flash_loan_nft_resource_address: self.flash_loan_nft_resource_manager.address(),
-                hooks_badge_resource_address: self.hook_badge_vault.resource_address(),
-                ticket_price: ticket_price,
-                winning_tickets: winning_tickets,
-                coins_per_winning_ticket: coins_per_winning_ticket,
-            }
+            pool_info
         }
 
         fn get_creator_data(

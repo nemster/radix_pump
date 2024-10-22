@@ -1163,63 +1163,51 @@ mod pool {
             )
         }
 
-        pub fn get_pool_info(&self) -> (
-            Decimal,
-            Decimal,
-            Decimal,
-            Decimal,
-            Decimal,
-            Decimal,
-            PoolMode,
-            Option<i64>,
-            Option<i64>,
-            Option<Decimal>,
-            Option<Decimal>,
-            Option<Decimal>,
-            Option<u32>,
-            Option<Decimal>,
-        ) {
-            (
-                self.base_coin_vault.amount(),
-                self.coin_vault.amount(),
-                self.last_price,
-                self.buy_pool_fee_percentage,
-                self.sell_pool_fee_percentage,
-                self.flash_loan_pool_fee_percentage,
-                self.mode,
-                match &self.launch {
+        pub fn get_pool_info(&self) -> PoolInfo {
+            PoolInfo {
+                component: Runtime::global_address().into(),
+                base_coin_amount: self.base_coin_vault.amount(),
+                coin_amount: self.coin_vault.amount(),
+                last_price: self.last_price,
+                total_buy_fee_percentage: self.buy_pool_fee_percentage,
+                total_sell_fee_percentage: self.sell_pool_fee_percentage,
+                total_flash_loan_fee_percentage: self.flash_loan_pool_fee_percentage,
+                pool_mode: self.mode,
+                end_launch_time: match &self.launch {
                     LaunchType::Quick(_) => None,
                     LaunchType::Fair(fair_launch) => Some(fair_launch.end_launch_time),
                     LaunchType::Random(random_launch) => Some(random_launch.end_launch_time),
                 },
-                match &self.launch {
+                unlocking_time: match &self.launch {
                     LaunchType::Quick(_) => None,
                     LaunchType::Fair(fair_launch) => Some(fair_launch.unlocking_time),
                     LaunchType::Random(random_launch) => Some(random_launch.unlocking_time),
                 },
-                match &self.launch {
+                initial_locked_amount: match &self.launch {
                     LaunchType::Quick(_) => None,
                     LaunchType::Fair(fair_launch) => Some(fair_launch.initial_locked_amount),
                     LaunchType::Random(random_launch) => Some(random_launch.coins_per_winning_ticket),
                 },
-                match &self.launch {
+                unlocked_amount: match &self.launch {
                     LaunchType::Quick(_) => None,
                     LaunchType::Fair(fair_launch) => Some(fair_launch.unlocked_amount),
                     LaunchType::Random(random_launch) => Some(random_launch.unlocked_amount),
                 },
-                match &self.launch {
-                    LaunchType::Quick(_) | LaunchType::Fair(_) => None,
+                ticket_price: match &self.launch {
+                   LaunchType::Quick(_) | LaunchType::Fair(_) => None,
                     LaunchType::Random(random_launch) => Some(random_launch.ticket_price),
                 },
-                match &self.launch {
+                winning_tickets: match &self.launch {
                     LaunchType::Quick(_) | LaunchType::Fair(_) => None,
                     LaunchType::Random(random_launch) => Some(random_launch.winning_tickets),
                 },
-                match &self.launch {
+                coins_per_winning_ticket: match &self.launch {
                     LaunchType::Quick(_) | LaunchType::Fair(_) => None,
                     LaunchType::Random(random_launch) => Some(random_launch.coins_per_winning_ticket),
                 },
-            )
+                flash_loan_nft_resource_address: None,
+                hooks_badge_resource_address: None,
+            }
         }
 
         pub fn update_pool_fee_percentage(

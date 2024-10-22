@@ -28,8 +28,8 @@ pub struct PoolInfo {
     pub ticket_price: Option<Decimal>,
     pub winning_tickets: Option<u32>,
     pub coins_per_winning_ticket: Option<Decimal>,
-    pub flash_loan_nft_resource_address: ResourceAddress,
-    pub hooks_badge_resource_address: ResourceAddress,
+    pub flash_loan_nft_resource_address: Option<ResourceAddress>,
+    pub hooks_badge_resource_address: Option<ResourceAddress>,
 }
 
 #[derive(Debug, ScryptoSbor, NonFungibleData)]

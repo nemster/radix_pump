@@ -638,8 +638,10 @@ mod radix_pump {
 
             self.emit_pool_event(event);
 
+            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            drop(pool);
             let buckets = self.execute_hooks(
-                &pool.enabled_hooks.get_hooks(hook_argument.operation),
+                &pool_enabled_hooks,
                 &hook_argument,
             );
 
@@ -667,8 +669,10 @@ mod radix_pump {
 
             self.emit_pool_event(event);
 
+            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            drop(pool);
             let buckets = self.execute_hooks(
-                &pool.enabled_hooks.get_hooks(hook_argument.operation),
+                &pool_enabled_hooks,
                 &hook_argument,
             );
 
@@ -835,8 +839,10 @@ mod radix_pump {
 
             self.emit_pool_event(event);
 
+            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            drop(pool);
             self.execute_hooks(
-                &pool.enabled_hooks.get_hooks(hook_argument.operation),
+                &pool_enabled_hooks,
                 &hook_argument,
             )
         }
@@ -978,14 +984,16 @@ mod radix_pump {
                 mode,
             );
 
+            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            drop(pool);
             self.execute_hooks(
-                &pool.enabled_hooks.get_hooks(hook_argument.operation),
+                &pool_enabled_hooks,
                 &hook_argument,
             )
         }
 
         fn execute_hooks(
-            &self,
+            &mut self,
             pool_enabled_hooks: &Vec<String>,
             hook_argument: &HookArgument,
         ) -> Vec<Bucket> {
@@ -998,6 +1006,8 @@ mod radix_pump {
 
             let mut additional_buckets: Vec<Bucket> = vec![];
 
+            let mut hook_badge_bucket = self.hook_badge_vault.take(dec!(1));
+
             for hook in merged_hooks.iter() {
                 let hook_address = self.registered_hooks.get(&hook);
 
@@ -1006,16 +1016,19 @@ mod radix_pump {
                     continue;
                 }
 
-                let hook_output = self.hook_badge_vault.as_fungible().authorize_with_amount(
-                    1,
-                    || { hook_address.unwrap().deref().hook(hook_argument.clone()) }
+                let (temp_badge_bucket, bucket) = hook_address.unwrap().deref().hook(
+                    hook_argument.clone(),
+                    hook_badge_bucket,
                 );
+                hook_badge_bucket = temp_badge_bucket;
 
-                match hook_output {
+                match bucket {
                     None => {},
                     Some(bucket) => additional_buckets.push(bucket),
                 }
             }
+
+            self.hook_badge_vault.put(hook_badge_bucket);
 
             additional_buckets
         }
@@ -1058,12 +1071,16 @@ mod radix_pump {
 
             let buckets = match hook_argument {
                 None => None,
-                Some(hook_argument) => Some(
-                    self.execute_hooks(
-                        &pool.enabled_hooks.get_hooks(hook_argument.operation),
-                        &hook_argument,
+                Some(hook_argument) => {
+                    let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+                    drop(pool);
+                    Some(
+                        self.execute_hooks(
+                            &pool_enabled_hooks,
+                            &hook_argument,
+                        )
                     )
-                ),
+                },
             };
 
             (bucket, buckets)
@@ -1138,8 +1155,10 @@ mod radix_pump {
 
                     self.emit_pool_event(event);
 
+                    let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+                    drop(pool);
                     let buckets = self.execute_hooks(
-                        &pool.enabled_hooks.get_hooks(hook_argument.operation),
+                        &pool_enabled_hooks,
                         &hook_argument,
                     );
 
@@ -1325,8 +1344,10 @@ mod radix_pump {
 
             self.emit_pool_event(event);
 
+            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            drop(pool);
             let buckets = self.execute_hooks(
-                &pool.enabled_hooks.get_hooks(hook_argument.operation),
+                &pool_enabled_hooks,
                 &hook_argument,
             );
 
@@ -1351,11 +1372,22 @@ mod radix_pump {
                 || pool.component_address.redeem_ticket(ticket_bucket)
             );
 
+            let pool_enabled_hooks_lose = match hook_argument_lose {
+                None => None,
+                Some(ref hook_argument) => Some(pool.enabled_hooks.get_hooks(hook_argument.operation)),
+            };
+            let pool_enabled_hooks_win = match hook_argument_win {
+                None => None,
+                Some(ref hook_argument) => Some(pool.enabled_hooks.get_hooks(hook_argument.operation)),
+            };
+
+            drop(pool);
+
             let lose_buckets = match hook_argument_lose {
                 None => None,
                 Some(hook_argument) => Some(
                     self.execute_hooks(
-                        &pool.enabled_hooks.get_hooks(hook_argument.operation),
+                        &pool_enabled_hooks_lose.unwrap(),
                         &hook_argument,
                     )
                 ),
@@ -1365,7 +1397,7 @@ mod radix_pump {
                 None => None,
                 Some(hook_argument) => Some(
                     self.execute_hooks(
-                        &pool.enabled_hooks.get_hooks(hook_argument.operation),
+                        &pool_enabled_hooks_win.unwrap(),
                         &hook_argument,
                     )
                 ),

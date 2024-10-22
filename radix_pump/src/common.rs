@@ -206,6 +206,10 @@ define_interface! {
         fn hook(
             &self,
             argument: HookArgument,
-        ) -> Option<Bucket>;
+            hook_badge_bucket: FungibleBucket,
+        ) -> (
+            FungibleBucket,
+            Option<Bucket>
+        );
     }
 }

@@ -2,6 +2,7 @@ use scrypto::prelude::*;
 use scrypto::prelude::rust::cmp::*;
 use random::Random;
 use crate::common::*;
+use crate::loan_safe_vault::*;
 
 #[derive(Debug, ScryptoSbor, PartialEq)]
 struct QuickLaunchDetails {
@@ -97,7 +98,7 @@ mod pool {
 
     struct Pool {
         base_coin_vault: Vault,
-        coin_vault: Vault,
+        coin_vault: LoanSafeVault,
         mode: PoolMode,
         last_price: Decimal,
         buy_pool_fee_percentage: Decimal,
@@ -214,7 +215,7 @@ mod pool {
 
             let pool = Self {
                 base_coin_vault: Vault::new(base_coin_address),
-                coin_vault: Vault::new(resource_manager.address()),
+                coin_vault: LoanSafeVault::new(resource_manager.address()),
                 mode: PoolMode::WaitingForLaunch,
                 last_price: launch_price,
                 buy_pool_fee_percentage: buy_pool_fee_percentage,
@@ -654,7 +655,7 @@ mod pool {
 
             let pool = Self {
                 base_coin_vault: Vault::with_bucket(base_coin_bucket),
-                coin_vault: Vault::with_bucket(coin_bucket.into()),
+                coin_vault: LoanSafeVault::with_bucket(coin_bucket.into()),
                 mode: PoolMode::Normal,
                 last_price: coin_price,
                 buy_pool_fee_percentage: buy_pool_fee_percentage,
@@ -817,7 +818,7 @@ mod pool {
 
             let pool = Pool {
                 base_coin_vault: Vault::new(base_coin_address),
-                coin_vault: Vault::new(resource_manager.address()),
+                coin_vault: LoanSafeVault::new(resource_manager.address()),
                 mode: PoolMode::WaitingForLaunch,
                 last_price: ticket_price / coins_per_winning_ticket,
                 buy_pool_fee_percentage: buy_pool_fee_percentage,
@@ -1117,7 +1118,7 @@ mod pool {
             Bucket, // bucket of coins
             Decimal, // price
         ) {
-            (self.coin_vault.take(amount), self.last_price)
+            (self.coin_vault.get_loan(amount), self.last_price)
         }
 
         pub fn return_flash_loan(
@@ -1142,7 +1143,7 @@ mod pool {
             let base_coin_bucket_amount = base_coin_bucket.amount();
 
             self.base_coin_vault.put(base_coin_bucket);
-            self.coin_vault.put(coin_bucket);
+            self.coin_vault.return_loan(coin_bucket);
 
             (
                 HookArgument { 

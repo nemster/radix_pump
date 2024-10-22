@@ -1256,11 +1256,16 @@ mod pool {
                 "Not allowed in this mode",
             );
 
-            amount = match &self.launch {
-                LaunchType::Quick(quick_launch) => min(
-                    amount,
-                    quick_launch.ignored_coins.checked_truncate(RoundingMode::ToZero).unwrap()
-                ),
+            amount = match self.launch {
+                LaunchType::Quick(ref mut quick_launch) => {
+                    let amount = min(
+                        amount,
+                        quick_launch.ignored_coins.checked_truncate(RoundingMode::ToZero).unwrap()
+                    );
+                    quick_launch.ignored_coins -= amount;
+
+                    amount
+                },
                 _ => Runtime::panic("Not allowed for this launch type".to_string()),
             };
 

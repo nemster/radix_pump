@@ -36,7 +36,6 @@ struct RandomLaunchDetails {
     number_of_extracted_tickets: u32,
     refunds_vault: Vault,
     key_random: u32,
-    ignored_coins: PreciseDecimal,
     random_badge_resource_manager: ResourceManager,
 }
 
@@ -456,14 +455,7 @@ mod pool {
 
                     let supply = random_launch.resource_manager.total_supply();
 
-                    let new_price = self.base_coin_vault.amount() / random_launch.coins_per_winning_ticket;
-                    if new_price < self.last_price {
-                        // If the random launch went very bad we must ignore some coins to keep the
-                        // same price as the launch phase
-                        random_launch.ignored_coins = (self.coin_vault.amount() - self.base_coin_vault.amount() / self.last_price).into();
-                    } else {
-                        self.last_price = new_price;
-                    }
+                    self.last_price = self.base_coin_vault.amount() / random_launch.coins_per_winning_ticket;
 
                     let base_coin_bucket = self.base_coin_vault.take_advanced(
                         random_launch.winning_tickets * random_launch.ticket_price,
@@ -848,7 +840,6 @@ mod pool {
                         number_of_extracted_tickets: 0,
                         refunds_vault: Vault::new(base_coin_address),
                         key_random: 0,
-                        ignored_coins: PreciseDecimal::ZERO,
                         random_badge_resource_manager: random_badge_resource_manager,
                     }
                 ),
@@ -885,18 +876,6 @@ mod pool {
                         (
                             min(expected_coin_amount, coin_amount) * base_coin_amount,
                             quick_launch.ignored_coins,
-                        )
-                    }
-                },
-                LaunchType::Random(ref mut random_launch) => {
-                    if random_launch.ignored_coins == PreciseDecimal::ZERO {
-                        (coin_amount * base_coin_amount, PreciseDecimal::ZERO)
-                    } else {
-                        let expected_coin_amount = base_coin_amount / PreciseDecimal::from(self.last_price);
-                        random_launch.ignored_coins = max(coin_amount - expected_coin_amount, PreciseDecimal::ZERO);
-                        (
-                            min(expected_coin_amount, coin_amount) * base_coin_amount,
-                            random_launch.ignored_coins,
                         )
                     }
                 },
@@ -1281,10 +1260,6 @@ mod pool {
                 LaunchType::Quick(quick_launch) => min(
                     amount,
                     quick_launch.ignored_coins.checked_truncate(RoundingMode::ToZero).unwrap()
-                ),
-                LaunchType::Random(random_launch) => min(
-                    amount,
-                    random_launch.ignored_coins.checked_truncate(RoundingMode::ToZero).unwrap()
                 ),
                 _ => Runtime::panic("Not allowed for this launch type".to_string()),
             };

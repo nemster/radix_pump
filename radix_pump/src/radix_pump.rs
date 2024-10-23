@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::ops::DerefMut;
 use scrypto::prelude::*;
 use scrypto::prelude::rust::cmp::*;
 use crate::common::*;
@@ -152,6 +152,7 @@ mod radix_pump {
         min_lock_duration: i64,
         proxy_badge_vault: FungibleVault,
         hook_badge_vault: FungibleVault,
+        read_only_hook_badge_vault: FungibleVault,
         registered_hooks: HookByName,
         registered_hooks_operations: HooksPerOperation,
         globally_enabled_hooks: HooksPerOperation,
@@ -278,6 +279,33 @@ mod radix_pump {
             ))
             .mint_initial_supply(dec![1]);
 
+            let read_only_hook_badge_bucket = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            .divisibility(0)
+            .metadata(metadata!(
+                roles {
+                    metadata_setter => rule!(require(owner_badge_address));
+                    metadata_setter_updater => rule!(require(owner_badge_address));
+                    metadata_locker => rule!(require(owner_badge_address));
+                    metadata_locker_updater => rule!(require(owner_badge_address));
+                },
+                init {
+                    "name" => "RO hook badge", updatable;
+                }
+            ))
+            .mint_roles(mint_roles!(
+                minter => rule!(deny_all);
+                minter_updater => rule!(require(owner_badge_address));
+            ))
+            .burn_roles(burn_roles!(
+                burner => rule!(deny_all);
+                burner_updater => rule!(require(owner_badge_address));
+            ))
+            .deposit_roles(deposit_roles!(
+                depositor => rule!(require(global_caller(component_address)));
+                depositor_updater => rule!(require(owner_badge_address));
+            ))  
+            .mint_initial_supply(dec![1]);
+
             let proxy_badge_bucket = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
             .divisibility(0)
             .metadata(metadata!(
@@ -319,6 +347,7 @@ mod radix_pump {
                 min_lock_duration: 7776000, // Three months
                 proxy_badge_vault: FungibleVault::with_bucket(proxy_badge_bucket),
                 hook_badge_vault: FungibleVault::with_bucket(hook_badge_bucket),
+                read_only_hook_badge_vault: FungibleVault::with_bucket(read_only_hook_badge_bucket),
                 registered_hooks: KeyValueStore::new(),
                 registered_hooks_operations: HooksPerOperation::new(),
                 globally_enabled_hooks: HooksPerOperation::new(),
@@ -638,7 +667,7 @@ mod radix_pump {
 
             self.emit_pool_event(event);
 
-            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
             let buckets = self.execute_hooks(
                 &pool_enabled_hooks,
@@ -669,7 +698,7 @@ mod radix_pump {
 
             self.emit_pool_event(event);
 
-            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
             let buckets = self.execute_hooks(
                 &pool_enabled_hooks,
@@ -838,7 +867,7 @@ mod radix_pump {
 
             self.emit_pool_event(event);
 
-            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
             self.execute_hooks(
                 &pool_enabled_hooks,
@@ -887,6 +916,7 @@ mod radix_pump {
             pool_info.total_flash_loan_fee_percentage = pool_info.total_flash_loan_fee_percentage + self.flash_loan_fee_percentage;
             pool_info.flash_loan_nft_resource_address = Some(self.flash_loan_nft_resource_manager.address());
             pool_info.hooks_badge_resource_address = Some(self.hook_badge_vault.resource_address());
+            pool_info.read_only_hooks_badge_resource_address = Some(self.read_only_hook_badge_vault.resource_address());
 
             pool_info
         }
@@ -955,7 +985,7 @@ mod radix_pump {
                 mode,
             );
 
-            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
             self.execute_hooks(
                 &pool_enabled_hooks,
@@ -965,41 +995,134 @@ mod radix_pump {
 
         fn execute_hooks(
             &mut self,
-            pool_enabled_hooks: &Vec<String>,
+            pool_enabled_hooks: &Vec<Vec<String>>,
             hook_argument: &HookArgument,
         ) -> Vec<Bucket> {
-            let merged_hooks = self.globally_enabled_hooks.merge(
-                hook_argument.operation,
-                pool_enabled_hooks,
-            );
-
-            let registered_hooks_per_operation = self.registered_hooks_operations.get_hooks(hook_argument.operation);
-
             let mut additional_buckets: Vec<Bucket> = vec![];
 
             let mut hook_badge_bucket = self.hook_badge_vault.take(dec!(1));
 
-            for hook in merged_hooks.iter() {
-                let hook_address = self.registered_hooks.get(&hook);
+            let mut additional_operations_round: Vec<Vec<(HookArgument, HookInterfaceScryptoStub)>> = vec![vec![],vec![],vec![]];
 
-                // Ignore hoooks that have been unregistered by the componet owner; do not panic
-                if hook_address.is_none() || !registered_hooks_per_operation.iter().any(|x| x == hook) {
-                    continue;
+            for execution_round in 0..3 {
+                let merged_hooks = self.globally_enabled_hooks.merge(
+                    hook_argument.operation,
+                    &pool_enabled_hooks[execution_round],
+                    execution_round,
+                );
+
+                let registered_hooks_per_operation =
+                    self.registered_hooks_operations.get_hooks(hook_argument.operation, execution_round);
+
+                for hook in merged_hooks.iter() {
+                    let hook_info = self.registered_hooks.get_mut(&hook);
+
+                    // Ignore hoooks that have been unregistered by the componet owner; do not panic
+                    if hook_info.is_none() || !registered_hooks_per_operation.iter().any(|x| x == hook) {
+                        continue;
+                    }
+
+                    let (
+                        temp_badge_bucket,
+                        opt_bucket,
+                        events,
+                        hook_arguments,
+                    ) = hook_info.unwrap().deref_mut().component_address.hook(
+                        hook_argument.clone(),
+                        hook_badge_bucket,
+                    );
+                    hook_badge_bucket = temp_badge_bucket;
+
+                    // An hook can generate any number of Pool events by calling Pool methods
+                    for event in events.iter() {
+                        self.emit_pool_event(event.clone());
+                    }
+
+                    // An hook can return a Bucket for the user
+                    match opt_bucket {
+                        None => {},
+                        Some(bucket) => additional_buckets.push(bucket),
+                    }
+
+                    match execution_round {
+                        0 => {
+                            // A round 0 hook can recursively trigger the execution of other hooks
+                            for argument in hook_arguments.iter() {
+                                // An hook executed on a pool can also trigger hooks on different
+                                // pools!
+                                let pool2 = self.pools.get(&argument.coin_address);
+                                match pool2 {
+                                    None => {},
+                                    Some(pool2) => {
+                                        let pool2_enabled_hooks = pool2.enabled_hooks.get_all_hooks(argument.operation);
+                                        // For execution rounds 2 and 3
+                                        for execution_round2 in 1..3 {
+                                            // Get all of the hook enabled for the operation
+                                            // globally or for the pool
+                                            let merged_hooks = self.globally_enabled_hooks.merge(
+                                                argument.operation,
+                                                &pool2_enabled_hooks[execution_round2],
+                                                execution_round2,
+                                            );
+                                            for hook2 in merged_hooks.iter() {
+                                                let hook2_info = self.registered_hooks.get(&hook2);
+                                                // Select only the registered hooks that allow
+                                                // recursion
+                                                match hook2_info {
+                                                    None => {},
+                                                    Some(hook2_info) => {
+                                                        if !hook2_info.allow_recursion || hook2_info.round == 0 {
+                                                            continue;
+                                                        }
+                                                        // Put them into an array for later use
+                                                        additional_operations_round[hook2_info.round].push(
+                                                            (argument.clone(), hook2_info.component_address)
+                                                        );
+                                                    },
+                                                }
+                                            }
+                                        }
+                                    },
+                                }
+                            }
+                        },
+                        1 | 2 => {
+                            for op in additional_operations_round[execution_round].iter_mut() {
+                                let (
+                                    temp_badge_bucket,
+                                    opt_bucket,
+                                    events,
+                                    _,
+                                ) = op.1.hook(
+                                    op.0.clone(),
+                                    hook_badge_bucket,
+                                );
+                                hook_badge_bucket = temp_badge_bucket;
+
+                                // An hook can generate any number of Pool events by calling Pool methods
+                                for event in events.iter() {
+                                    self.emit_pool_event(event.clone());
+                                }
+
+                                // An hook can return a Bucket for the user
+                                match opt_bucket {
+                                    None => {},
+                                    Some(bucket) => additional_buckets.push(bucket),
+                                }
+                            }
+                        },
+                        _ => {},
+                    }
                 }
 
-                let (temp_badge_bucket, bucket) = hook_address.unwrap().deref().hook(
-                    hook_argument.clone(),
-                    hook_badge_bucket,
-                );
-                hook_badge_bucket = temp_badge_bucket;
-
-                match bucket {
-                    None => {},
-                    Some(bucket) => additional_buckets.push(bucket),
+                // At the end of round 1 switch to the read only badge
+                if execution_round == 1 {
+                    self.hook_badge_vault.put(hook_badge_bucket);
+                    hook_badge_bucket = self.read_only_hook_badge_vault.take(dec!(1));
                 }
             }
 
-            self.hook_badge_vault.put(hook_badge_bucket);
+            self.read_only_hook_badge_vault.put(hook_badge_bucket);
 
             additional_buckets
         }
@@ -1043,7 +1166,7 @@ mod radix_pump {
             let buckets = match hook_argument {
                 None => None,
                 Some(hook_argument) => {
-                    let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+                    let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
                     drop(pool);
                     Some(
                         self.execute_hooks(
@@ -1126,7 +1249,7 @@ mod radix_pump {
 
                     self.emit_pool_event(event);
 
-                    let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+                    let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
                     drop(pool);
                     let buckets = self.execute_hooks(
                         &pool_enabled_hooks,
@@ -1144,23 +1267,55 @@ mod radix_pump {
             operations: Vec<String>,
             component_address: HookInterfaceScryptoStub,
         ) {
-            self.registered_hooks_operations.add_hook(&name, &operations);
+            let (round, allow_recursion) = component_address.get_hook_info();
+            assert!(
+                round < 3,
+                "Non existend round",
+            );
+            assert!(
+                round != 0 || !allow_recursion,
+                "Round 0 hooks can't be called recursively",
+            );
 
-            self.registered_hooks.insert(name, component_address);
+            self.registered_hooks_operations.add_hook(
+                &name,
+                &operations,
+                round
+            );
+
+            self.registered_hooks.insert(
+                name,
+                HookInfo {
+                    component_address: component_address,
+                    round: round,
+                    allow_recursion: allow_recursion,
+                },
+            );
         }
 
         pub fn unregister_hook(
             &mut self,
             name: String,
             operations: Option<Vec<String>>,
-        ) { 
-            match operations {
-                None => {
-                    self.registered_hooks.remove(&name);
-                },
+        ) {
+            let hook_info = self.registered_hooks.get(&name);
+            match hook_info {
+                None => {},
 
-                Some(operations) =>
-                    self.registered_hooks_operations.remove_hook(&name, &operations),
+                Some(hook_info) => {
+                    match operations {
+                        None => {
+                            self.registered_hooks.remove(&name);
+                        },
+
+                        Some(operations) =>
+                            self.registered_hooks_operations.remove_hook(
+                                &name,
+                                &operations,
+                                hook_info.round,
+                            ),
+                    }
+                },
             }
         }
 
@@ -1169,24 +1324,32 @@ mod radix_pump {
             name: String,
             operations: Vec<String>,
         ) {
-            let hook_address = self.registered_hooks.get(&name).expect("Unknown hook");
+            let hook_info = self.registered_hooks.get(&name).expect("Unknown hook");
 
             for operation in operations.iter() {
                 assert!(
-                    self.registered_hooks_operations.hook_exists(&name, &operation),
+                    self.registered_hooks_operations.hook_exists(
+                        &name,
+                        &operation,
+                        hook_info.round,
+                    ),
                     "Hook {} not registered for operation {}",
                     name,
                     operation,
                 );
             }
 
-            self.globally_enabled_hooks.add_hook(&name, &operations);
+            self.globally_enabled_hooks.add_hook(
+                &name,
+                &operations,
+                hook_info.round,
+            );
 
             Runtime::emit_event(
                 HookEnabledEvent {
                     resource_address: None,
                     hook_name: name,
-                    hook_address: *hook_address,
+                    hook_address: hook_info.component_address,
                     operations: operations,
                 }
             );
@@ -1197,15 +1360,19 @@ mod radix_pump {
             name: String,
             operations: Vec<String>,
         ) {
-            let hook_address = self.registered_hooks.get(&name).expect("Unknown hook");
+            let hook_info = self.registered_hooks.get(&name).expect("Unknown hook");
 
-            self.globally_enabled_hooks.remove_hook(&name, &operations);
+            self.globally_enabled_hooks.remove_hook(
+                &name,
+                &operations,
+                hook_info.round,
+            );
 
             Runtime::emit_event(
                 HookDisabledEvent {
                     resource_address: None,
                     hook_name: name,
-                    hook_address: *hook_address,
+                    hook_address: hook_info.component_address,
                     operations: operations,
                 }
             );
@@ -1217,11 +1384,15 @@ mod radix_pump {
             name: String,
             operations: Vec<String>,
         ) {
-            let hook_address = self.registered_hooks.get(&name).expect("Unknown hook");
+            let hook_info = self.registered_hooks.get(&name).expect("Unknown hook");
 
             for operation in operations.iter() {
                 assert!(
-                    self.registered_hooks_operations.hook_exists(&name, &operation),
+                    self.registered_hooks_operations.hook_exists(
+                        &name,
+                        &operation,
+                        hook_info.round,
+                    ),
                     "Hook {} not registered for operation {}",
                     name,
                     operation,
@@ -1230,13 +1401,17 @@ mod radix_pump {
 
             let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
 
-            self.pools.get_mut(&coin_address).unwrap().enabled_hooks.add_hook(&name, &operations);
+            self.pools.get_mut(&coin_address).unwrap().enabled_hooks.add_hook(
+                &name,
+                &operations,
+                hook_info.round,
+            );
             
             Runtime::emit_event(
                 HookEnabledEvent {
                     resource_address: Some(coin_address),
                     hook_name: name,
-                    hook_address: *hook_address,
+                    hook_address: hook_info.component_address,
                     operations: operations,
                 }
             );
@@ -1248,17 +1423,21 @@ mod radix_pump {
             name: String,
             operations: Vec<String>,
         ) {
-            let hook_address = self.registered_hooks.get(&name).expect("Unknown hook");
+            let hook_info = self.registered_hooks.get(&name).expect("Unknown hook");
 
             let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
 
-            self.pools.get_mut(&coin_address).unwrap().enabled_hooks.remove_hook(&name, &operations);
+            self.pools.get_mut(&coin_address).unwrap().enabled_hooks.remove_hook(
+                &name,
+                &operations,
+                hook_info.round,
+            );
 
             Runtime::emit_event(
                 HookDisabledEvent {
                     resource_address: Some(coin_address),
                     hook_name: name,
-                    hook_address: *hook_address,
+                    hook_address: hook_info.component_address,
                     operations: operations,
                 }
             );
@@ -1315,7 +1494,7 @@ mod radix_pump {
 
             self.emit_pool_event(event);
 
-            let pool_enabled_hooks = pool.enabled_hooks.get_hooks(hook_argument.operation);
+            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
             let buckets = self.execute_hooks(
                 &pool_enabled_hooks,
@@ -1345,11 +1524,11 @@ mod radix_pump {
 
             let pool_enabled_hooks_lose = match hook_argument_lose {
                 None => None,
-                Some(ref hook_argument) => Some(pool.enabled_hooks.get_hooks(hook_argument.operation)),
+                Some(ref hook_argument) => Some(pool.enabled_hooks.get_all_hooks(hook_argument.operation)),
             };
             let pool_enabled_hooks_win = match hook_argument_win {
                 None => None,
-                Some(ref hook_argument) => Some(pool.enabled_hooks.get_hooks(hook_argument.operation)),
+                Some(ref hook_argument) => Some(pool.enabled_hooks.get_all_hooks(hook_argument.operation)),
             };
 
             drop(pool);

@@ -1208,6 +1208,7 @@ mod pool {
                 },
                 flash_loan_nft_resource_address: None,
                 hooks_badge_resource_address: None,
+                read_only_hooks_badge_resource_address: None,
             }
         }
 

@@ -1,32 +1,47 @@
 use scrypto::prelude::*;
 use crate::common::*;
 
-pub type HookByName = KeyValueStore<String, HookInterfaceScryptoStub>;
+#[derive(ScryptoSbor)]
+pub struct HookInfo {
+    pub component_address: HookInterfaceScryptoStub,
+    pub round: HookExecutionRound,
+    pub allow_recursion: bool,
+}
+
+pub type HookByName = KeyValueStore<String, HookInfo>;
+
+pub type HooksPerOperationRound = KeyValueStore<HookableOperation, Vec<String>>;
 
 #[derive(ScryptoSbor)]
 pub struct HooksPerOperation {
-    kvs: KeyValueStore<HookableOperation, Vec<String>>,
+    kvs: Vec<HooksPerOperationRound>
 }
 
 impl HooksPerOperation {
     pub fn new() -> HooksPerOperation {
         Self {
-            kvs: KeyValueStore::new()
+            kvs: vec![
+                KeyValueStore::new(),
+                KeyValueStore::new(),
+                KeyValueStore::new(),
+            ],
         }
     }
+
 
     pub fn add_hook(
         &mut self,
         name: &String,
         operations: &Vec<String>,
+        execution_round: HookExecutionRound,
     ) {
         for o in operations.iter() {
             let operation = string_to_operation(o);
 
-            if self.kvs.get(&operation).is_none() {
-                self.kvs.insert(operation, vec![name.clone()]);
+            if self.kvs[execution_round].get(&operation).is_none() {
+                self.kvs[execution_round].insert(operation, vec![name.clone()]);
             } else {
-                let mut vec = self.kvs.get_mut(&operation).unwrap();
+                let mut vec = self.kvs[execution_round].get_mut(&operation).unwrap();
 
                 if !vec.iter().any(|x| *x == *name) {
                     vec.push(name.clone());
@@ -39,11 +54,12 @@ impl HooksPerOperation {
         &mut self,
         name: &String,
         operations: &Vec<String>,
+        execution_round: HookExecutionRound,
     ) {
         for o in operations.iter() {
             let operation = string_to_operation(o);
 
-            self.kvs.get_mut(&operation).expect("Operation not found").retain(|x| *x != *name);
+            self.kvs[execution_round].get_mut(&operation).expect("Operation not found").retain(|x| *x != *name);
         }
     }
 
@@ -51,10 +67,11 @@ impl HooksPerOperation {
         &self,
         name: &String,
         operation: &String,
+        execution_round: HookExecutionRound,
     ) -> bool {
         let operation = string_to_operation(&operation);
 
-        let vec = self.kvs.get(&operation);
+        let vec = self.kvs[execution_round].get(&operation);
         match vec {
             None => return false,
             Some(vec) => vec.iter().any(|x| *x == *name),
@@ -64,19 +81,39 @@ impl HooksPerOperation {
     pub fn get_hooks(
         &self,
         operation: HookableOperation,
+        execution_round: HookExecutionRound,
     ) -> Vec<String> {
-        match self.kvs.get(&operation) {
+        match self.kvs[execution_round].get(&operation) {
             None => vec![],
             Some(vec) => vec.to_vec(),
         }
+    }
+
+    pub fn get_all_hooks(
+        &self,
+        operation: HookableOperation,
+    ) -> Vec<Vec<String>> {
+        let mut vec_vec = vec![];
+
+        for execution_round in 0..3 {
+            vec_vec.push(
+                match self.kvs[execution_round].get(&operation) {
+                    None => vec![],
+                    Some(vec) => vec.to_vec(),
+                }
+            );
+        }
+
+        vec_vec
     }
 
     pub fn merge(
         &self,
         operation: HookableOperation,
         vec: &Vec<String>,
+        execution_round: HookExecutionRound,
     ) -> Vec<String> {
-        let mut merged_hooks = match self.kvs.get(&operation) {
+        let mut merged_hooks = match self.kvs[execution_round].get(&operation) {
             None => vec![],
             Some(v) => v.to_vec(),
         };
@@ -92,7 +129,6 @@ impl HooksPerOperation {
 
         merged_hooks
     }
-
 }
 
 pub fn string_to_operation(operation: &String) -> HookableOperation {

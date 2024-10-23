@@ -30,6 +30,7 @@ pub struct PoolInfo {
     pub coins_per_winning_ticket: Option<Decimal>,
     pub flash_loan_nft_resource_address: Option<ResourceAddress>,
     pub hooks_badge_resource_address: Option<ResourceAddress>,
+    pub read_only_hooks_badge_resource_address: Option<ResourceAddress>,
 }
 
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
@@ -58,7 +59,7 @@ pub enum HookableOperation {
     PostRedeemLousingTicket,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
 pub struct FairLaunchStartEvent {
     pub resource_address: ResourceAddress,
     pub price: Decimal,
@@ -70,7 +71,7 @@ pub struct FairLaunchStartEvent {
     pub flash_loan_pool_fee_percentage: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
 pub struct FairLaunchEndEvent {
     pub resource_address: ResourceAddress,
     pub creator_proceeds: Decimal,
@@ -79,7 +80,7 @@ pub struct FairLaunchEndEvent {
     pub coins_in_pool: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
 pub struct QuickLaunchEvent {
     pub resource_address: ResourceAddress,
     pub price: Decimal,
@@ -90,7 +91,7 @@ pub struct QuickLaunchEvent {
     pub flash_loan_pool_fee_percentage: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
 pub struct RandomLaunchStartEvent {
     pub resource_address: ResourceAddress,
     pub ticket_price: Decimal,
@@ -103,7 +104,7 @@ pub struct RandomLaunchStartEvent {
     pub flash_loan_pool_fee_percentage: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
 pub struct RandomLaunchEndEvent {
     pub resource_address: ResourceAddress,
     pub creator_proceeds: Decimal,
@@ -112,7 +113,7 @@ pub struct RandomLaunchEndEvent {
     pub coins_in_pool: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
 pub struct BuyEvent {
     pub resource_address: ResourceAddress,
     pub mode: PoolMode,
@@ -122,7 +123,7 @@ pub struct BuyEvent {
     pub fee_paid_to_the_pool: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
 pub struct SellEvent {
     pub resource_address: ResourceAddress,
     pub mode: PoolMode,
@@ -132,20 +133,20 @@ pub struct SellEvent {
     pub fee_paid_to_the_pool: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
 pub struct LiquidationEvent {
     pub resource_address: ResourceAddress,
     pub price: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
 pub struct FlashLoanEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
     pub fee_paid_to_the_pool: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
 pub struct BuyTicketEvent {
     pub resource_address: ResourceAddress,
     pub amount: u32,
@@ -155,7 +156,7 @@ pub struct BuyTicketEvent {
     pub fee_paid_to_the_pool: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
 pub struct FeeUpdateEvent {
     pub resource_address: ResourceAddress,
     pub buy_pool_fee_percentage: Decimal,
@@ -163,13 +164,13 @@ pub struct FeeUpdateEvent {
     pub flash_loan_pool_fee_percentage: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
 pub struct BurnEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
 }
 
-#[derive(ScryptoSbor)]
+#[derive(ScryptoSbor, Clone)]
 pub enum AnyPoolEvent {
     FairLaunchStartEvent(FairLaunchStartEvent),
     FairLaunchEndEvent(FairLaunchEndEvent),
@@ -201,15 +202,62 @@ pub struct HookArgument {
     pub price: Option<Decimal>,
 }
 
+// Hooks can be executed in three different rounds (0, 1 or 2)
+
+// Round 0 hooks can recursively trigger more round 1 and 2 hooks calls while interacting with a Pool.
+// A round 0 hook will never trigger the execution of another round 0 hook.
+
+// Round 1 hook are executed after all of the round 0 hooks are done.
+// If a round 1 hook returns one or more HookArgument, it is ignored: recursion is not happening.
+
+// Round 2 hooks are executed once round 1 is completed and are not allowed to perform any state changing
+// operation on the Pools.
+pub type HookExecutionRound = usize;
+
 define_interface! {
     Hook impl [ScryptoStub, Trait, ScryptoTestStub] {
+
+        // Hook component instantiation is not performed by RadixPump; you should take care of it.
+        // A hook component instantiation function should have a ResourceAddress parameter to set
+        // the badge that will be used by the proxy; you can know this ResourceAddress by querying
+        // the get_pool_info() method on the RadixPump component.
+        // - hooks_badge_resource_address for first and second round hooks, it can be used to
+        //   interact with any Pool component.
+        // - read_only_hooks_badge_resource_address for third round hooks
+
         fn hook(
-            &self,
+            &mut self,
+
+            // This struct contains information about what caused the hook to be called
             argument: HookArgument,
+
+            // This badge has two reasons:
+            // - ensure the hook that RadixPump is calling it
+            // - authenticate when calling a Pool method
             hook_badge_bucket: FungibleBucket,
         ) -> (
+            // Return back the hook_badge_bucket
             FungibleBucket,
-            Option<Bucket>
+
+            // Any coin the hook wants to send to the user
+            Option<Bucket>,
+
+            // If the hook called a Pool method and it returned an event struct, return it to the
+            // caller so it can be emitted
+            Vec<AnyPoolEvent>,
+
+            // A round 0 hook can also return informations about new hooks to be called
+            Vec<HookArgument>,
+        );
+
+        fn get_hook_info(&self) -> (
+            // Which round wants this hook be executed?
+            // Any number bigger than 2 will cause an exception when the hook is registered,
+            HookExecutionRound,
+
+            // Wheter other hooks can trigger or not the execution of this hook.
+            // For round 0 hooks this must be false.
+            bool,
         );
     }
 }

@@ -43,12 +43,14 @@ mod test_hook {
 
     impl HookInterfaceTrait for TestHook {
         fn hook(
-            &self,
+            &mut self,
             argument: HookArgument,
             hook_badge_bucket: FungibleBucket,
         ) -> (
             FungibleBucket,
-            Option<Bucket>
+            Option<Bucket>,
+            Vec<AnyPoolEvent>,
+            Vec<HookArgument>,
         ) {
 
             // Make sure the proxy component is the caller
@@ -57,8 +59,6 @@ mod test_hook {
                 hook_badge_bucket.amount() == dec!(1),
                 "Wrong badge",
             );
-
-            // You can then use hook_badge_bucket to authenticate towards a Pool component
 
             Runtime::emit_event(
                 TestHookEvent {
@@ -73,8 +73,12 @@ mod test_hook {
             (
                 hook_badge_bucket, // The hook_badge_bucket must always be returned!
                 Some(self.resource_manager.mint(1)),
+                vec![],
+                vec![],
             )
         }
+
+        fn get_hook_info(&self) -> (HookExecutionRound, bool) {(3, false)}
     }
 }
 

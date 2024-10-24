@@ -69,7 +69,7 @@ No one can retrieve pool fees, the paid base coins just get into the pool itself
 Hooks are external components authomatically called by RadixPump when certain operations are performed.  
 
 The component owner can make hooks available by calling the `register_hook` method, he must specify the operations this hook can be attached to.  
-The available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket` and `PostRedeemLousingTicket`. I avoided `Pre` hooks to prevent frontrunning and sandwitch attacks.  
+The available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket`, `PostRedeemLousingTicket`, `PostAddLiquidity` and `PostRemoveLiquidity`. I avoided `Pre` hooks to prevent frontrunning and sandwitch attacks.  
 
 Once an hook is registered the component owner can attach it to one or more operation globally (i.e. for all pools) via the `owner_enable_hook` method.
 A coin owner can attach a registered hook to operations happening on his coin.
@@ -748,7 +748,7 @@ CALL_METHOD
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<HOOK_NAME>` is the name that will be used to refer to this hook.  
-`<OPERATION>` is one of the operations the hooks can be attached to. Available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket` and `PostRedeemLousingTicket`.  
+`<OPERATION>` is one of the operations the hooks can be attached to. Available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket`, `PostRedeemLousingTicket`, `PostAddLiquidity` and `PostRemoveLiquidity`.  
 `<HOOK_ADDRESS>` is the component address of the hook.  
 
 ### unregister_hook

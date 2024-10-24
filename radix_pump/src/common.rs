@@ -21,6 +21,8 @@ pub struct PoolInfo {
     pub total_sell_fee_percentage: Decimal,
     pub total_flash_loan_fee_percentage: Decimal,
     pub pool_mode: PoolMode,
+    pub lp_resource_address: ResourceAddress,
+    pub coin_lp_ratio: Decimal,
     pub end_launch_time: Option<i64>,
     pub unlocking_time: Option<i64>,
     pub initial_locked_amount: Option<Decimal>,
@@ -57,6 +59,8 @@ pub enum HookableOperation {
     PostBuyTicket,
     PostRedeemWinningTicket,
     PostRedeemLousingTicket,
+    PostAddLiquidity,
+    PostRemoveLiquidity,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent, Clone)]
@@ -170,6 +174,18 @@ pub struct BurnEvent {
     pub amount: Decimal,
 }
 
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+pub struct AddLiquidityEvent {
+    pub resource_address: ResourceAddress,
+    pub amount: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+pub struct RemoveLiquidityEvent {
+    pub resource_address: ResourceAddress,
+    pub amount: Decimal,
+}
+
 #[derive(ScryptoSbor, Clone)]
 pub enum AnyPoolEvent {
     FairLaunchStartEvent(FairLaunchStartEvent),
@@ -184,12 +200,23 @@ pub enum AnyPoolEvent {
     BuyTicketEvent(BuyTicketEvent),
     FeeUpdateEvent(FeeUpdateEvent),
     BurnEvent(BurnEvent),
+    AddLiquidityEvent(AddLiquidityEvent),
+    RemoveLiquidityEvent(RemoveLiquidityEvent),
 }
 
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
 pub struct TicketData {
     pub coin_resource_address: ResourceAddress,
     pub buy_date: Instant,
+}
+
+#[derive(Debug, ScryptoSbor, NonFungibleData)]
+pub struct LPData {
+    pub deposited_coins: Decimal,
+    pub deposited_base_coins: Decimal,
+    pub lp_share: Decimal,
+    pub date: Instant,
+    pub coin_resource_address: ResourceAddress,
 }
 
 #[derive(ScryptoSbor, Clone)]
@@ -200,6 +227,7 @@ pub struct HookArgument {
     pub amount: Option<Decimal>,
     pub mode: PoolMode,
     pub price: Option<Decimal>,
+    pub ids: Vec<u64>,
 }
 
 // Hooks can be executed in three different rounds (0, 1 or 2)
@@ -221,9 +249,9 @@ define_interface! {
         // A hook component instantiation function should have a ResourceAddress parameter to set
         // the badge that will be used by the proxy; you can know this ResourceAddress by querying
         // the get_pool_info() method on the RadixPump component.
-        // - hooks_badge_resource_address for first and second round hooks, it can be used to
+        // - hooks_badge_resource_address for rounds 0 and 1 hooks, it can be used to
         //   interact with any Pool component.
-        // - read_only_hooks_badge_resource_address for third round hooks
+        // - read_only_hooks_badge_resource_address for round 2 hooks
 
         fn hook(
             &mut self,

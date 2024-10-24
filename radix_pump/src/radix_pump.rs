@@ -56,6 +56,8 @@ struct PoolStruct {
     BuyTicketEvent,
     FeeUpdateEvent,
     BurnEvent,
+    AddLiquidityEvent,
+    RemoveLiquidityEvent,
     HookEnabledEvent,
     HookDisabledEvent,
 )]
@@ -96,6 +98,7 @@ mod radix_pump {
             burn => PUBLIC;
             buy_ticket => PUBLIC;
             redeem_ticket => PUBLIC;
+            add_liquidity => PUBLIC;
         }
     }
 
@@ -129,6 +132,7 @@ mod radix_pump {
         burn => Free;
         buy_ticket => Usd(dec!("0.005"));
         redeem_ticket => Free;
+        add_liquidity => Free;
     }
 
     struct RadixPump {
@@ -638,6 +642,8 @@ mod radix_pump {
                 AnyPoolEvent::BuyTicketEvent(event) => Runtime::emit_event(event),
                 AnyPoolEvent::FeeUpdateEvent(event) => Runtime::emit_event(event),
                 AnyPoolEvent::BurnEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::AddLiquidityEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::RemoveLiquidityEvent(event) => Runtime::emit_event(event),
             }
         }
 
@@ -1554,6 +1560,38 @@ mod radix_pump {
             };
 
             (base_coin_bucket, coin_bucket, lose_buckets, win_buckets)
+        }
+
+        pub fn add_liquidity(
+            &mut self,
+            base_coin_bucket: Bucket,
+            coin_bucket: Bucket,
+        ) -> (
+            Bucket,
+            Bucket,
+            Vec<Bucket>,
+        ) {
+            let coin_address = coin_bucket.resource_address();
+            let pool = self.pools.get(&coin_address).expect("Coin not found");
+
+            let (lp_bucket, remainings_bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.add_liquidity(
+                    base_coin_bucket,
+                    coin_bucket,
+                )
+            );
+
+            self.emit_pool_event(event);
+
+            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
+            drop(pool);
+            let buckets = self.execute_hooks(
+                &pool_enabled_hooks,
+                &hook_argument,
+            );
+
+            (lp_bucket, remainings_bucket, buckets)
         }
     }
 }

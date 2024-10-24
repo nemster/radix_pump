@@ -284,6 +284,10 @@ The coin creator also receives a number of coins as if he bought them from the p
 
 A `QuickLaunchEvent` event is issued. It contains the resource address of the new coin, the initial coin price, the amount held by the creator and the number of coins currently in the pool.  
 
+### new_fair_launch
+
+TODO
+
 ### buy
 
 A user can buy an existing coin calling this method and paying with base coins.  
@@ -580,19 +584,26 @@ CALL_METHOD
 `<COIN_ADDRESS>` is the resource address of the coin the user wants to receve information about.  
 
 The method returns a `PoolInfo` struct containing these information:  
-- the amount of base coins in the coin pool.  
+- the address of the pool component.  
+- the amount of base coins in the pool.  
 - the amount of coins in the pool.  
 - the price of the last buy or sell operation.  
 - total (component owner + pool) buy fee percentage.  
 - total (component owner + pool) sell fee percentage.  
 - total (component owner + pool) flash loan fee percentage.  
-- the pool mode (WaitingForLaunch, Launching, Normal or Liquidation).  
-- the end of the launch period (FairLaunch only)
-- the end of the lock period (FairLaunch only)
-- the creator allocation initially locked (FairLaunch only)
-- the currently claimed creator allocation  (FairLaunch only)
+- the pool mode (WaitingForLaunch, Launching, TerminatingLaunch, Normal or Liquidation).  
+- the resource address of the liquidity NFT of the pool.  
+- the number of coins currently corresponding to 1 `lp_share` in the liquidity NFT.  
+- the end of the launch period (FairLaunch and RandomLaunch only).  
+- the end of the lock period (FairLaunch and RandomLaunch only).  
+- the creator allocation initially locked (FairLaunch and RandomLaunch only).  
+- the currently claimed creator allocation  (FairLaunch and RandomLaunch only).  
+- the cost of a ticket (RandomLaunch only).  
+- the number of winning tickets (RandomLaunch only).  
+- how many coins a winning ticket will receive after launch (RandomLaunch only).  
 - the resource address of the transient NFT used in flash loans (it's the same for all of the coins).  
-- the respurce address of the badge the component uses to authenticate against hooks.  
+- the resource address of the badge the component uses to authenticate against hooks and hooks can use to authenticate against the pools.  
+- the resource address of the badge the component uses to authenticate against read only hooks.  
 
 ### update_time_limits
 
@@ -956,7 +967,7 @@ CALL_METHOD
 `<BASE_COIN_AMOUNT>` is the base coin amount to buy the tickets.
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.
 `<COIN_ADDRESS>` is the resource address of the random launched coin the user wants to buy the tickets for.
-`<AMOUNT>` is the number of coins the user wants to buy.
+`<AMOUNT>` is the number of tickets the user wants to buy.
 
 ### redeem_ticket
 
@@ -984,10 +995,92 @@ CALL_METHOD
     Expression("ENTIRE_WORKTOP")
 ;
 ```
+
 `<ACCOUNT_ADDRESS>` is the account of the user redeeming the tickets.  
 `<TICKET_ADDRESS>` is the resource address of the tickets.  
 `<TICKET_ID>` is one of the numeric ids of the tickets to redeem.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+
+### add_liquidity
+
+This method allows a user to add liquidity to a pool.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw"
+    Address("<BASE_COIN_ADDRESS>")
+    Decimal("<BASE_COIN_AMOUNT>")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("<BASELCOIN_ADDRESS>")
+    Bucket("base_coin_bucket")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw"
+    Address("<COIN_ADDRESS>")
+    Decimal("<COIN_AMOUNT>")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("<COIN_ADDRESS>")
+    Bucket("coin_bucket")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "add_liquidity"
+    Bucket("base_coin_bucket")
+    Bucket("coin_bucket")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account of the user adding liquidity to the pool.  
+`<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
+`<BASE_COIN_AMOUNT>` is the base coin amount to add to the pool.  
+`<COIN_ADDRESS>` is the resource address of the coin of the pool.  
+`<COIN_AMOUNT>` is the coin amount to add to the pool.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+
+The user receives an NFT whose non fungible data contain the amount of base coins and coins added to the pool, the current date and time, the resource address of the coin and informations needed by the pool itsels.  
+
+### remove_liquidity
+
+This method allows a user to remove the liquidity he previously deposited in a pool.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw_non_fungibles"
+    Address("<LP_NFT_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<LP_NFT_ID>#"), NonFungibleLocalId("#<LP_NFT_ID>#")...)
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("<LP_NFT_ADDRESS>")
+    Bucket("lp_bucket")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "remove_liquidity"
+    Bucket("lp_bucket")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account of the user removing the liquidity.  
+`<LP_NFT_ADDRESS>` is the resource address of the liquidity NFT.  
+`<LP_NFT_ID>` is one of the numeric ids of the liquidity NFTs to return.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+
+This method returns both base coins and coins in normal mode, while return only base coins in liquidation mode.  
 
 ## Special thanks to:
 

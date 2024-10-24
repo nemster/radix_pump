@@ -99,6 +99,7 @@ mod radix_pump {
             buy_ticket => PUBLIC;
             redeem_ticket => PUBLIC;
             add_liquidity => PUBLIC;
+            remove_liquidity => PUBLIC;
         }
     }
 
@@ -133,6 +134,7 @@ mod radix_pump {
         buy_ticket => Usd(dec!("0.005"));
         redeem_ticket => Free;
         add_liquidity => Free;
+        remove_liquidity => Free;
     }
 
     struct RadixPump {
@@ -1592,6 +1594,35 @@ mod radix_pump {
             );
 
             (lp_bucket, remainings_bucket, buckets)
+        }
+
+        pub fn remove_liquidity(
+            &mut self,
+            lp_bucket: Bucket,
+        ) -> (
+            Bucket,
+            Option<Bucket>,
+            Vec<Bucket>,
+        ) {
+            let lp_id = &lp_bucket.as_non_fungible().non_fungible_local_ids()[0];
+            let lp_data = ResourceManager::from_address(lp_bucket.resource_address()).get_non_fungible_data::<LPData>(lp_id);
+            let pool = self.pools.get(&lp_data.coin_resource_address).expect("Coin not found");
+
+            let (base_coin_bucket, coin_bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.remove_liquidity(lp_bucket)
+            );
+
+            self.emit_pool_event(event);
+
+            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
+            drop(pool);
+            let buckets = self.execute_hooks(
+                &pool_enabled_hooks,
+                &hook_argument,
+            );
+
+            (base_coin_bucket, coin_bucket, buckets)
         }
     }
 }

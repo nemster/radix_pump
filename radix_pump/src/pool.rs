@@ -94,7 +94,7 @@ mod pool {
             random_callback => PUBLIC;
             random_on_error => PUBLIC;
             add_liquidity => restrict_to: [proxy, hook];
-            //TODO: remove_liquidity => restrict_to: [proxy, hook];
+            remove_liquidity => restrict_to: [proxy, hook];
         }
     }
 
@@ -116,6 +116,7 @@ mod pool {
         total_users_lp: Decimal,
         lp_resource_manager: ResourceManager,
         last_lp_id: u64,
+        base_coins_to_lp_providers: Decimal,
     }
 
     impl Pool {
@@ -295,6 +296,7 @@ mod pool {
                     component_address,
                 ),
                 last_lp_id: 1,
+                base_coins_to_lp_providers: Decimal::ZERO,
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
@@ -750,6 +752,7 @@ mod pool {
                     component_address,
                 ),
                 last_lp_id: 1,
+                base_coins_to_lp_providers: Decimal::ZERO,
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
@@ -937,6 +940,7 @@ mod pool {
                     component_address,
                 ),
                 last_lp_id: 1,
+                base_coins_to_lp_providers: Decimal::ZERO,
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
@@ -948,35 +952,6 @@ mod pool {
             .globalize();
 
             (pool, resource_manager.address())
-        }
-
-        fn custom_costant_product(
-            &mut self,
-        ) -> (
-            PreciseDecimal, // Costant product
-            PreciseDecimal, // Ignored coins
-        ) {
-            let base_coin_amount = PreciseDecimal::from(self.base_coin_vault.amount());
-            let coin_amount = PreciseDecimal::from(self.coin_vault.amount());
-
-            match self.launch {
-                LaunchType::Quick(ref mut quick_launch) => {
-                    if quick_launch.ignored_coins == Decimal::ZERO {
-                        (coin_amount * base_coin_amount, PreciseDecimal::ZERO)
-                    } else {
-                        let expected_coin_amount = base_coin_amount / PreciseDecimal::from(self.last_price);
-                        let ignored_coins = max(coin_amount - expected_coin_amount, PreciseDecimal::ZERO);
-
-                        quick_launch.ignored_coins = ignored_coins.checked_truncate(RoundingMode::ToZero).unwrap();
-
-                        (
-                            min(expected_coin_amount, coin_amount) * base_coin_amount,
-                            ignored_coins,
-                        )
-                    }
-                },
-                _ => (coin_amount * base_coin_amount, PreciseDecimal::ZERO),
-            }
         }
 
         pub fn buy(
@@ -991,21 +966,22 @@ mod pool {
 
             match self.mode {
                 PoolMode::Normal => {
-                    let (constant_product, ignored_coins) = self.custom_costant_product();
+                    let constant_product = PreciseDecimal::from(self.base_coin_vault.amount()) * PreciseDecimal::from(self.coins_in_pool());
 
-                    let coins_in_pool = (
-                        ignored_coins +
+                    let coins_in_pool_new = (
                         constant_product /
                         PreciseDecimal::from(self.base_coin_vault.amount() + base_coin_bucket.amount() - fee)
                     )
                     .checked_truncate(RoundingMode::ToZero)
                     .unwrap();
 
-                    let coin_amount_bought = self.coin_vault.amount() - coins_in_pool;
+                    let coin_amount_bought = self.coins_in_pool() - coins_in_pool_new;
 
                     self.last_price = base_coin_bucket.amount() / coin_amount_bought;
 
                     self.base_coin_vault.put(base_coin_bucket);
+
+                    self.update_ignored_coins();
 
                     (
                         self.coin_vault.take(coin_amount_bought),
@@ -1086,18 +1062,18 @@ mod pool {
         ) {
             match self.mode {
                 PoolMode::Normal => {
-                    let (constant_product, ignored_coins) = self.custom_costant_product();
+                    let constant_product = PreciseDecimal::from(self.base_coin_vault.amount()) * PreciseDecimal::from(self.coins_in_pool());
 
                     let coin_bucket_amount = coin_bucket.amount();
 
-                    let base_coins_in_vault = (
+                    let base_coins_in_vault_new = (
                         constant_product / 
-                        (PreciseDecimal::from(coin_bucket_amount + self.coin_vault.amount()) - ignored_coins)
+                        PreciseDecimal::from(coin_bucket_amount + self.coins_in_pool())
                     )
                     .checked_truncate(RoundingMode::ToZero)
                     .unwrap();
 
-                    let bought_base_coins = self.base_coin_vault.amount() - base_coins_in_vault;
+                    let bought_base_coins = self.base_coin_vault.amount() - base_coins_in_vault_new;
                     let fee_amount = bought_base_coins * self.sell_pool_fee_percentage / dec!(100);
                     let base_coin_bucket = self.base_coin_vault.take_advanced(
                         bought_base_coins - fee_amount,
@@ -1107,6 +1083,8 @@ mod pool {
                     self.last_price = base_coin_bucket.amount() / coin_bucket_amount;
 
                     self.coin_vault.put(coin_bucket);
+
+                    self.update_ignored_coins();
 
                     (
                         base_coin_bucket,
@@ -1188,9 +1166,9 @@ mod pool {
             // The factor 2 exist because we have to repay both coins and base coins provided.
             // total_users_lp / total_lp represents the share of the coin in the pool that belogs to
             // LP providers,
-            let coin_equivalent_lp = 2 * self.coins_in_pool() * self.total_users_lp / self.total_lp;
+            let coin_equivalent_lp: PreciseDecimal = 2 * PreciseDecimal::from(self.coins_in_pool()) * self.total_users_lp / self.total_lp;
 
-            let coin_circulating_supply = match &self.launch {
+            let coin_circulating_supply: PreciseDecimal = match &self.launch {
                 LaunchType::Random(random_launch) =>
                     coin_supply +
                     coin_equivalent_lp -
@@ -1208,7 +1186,11 @@ mod pool {
             };
 
             // We have to repay the coin circulating supply with the base coins in the pool
-            self.last_price = self.base_coin_vault.amount() / coin_circulating_supply;
+            self.last_price = (self.base_coin_vault.amount() / coin_circulating_supply)
+                .checked_truncate(RoundingMode::ToZero).unwrap();
+
+            self.base_coins_to_lp_providers = (coin_equivalent_lp * self.base_coin_vault.amount() / coin_circulating_supply)
+                .checked_truncate(RoundingMode::ToZero).unwrap();
 
             (
                 PoolMode::Liquidation,
@@ -1254,6 +1236,8 @@ mod pool {
 
             self.base_coin_vault.put(base_coin_bucket);
             self.coin_vault.return_loan(coin_bucket);
+
+            self.update_ignored_coins();
 
             (
                 HookArgument { 
@@ -1704,6 +1688,8 @@ mod pool {
             self.base_coin_vault.put(base_coin_bucket);
             self.coin_vault.put(coin_bucket);
 
+            self.update_ignored_coins();
+
             (
                 lp_bucket,
                 return_bucket,
@@ -1725,12 +1711,107 @@ mod pool {
             )
         }
 
+        pub fn remove_liquidity(
+            &mut self,
+            lp_bucket: Bucket,
+        ) -> (
+            Bucket,
+            Option<Bucket>,
+            HookArgument,
+            AnyPoolEvent,
+        ) {
+            assert!(
+                lp_bucket.resource_address() == self.lp_resource_manager.address(),
+                "Unknown LP token",
+            );
+
+            let mut lp_share = Decimal::ZERO;
+            let mut ids: Vec<u64> = vec![];
+            for lp_id in lp_bucket.as_non_fungible().non_fungible_local_ids().iter() {
+                match &lp_id {
+                    NonFungibleLocalId::Integer(lp_id) => {
+                        ids.push(lp_id.value());
+                    },
+                    _ => Runtime::panic("WTF".to_string()),
+                }
+
+                lp_share += self.lp_resource_manager.get_non_fungible_data::<LPData>(&lp_id).lp_share;
+            }
+            let user_share = PreciseDecimal::from(lp_share) / PreciseDecimal::from(self.total_lp);
+
+            let (base_coin_bucket, coin_bucket, amount) = match &self.mode {
+                PoolMode::Normal => {
+                    let amount = (user_share * self.coin_vault.amount())
+                    .checked_truncate(RoundingMode::ToZero).unwrap();
+
+                    (
+                        self.base_coin_vault.take_advanced(
+                            (user_share * self.base_coin_vault.amount()).checked_truncate(RoundingMode::ToZero).unwrap(),
+                            WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                        ),
+                        Some(self.coin_vault.take(amount)),
+                        amount,
+                    )
+                },
+                PoolMode::Liquidation => (
+                    self.base_coin_vault.take_advanced(
+                        self.base_coins_to_lp_providers * (lp_share / self.total_users_lp),
+                        WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                    ),
+                    None,
+                    Decimal::ZERO,
+                ),
+                _ => Runtime::panic("Not allowed in this mode".to_string()),
+            };
+
+            lp_bucket.burn();
+
+            self.total_lp -= lp_share;
+            self.total_users_lp -= lp_share;
+
+            // Needed?
+            self.update_ignored_coins();
+
+            (
+                base_coin_bucket,
+                coin_bucket,
+                HookArgument {
+                    component: Runtime::global_address().into(),
+                    coin_address: self.coin_vault.resource_address(),
+                    operation: HookableOperation::PostRemoveLiquidity,
+                    amount: Some(amount),
+                    mode: self.mode,
+                    price: Some(self.last_price),
+                    ids: ids,
+                },
+                AnyPoolEvent::RemoveLiquidityEvent(
+                    RemoveLiquidityEvent {
+                        resource_address: self.coin_vault.resource_address(),
+                        amount: amount,
+                    }
+                ),
+            )
+        }
+
         // Returns the non ignored number of coins in the pool
         fn coins_in_pool(&self) -> Decimal {
             match &self.launch {
                 LaunchType::Quick(quick_launch) =>
                     self.coin_vault.amount() - quick_launch.ignored_coins,
                 _ => self.coin_vault.amount(),
+            }
+        }
+
+        fn update_ignored_coins(&mut self) {
+            match self.launch {
+                LaunchType::Quick(ref mut quick_launch) =>
+                    if quick_launch.ignored_coins > Decimal::ZERO {
+                        quick_launch.ignored_coins = max(
+                            self.coin_vault.amount() - self.base_coin_vault.amount() / self.last_price,
+                            Decimal::ZERO,
+                        );
+                    }
+                 _ => {}
             }
         }
     }

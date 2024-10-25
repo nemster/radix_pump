@@ -279,10 +279,6 @@ mod radix_pump {
                 burner => rule!(deny_all);
                 burner_updater => rule!(require(owner_badge_address));
             ))
-            .deposit_roles(deposit_roles!(
-                depositor => rule!(require(global_caller(component_address)));
-                depositor_updater => rule!(require(owner_badge_address));
-            ))
             .mint_initial_supply(dec![1]);
 
             let read_only_hook_badge_bucket = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
@@ -306,10 +302,6 @@ mod radix_pump {
                 burner => rule!(deny_all);
                 burner_updater => rule!(require(owner_badge_address));
             ))
-            .deposit_roles(deposit_roles!(
-                depositor => rule!(require(global_caller(component_address)));
-                depositor_updater => rule!(require(owner_badge_address));
-            ))  
             .mint_initial_supply(dec![1]);
 
             let proxy_badge_bucket = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
@@ -620,7 +612,7 @@ mod radix_pump {
             );
 
             let buckets = self.execute_hooks(
-                &vec![],
+                &vec![vec![],vec![],vec![]],
                 &hook_argument,
             );
 
@@ -1009,6 +1001,7 @@ mod radix_pump {
             let mut additional_buckets: Vec<Bucket> = vec![];
 
             let mut hook_badge_bucket = self.hook_badge_vault.take(dec!(1));
+            let mut the_badge_i_gave_you = hook_badge_bucket.resource_address();
 
             let mut additional_operations_round: Vec<Vec<(HookArgument, HookInterfaceScryptoStub)>> = vec![vec![],vec![],vec![]];
 
@@ -1038,6 +1031,10 @@ mod radix_pump {
                     ) = hook_info.unwrap().deref_mut().component_address.hook(
                         hook_argument.clone(),
                         hook_badge_bucket,
+                    );
+                    assert!(
+                        temp_badge_bucket.resource_address() == the_badge_i_gave_you && temp_badge_bucket.amount() == Decimal::ONE,
+                        "Hey hook, where's my badge gone?",
                     );
                     hook_badge_bucket = temp_badge_bucket;
 
@@ -1105,6 +1102,10 @@ mod radix_pump {
                                     op.0.clone(),
                                     hook_badge_bucket,
                                 );
+                                assert!(
+                                    temp_badge_bucket.resource_address() == the_badge_i_gave_you && temp_badge_bucket.amount() == Decimal::ONE,
+                                    "Hey hook, where's my badge gone?",
+                                );
                                 hook_badge_bucket = temp_badge_bucket;
 
                                 // An hook can generate any number of Pool events by calling Pool methods
@@ -1127,6 +1128,7 @@ mod radix_pump {
                 if execution_round == 1 {
                     self.hook_badge_vault.put(hook_badge_bucket);
                     hook_badge_bucket = self.read_only_hook_badge_vault.take(dec!(1));
+                    the_badge_i_gave_you = hook_badge_bucket.resource_address();
                 }
             }
 
@@ -1278,7 +1280,7 @@ mod radix_pump {
             let (round, allow_recursion) = component_address.get_hook_info();
             assert!(
                 round < 3,
-                "Non existend round",
+                "Non existent round",
             );
             assert!(
                 round != 0 || !allow_recursion,

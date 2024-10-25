@@ -26,7 +26,8 @@ increase_in_wallet() {
 get_pool_info () {
   echo PoolInfo for $1
   resim call-method $radix_pump_component get_pool_info $1 |
-    grep -A 50 '├─ Tuple(' | (
+    grep -A 100 '├─ Tuple(' | (
+      read x
       read x
       read base_coin_amount
       echo base_coin_amount: $(echo $base_coin_amount | cut -d '"' -f 2)
@@ -48,6 +49,9 @@ get_pool_info () {
         'Enum::[3],') echo pool_mode: Normal ;;
         'Enum::[4],') echo pool_mode: Liquidation ;;
       esac
+      read lp_resource_address
+      read coin_lp_ratio
+      echo coin_lp_ratio : $coin_lp_ratio
       read end_launch_time
       if [ "$end_launch_time" = "Enum::[1](" ]
       then
@@ -140,8 +144,9 @@ resim call-function ${radix_pump_package} RadixPump new ${owner_badge} ${base_co
 export radix_pump_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 export creator_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export flash_loan_nft=$(grep 'Resource:' $OUTPUTFILE | head -n 2 | tail -n 1 | cut -d ' ' -f 3)
-export hooks_badge=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)
-echo -e "RadixPump component: ${radix_pump_component}\nCreator badge: ${creator_badge}\nFlash loan transient NFT: ${flash_loan_nft}\nHooks authentication badge: ${hooks_badge}"
+export hooks_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 3 | tail -n 1 | cut -d ' ' -f 3)
+export ro_hooks_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 4 | tail -n 1 | cut -d ' ' -f 3)
+echo -e "RadixPump component: ${radix_pump_component}\nCreator badge: ${creator_badge}\nFlash loan transient NFT: ${flash_loan_nft}\nHooks authentication badge: ${hooks_badge}\nRead only hooks authentication badge: ${ro_hooks_badge}"
 
 echo
 export forbidden_symbols='"XRD"'
@@ -159,14 +164,14 @@ export hooks_package=$(grep 'Success! New Package:' $OUTPUTFILE | cut -d ' ' -f 
 echo Hooks package: ${hooks_package}
 
 echo
-resim call-function ${hooks_package} TestHook new ${owner_badge} ${hooks_badge} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+resim call-function ${hooks_package} TestHook new ${owner_badge} ${ro_hooks_badge} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export test_hook_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 export test_hook_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 echo -e "TestHook component: ${test_hook_component}\nTestHook coin: ${test_hook_coin}"
 
 echo
 export hook_name=TestHook
-export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch", "PostTerminateRandomLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan", "PostBuyTicket", "PostRedeemWinningTicket", "PostRedeemLousingTicket"'
+export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch", "PostTerminateRandomLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan", "PostBuyTicket", "PostRedeemWinningTicket", "PostRedeemLousingTicket", "PostAddLiquidity", "PostRemoveLiquidity"'
 resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
 
@@ -193,11 +198,13 @@ export buy_pool_fee=0.1
 export sell_pool_fee=0.1
 export flash_loan_pool_fee=0.1
 resim call-method ${radix_pump_component} new_quick_launch ${base_coin}:${minimum_deposit} $symbol $name $icon "$description" "${info_url}" $supply $price $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export quick_launched_coin=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
+export quick_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
+export lp_quick=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
 export quick_launched_coin_received=$(grep -A 1 "ResAddr: ${quick_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
 echo Quick launched ${quick_launched_coin}, received $(increase_in_wallet ${quick_launched_coin})
 echo Creator badge id: ${creator_badge_id}
+echo LP token: ${lp_quick}
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
 
 echo
@@ -313,7 +320,7 @@ export buy_pool_fee=5
 export sell_pool_fee=0.1
 export flash_loan_pool_fee=0.1
 resim call-method ${radix_pump_component} new_fair_launch $symbol $name $icon "$description" "${info_url}" $price $creator_locked_percentage $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export fair_launched_coin=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
+export fair_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
 echo Fair launched ${fair_launched_coin}, received $(increase_in_wallet ${fair_launched_coin})
 echo Creator badge id: ${creator_badge_id}
@@ -462,17 +469,21 @@ export icon=https://img.evients.com/images/f480x480/e7/b5/09/51/e7b50951be9149fe
 export description="Random launched coin"
 export info_url=""
 export ticket_price=10
-export winning_tickets=10
+export winning_tickets=30
 export coins_per_winning_ticket=10
 export buy_pool_fee=5
 export sell_pool_fee=0.1
 export flash_loan_pool_fee=0.1
 resim call-method ${radix_pump_component} new_random_launch $symbol $name $icon "$description" "${info_url}" $ticket_price $winning_tickets $coins_per_winning_ticket $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export random_ticket=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
-export random_launched_coin=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)
+export random_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 2 | tail -n 1 | cut -d ' ' -f 3)
+export random_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 3 | tail -n 1 | cut -d ' ' -f 3)
+export lp_random=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
 echo Random launch coin created $random_launched_coin
+echo LP token: $lp_random
 echo ticket: $random_ticket
+echo Random badge: $random_badge
 
 echo
 get_pool_info ${random_launched_coin}
@@ -501,9 +512,17 @@ echo Failed attempt to buy one ticket without paying ticket_price + total_buy_fe
 
 echo
 update_wallet_amounts
-export bought_tickets=50
-export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${bought_tickets} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee}))" | bc)
-resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} $amount ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export bought_tickets1=40
+export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${bought_tickets1} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee}))" | bc)
+resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets1} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Bought $(increase_in_wallet ${random_ticket}) tickets for $payment $base_coin
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+
+echo
+update_wallet_amounts
+export bought_tickets2=30
+export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${bought_tickets2} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee}))" | bc)
+resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets2} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${random_ticket}) tickets for $payment $base_coin
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
 
@@ -539,7 +558,7 @@ export enabled_operations='"PostRedeemLousingTicket"'
 resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${random_launched_coin}
 
-resim show | grep -A ${bought_tickets} ${random_ticket} | grep -v ${random_ticket} | while read x ticket_id
+resim show | grep -A $((${bought_tickets1} + ${bought_tickets2})) ${random_ticket} | grep -v ${random_ticket} | while read x ticket_id
 do
   echo
   update_wallet_amounts

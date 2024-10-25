@@ -221,7 +221,7 @@ pub struct LPData {
 
 #[derive(ScryptoSbor, Clone)]
 pub struct HookArgument {
-    pub component: Global<Pool>,
+//TODO: why this doesn't work?    pub component: Global<Pool>,
     pub coin_address: ResourceAddress,
     pub operation: HookableOperation,
     pub amount: Option<Decimal>,

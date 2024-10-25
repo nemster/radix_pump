@@ -78,7 +78,7 @@ mod test_hook {
             )
         }
 
-        fn get_hook_info(&self) -> (HookExecutionRound, bool) {(3, false)}
+        fn get_hook_info(&self) -> (HookExecutionRound, bool) {(2, false)}
     }
 }
 

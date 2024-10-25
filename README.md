@@ -670,7 +670,7 @@ The `deposit_batch` at the end is generally not needed but some hook may cause i
 
 ### terminate_launch
 
-The creator of a coin can call this method to end the launching phase of his fair launched coin, it can't happen before the time specified in the `launch` call.
+The creator of a coin can call this method to end the launching phase of his fair or random launched coin, it can't happen before the time specified in the `launch` call.
 
 ```
 CALL_METHOD
@@ -701,9 +701,11 @@ CALL_METHOD
 
 This call returns the proceeds of the launch sale and starts the unlocking period.  
 
+For random launched coins it is highly probable that this method must be called more than once, in different transactions, waiting a few seconds between them. Only when the creator gets the proceeds of the sale the pool has effectively reached the normal mode.  
+
 ### unlock
 
-Allows the creator of a fair launched coin to withdraw his previously locked coins.  
+Allows the creator of a fair or random launched coin to withdraw his previously locked coins.  
 This method can only be called in Normal mode. If a pool gets into Liquidation mode it will never be possible to withdraw the creator's coin.  
 
 ```

@@ -100,6 +100,7 @@ mod radix_pump {
             redeem_ticket => PUBLIC;
             add_liquidity => PUBLIC;
             remove_liquidity => PUBLIC;
+            swap => PUBLIC;
         }
     }
 
@@ -135,6 +136,7 @@ mod radix_pump {
         redeem_ticket => Free;
         add_liquidity => Free;
         remove_liquidity => Free;
+        swap => Usd(dec!("0.005"));
     }
 
     struct RadixPump {
@@ -1625,6 +1627,53 @@ mod radix_pump {
             );
 
             (base_coin_bucket, coin_bucket, buckets)
+        }
+
+        pub fn swap(
+            &mut self,
+            coin1_bucket: Bucket,
+            coin2_address: ResourceAddress,
+        ) -> (Bucket, Vec<Bucket>, Vec<Bucket>) {
+            let coin1_address = coin1_bucket.resource_address();
+            let pool1 = self.pools.get(&coin1_address).expect("Coin1 not found");
+
+            let pool2 = self.pools.get(&coin2_address).expect("Coin2 not found");
+
+            let (coin2_bucket, hook_argument1, hook_argument2, event1, event2) = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || {
+                    let (mut base_coin_bucket, hook_argument1, event1) = pool1.component_address.sell(coin1_bucket);
+
+                    self.fee_vault.put(
+                        base_coin_bucket.take_advanced(
+                            base_coin_bucket.amount() * self.buy_sell_fee_percentage / dec!(100),
+                            WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                        )
+                    );
+
+                    let (coin2_bucket, hook_argument2, event2) = pool2.component_address.buy(base_coin_bucket);
+
+                    (coin2_bucket, hook_argument1, hook_argument2, event1, event2)
+                }
+            );
+
+            self.emit_pool_event(event1);
+            self.emit_pool_event(event2);
+
+            let pool1_enabled_hooks = pool1.enabled_hooks.get_all_hooks(hook_argument1.operation);
+            let pool2_enabled_hooks = pool2.enabled_hooks.get_all_hooks(hook_argument2.operation);
+            drop(pool1);
+            drop(pool2);
+            let buckets1 = self.execute_hooks(
+                &pool1_enabled_hooks,
+                &hook_argument1,
+            );
+            let buckets2 = self.execute_hooks(
+                &pool2_enabled_hooks,
+                &hook_argument2,
+            );
+
+            (coin2_bucket, buckets1, buckets2)
         }
     }
 }

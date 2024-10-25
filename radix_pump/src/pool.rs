@@ -1335,8 +1335,17 @@ mod pool {
             flash_loan_pool_fee_percentage: Decimal,
         ) -> AnyPoolEvent {
             assert!(
-                self.mode == PoolMode::WaitingForLaunch || self.mode == PoolMode::Normal,
+                self.mode == PoolMode::WaitingForLaunch ||
+                self.mode == PoolMode::TerminatingLaunch ||
+                self.mode == PoolMode::Normal,
                 "Not allowed in this mode",
+            );
+
+            assert!(
+                buy_pool_fee_percentage <= self.buy_pool_fee_percentage &&
+                sell_pool_fee_percentage <= self.sell_pool_fee_percentage &&
+                flash_loan_pool_fee_percentage <= self.flash_loan_pool_fee_percentage,
+                "You can't increase pool fees",
             );
 
             self.buy_pool_fee_percentage = buy_pool_fee_percentage;
@@ -1561,14 +1570,16 @@ mod pool {
 
                             for ticket_id in ticket_bucket.as_non_fungible().non_fungible_local_ids().iter() {
                                 match &ticket_id {
-                                    NonFungibleLocalId::Integer(ticket_id) =>
-                                        if self.extracted_tickets.get(&ticket_id.value()).is_some()  && random_launch.extract_winners {
+                                    NonFungibleLocalId::Integer(ticket_id) => {
+                                        let extracted = self.extracted_tickets.get(&ticket_id.value()).is_some();
+                                        if extracted && random_launch.extract_winners || !extracted && !random_launch.extract_winners {
                                             coin_bucket.put(random_launch.winners_vault.take(random_launch.coins_per_winning_ticket));
                                             winners.push(ticket_id.value());
                                         } else {
                                             base_coin_bucket.put(random_launch.refunds_vault.take(random_launch.ticket_price));
                                             losers.push(ticket_id.value());
-                                        },
+                                        }
+                                    },
                                     _ => Runtime::panic("WTF".to_string()),
                                 }
                             }

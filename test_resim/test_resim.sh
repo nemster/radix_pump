@@ -51,7 +51,7 @@ get_pool_info () {
       esac
       read lp_resource_address
       read coin_lp_ratio
-      echo coin_lp_ratio : $coin_lp_ratio
+      echo coin_lp_ratio : $(echo $coin_lp_ratio | cut -d '"' -f 2)
       read end_launch_time
       if [ "$end_launch_time" = "Enum::[1](" ]
       then

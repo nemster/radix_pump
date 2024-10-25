@@ -64,6 +64,8 @@ The component owner can set the upper limit for buy/sell and flash loan fees; by
 
 No one can retrieve pool fees, the paid base coins just get into the pool itself. The effect is a coin price increase.  
 
+Once a pool is created it is not possible to increase its fees but only reduce them.  
+
 ## Hooks
 
 Hooks are external components authomatically called by RadixPump when certain operations are performed.  
@@ -567,6 +569,8 @@ CALL_METHOD
 `<BUY_POOL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the pool. The upper limit for this parameter can be changed by the componet owner.  
 `<SELL_POOL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the pool. The upper limit for this parameter can be changed by the componet owner.  
 `<FLASH_LOAN_POOL_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the pool. The upper limit for this parameter can be changed by the componet owner.  
+
+Fees can never be increased, you can only reduce them.  
 
 ### get_pool_info
 
@@ -1083,6 +1087,40 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 
 This method returns both base coins and coins in normal mode, while return only base coins in liquidation mode.  
+
+### swap
+
+This method allows a user to swap one coin for another paying less fees than sell + buy methods.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw"
+    Address("<COIN1_ADDRESS>")
+    Decimal("<COIN1_AMOUNT>")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("<COIN1_ADDRESS>") 
+    Bucket("coin_bucket")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "swap"
+    Bucket("coin1_bucket")
+    Address("<COIN2_ADDRESS>")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+; 
+```
+
+`<ACCOUNT_ADDRESS>` is the account of the user swapping the coins.
+`<COIN1_ADDRESS>` is the coin the user wants to sell.
+`<COIN1_AMOUNT>` is the coin amount the user wants to sell.
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.
+`<COIN2_ADDRESS>` is the coin the user wants to buy.
 
 ## Special thanks to:
 

@@ -1,0 +1,64 @@
+CALL_METHOD
+    Address("${account}")
+    "lock_fee"
+    Decimal("5")
+;
+CALL_METHOD
+    Address("${radix_pump_component}") 
+    "get_flash_loan" 
+    Address("${coin}")
+    Decimal("${loan_amount}")
+;
+CALL_METHOD
+    Address("${account}") 
+    "withdraw"
+    Address("${coin}")
+    Decimal("${sell_amount}")
+;
+TAKE_FROM_WORKTOP
+    Address("${coin}")
+    Decimal("${sell_amount}")
+    Bucket("coin_bucket") 
+;
+CALL_METHOD
+    Address("${radix_pump_component}")
+    "sell"
+    Bucket("coin_bucket") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("${flash_loan_nft}")
+    Bucket("transient_nft_bucket")
+;
+TAKE_FROM_WORKTOP
+    Address("${base_coin}")
+    Decimal("${fee}")
+    Bucket("base_coin_bucket")
+;
+TAKE_FROM_WORKTOP
+    Address("${coin}")
+    Decimal("${loan_amount}")
+    Bucket("coin_bucket2")
+;
+CALL_METHOD
+    Address("${radix_pump_component}")
+    "return_flash_loan"
+    Bucket("transient_nft_bucket")
+    Bucket("base_coin_bucket")
+    Bucket("coin_bucket2")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("${base_coin}") 
+    Bucket("base_coin_bucket2")
+;
+CALL_METHOD
+    Address("${radix_pump_component}")
+    "buy"
+    Address("${coin}")
+    Bucket("base_coin_bucket2")
+;
+CALL_METHOD
+    Address("${account}")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+

@@ -598,6 +598,34 @@ get_pool_info ${random_launched_coin}
 
 echo
 update_wallet_amounts
+export coin=${random_launched_coin}
+export loan_amount=9
+export sell_amount=9
+export fee=0.047368421052631578 # loan_amount x last_price x total_flash_loan_fee_percentage / 100
+echo resim run flash_loan_attack_sell.rtm
+resim run flash_loan_attack_sell.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo "Tried to manipulate price via flash loan: get flash loan -> sell when the pool has few coins (so the price should be high) -> return loan -> buy"
+echo "${random_launched_coin} variation in wallet: $(increase_in_wallet ${random_launched_coin}) (if negative the attack failed)"
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+update_wallet_amounts
+export coin=${random_launched_coin}
+export coin_amount=9
+export base_coin_amount=12.788588423 # coin_amount x last_price
+export loan_amount=9
+export lp=${lp_random}
+export fee=0.047368421052631578 # loan_amount x last_price x total_flash_loan_fee_percentage / 100
+echo resim run flash_loan_attack_lp.rtm
+resim run flash_loan_attack_lp.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo "Tried to steal liquidity via flash loan: get flash loan -> add liquidity when the pool has few coins (so the share should be high) -> return loan -> withdraw liquidity"
+echo "${random_launched_coin} variation in wallet: $(increase_in_wallet ${random_launched_coin})"
+echo "${base_coin} variation in wallet: $(increase_in_wallet ${base_coin}) (if both are negative the attack failed)"
+
+echo
+update_wallet_amounts
 export sell_amount=2
 echo resim call-method ${radix_pump_component} swap ${random_launched_coin}:${sell_amount} ${quick_launched_coin}
 resim call-method ${radix_pump_component} swap ${random_launched_coin}:${sell_amount} ${quick_launched_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )

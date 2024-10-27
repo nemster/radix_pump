@@ -1348,6 +1348,13 @@ mod pool {
                 "You can't increase pool fees",
             );
 
+            assert!(
+                buy_pool_fee_percentage < self.buy_pool_fee_percentage ||
+                sell_pool_fee_percentage < self.sell_pool_fee_percentage ||
+                flash_loan_pool_fee_percentage < self.flash_loan_pool_fee_percentage,
+                "No changes made",
+            );
+
             self.buy_pool_fee_percentage = buy_pool_fee_percentage;
             self.sell_pool_fee_percentage = sell_pool_fee_percentage;
             self.flash_loan_pool_fee_percentage = flash_loan_pool_fee_percentage;

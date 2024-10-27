@@ -75,8 +75,6 @@ mod radix_pump {
             new_fair_launch => PUBLIC;
             new_quick_launch => PUBLIC;
             new_random_launch => PUBLIC;
-            buy => PUBLIC;
-            sell => PUBLIC;
             get_fees => restrict_to: [OWNER];
             update_fees => restrict_to: [OWNER];
             owner_set_liquidation_mode => restrict_to: [OWNER];
@@ -111,8 +109,6 @@ mod radix_pump {
         new_fair_launch => Usd(dec!("0.05"));
         new_quick_launch => Usd(dec!("0.05"));
         new_random_launch => Usd(dec!("0.05"));
-        buy => Usd(dec!("0.005"));
-        sell => Usd(dec!("0.005"));
         get_fees => Free;
         update_fees => Free;
         owner_set_liquidation_mode => Free;
@@ -641,73 +637,6 @@ mod radix_pump {
                 AnyPoolEvent::AddLiquidityEvent(event) => Runtime::emit_event(event),
                 AnyPoolEvent::RemoveLiquidityEvent(event) => Runtime::emit_event(event),
             }
-        }
-
-        pub fn buy(
-            &mut self,
-            coin_address: ResourceAddress,
-            mut base_coin_bucket: Bucket,
-        ) -> (Bucket, Vec<Bucket>) {
-            assert!(
-                base_coin_bucket.resource_address() == self.base_coin_address,
-                "Wrong base coin",
-            );
-
-            self.fee_vault.put(
-                base_coin_bucket.take_advanced(
-                    base_coin_bucket.amount() * self.buy_sell_fee_percentage / dec!(100),
-                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
-                )
-            );
-
-            let pool = self.pools.get(&coin_address).expect("Coin not found");
-
-            let (coin_bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
-                1,
-                || pool.component_address.buy(base_coin_bucket)
-            );
-
-            self.emit_pool_event(event);
-
-            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
-            drop(pool);
-            let buckets = self.execute_hooks(
-                &pool_enabled_hooks,
-                &hook_argument,
-            );
-
-            (coin_bucket, buckets)
-        }
-
-        pub fn sell(
-            &mut self,
-            coin_bucket: Bucket,
-        ) -> (Bucket, Vec<Bucket>) {
-            let coin_address = coin_bucket.resource_address();
-            let pool = self.pools.get(&coin_address).expect("Coin not found");
-
-            let (mut base_coin_bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
-                1,
-                || pool.component_address.sell(coin_bucket)
-            );
-
-            self.fee_vault.put(
-                base_coin_bucket.take_advanced(
-                    base_coin_bucket.amount() * self.buy_sell_fee_percentage / dec!(100),
-                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
-                )
-            );
-
-            self.emit_pool_event(event);
-
-            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
-            drop(pool);
-            let buckets = self.execute_hooks(
-                &pool_enabled_hooks,
-                &hook_argument,
-            );
-
-            (base_coin_bucket, buckets)
         }
 
         pub fn get_fees(
@@ -1634,44 +1563,68 @@ mod radix_pump {
             coin1_bucket: Bucket,
             coin2_address: ResourceAddress,
         ) -> (Bucket, Vec<Bucket>, Vec<Bucket>) {
+            assert!(
+                coin1_bucket.amount() > Decimal::ZERO,
+                "Coin1 bucket should not be empty",
+            );
             let coin1_address = coin1_bucket.resource_address();
-            let pool1 = self.pools.get(&coin1_address).expect("Coin1 not found");
-
-            let pool2 = self.pools.get(&coin2_address).expect("Coin2 not found");
-
-            let (coin2_bucket, hook_argument1, hook_argument2, event1, event2) = self.proxy_badge_vault.authorize_with_amount(
-                1,
-                || {
-                    let (mut base_coin_bucket, hook_argument1, event1) = pool1.component_address.sell(coin1_bucket);
-
-                    self.fee_vault.put(
-                        base_coin_bucket.take_advanced(
-                            base_coin_bucket.amount() * self.buy_sell_fee_percentage / dec!(100),
-                            WithdrawStrategy::Rounded(RoundingMode::ToZero),
-                        )
-                    );
-
-                    let (coin2_bucket, hook_argument2, event2) = pool2.component_address.buy(base_coin_bucket);
-
-                    (coin2_bucket, hook_argument1, hook_argument2, event1, event2)
-                }
+            assert!(
+                coin1_address != coin2_address,
+                "Can't swap a coin with itself",
             );
 
-            self.emit_pool_event(event1);
-            self.emit_pool_event(event2);
+            let mut base_coin_bucket: Bucket;
+            let mut buckets1: Vec<Bucket> = vec![];
 
-            let pool1_enabled_hooks = pool1.enabled_hooks.get_all_hooks(hook_argument1.operation);
-            let pool2_enabled_hooks = pool2.enabled_hooks.get_all_hooks(hook_argument2.operation);
-            drop(pool1);
-            drop(pool2);
-            let buckets1 = self.execute_hooks(
-                &pool1_enabled_hooks,
-                &hook_argument1,
+            if coin1_address == self.base_coin_address {
+                base_coin_bucket = coin1_bucket;
+            } else {
+                let pool = self.pools.get(&coin1_address).expect("Coin1 not found");
+                let (bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
+                    1,
+                    || pool.component_address.sell(coin1_bucket)
+                );
+                base_coin_bucket = bucket;
+
+                self.emit_pool_event(event);
+
+                let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
+                drop(pool);
+                buckets1 = self.execute_hooks(
+                    &pool_enabled_hooks,
+                    &hook_argument,
+                );
+            }
+ 
+            self.fee_vault.put(
+                base_coin_bucket.take_advanced(
+                    base_coin_bucket.amount() * self.buy_sell_fee_percentage / dec!(100),
+                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                )
             );
-            let buckets2 = self.execute_hooks(
-                &pool2_enabled_hooks,
-                &hook_argument2,
-            );
+
+            let coin2_bucket: Bucket;
+            let mut buckets2: Vec<Bucket> = vec![];
+
+            if coin2_address == self.base_coin_address {
+                coin2_bucket = base_coin_bucket;
+            } else {
+                let pool = self.pools.get(&coin2_address).expect("Coin2 not found");
+                let (bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
+                    1,
+                    || pool.component_address.buy(base_coin_bucket)
+                );
+                coin2_bucket = bucket;
+
+                self.emit_pool_event(event);
+
+                let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
+                drop(pool);
+                buckets2 = self.execute_hooks(
+                    &pool_enabled_hooks,
+                    &hook_argument,
+                );
+            }
 
             (coin2_bucket, buckets1, buckets2)
         }

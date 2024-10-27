@@ -22,8 +22,9 @@ TAKE_FROM_WORKTOP
 ;
 CALL_METHOD
     Address("${radix_pump_component}")
-    "sell"
+    "swap"
     Bucket("coin_bucket") 
+    Address("${base_coin}")
 ;
 TAKE_ALL_FROM_WORKTOP
     Address("${flash_loan_nft}")
@@ -52,9 +53,9 @@ TAKE_ALL_FROM_WORKTOP
 ;
 CALL_METHOD
     Address("${radix_pump_component}")
-    "buy"
-    Address("${coin}")
+    "swap"
     Bucket("base_coin_bucket2")
+    Address("${coin}")
 ;
 CALL_METHOD
     Address("${account}")

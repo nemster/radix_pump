@@ -202,9 +202,9 @@ CALL_METHOD
 `<COIN_INFO_URL>` is the URL of the website of the coin (it can be an empty string).  
 `<LAUNCH_PRICE>` is the price that will be constant during the launch phase.  
 `<CREATOR_LOCKED_PERCENTAGE>` percentage of minted coins reserved to the creator (initially locked).  
-`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
-`<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
-`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
+`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can sey a upper limit to this parameter (by default 10%).  
+`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
 
 The name and symbol of the coin are reserved no coin is minted at this stage.  
 
@@ -268,9 +268,9 @@ CALL_METHOD
 `<COIN_INFO_URL>` is the URL of the website of the coin (it can be an empty string).  
 `<COIN_SUPPLY>` is the initial supply of the new coin. It is not be possible to incease the supply later but it can be reduced by burning coins.  
 `<PRICE>` is the initial price of the coin. The creator himself receives coins bought at this price with his base coin deposit.  
-`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
-`<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
-`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
+`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
 
 The coin creator receives a creator badge NFT that shows in the wallet a numeric ID, the resource address, name and symbol of the new created coin.  
 This badge allows the creator to:  
@@ -286,88 +286,42 @@ The coin creator also receives a number of coins as if he bought them from the p
 
 A `QuickLaunchEvent` event is issued. It contains the resource address of the new coin, the initial coin price, the amount held by the creator and the number of coins currently in the pool.  
 
-### new_fair_launch
+### new_random_launch
 
-TODO
+This method creates a new coin whose initial supply will be distributed to part of the buyers of a ticket.  
 
-### buy
-
-A user can buy an existing coin calling this method and paying with base coins.  
-A Radix network transaction that calls this method adds a very small royalty that goes to the package owner (about $0.005 in XRD).  
-It is not allowed to buy coins in liquidation mode.
-
-```
-CALL_METHOD
-    Address("<ACCOUNT_ADDRESS>")
-    "withdraw"
-    Address("<BASE_COIN_ADDRESS>")
-    Decimal("<BASE_COIN_AMOUNT>")
-;
-TAKE_ALL_FROM_WORKTOP
-    Address("<BASE_COIN_ADDRESS>")
-    Bucket("base_coin_bucket")
-;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
-    "buy"
-    Address("<COIN_ADDRESS>")
-    Bucket("base_coin_bucket")
+    "new_random_launch"
+    "<COIN_SYMBOL>"
+    "<COIN_NAME>"
+    "<COIN_ICON_URL>"
+    "<COIN_DESCRIPTION>"
+    "<COIN_INFO_URL>"
+    Decimal("<TICKET_PRICE>")
+    <WINNING_TICKETS>u32
+    Decimal("<COINS_PER_WINNING_TICKET>")
+    Decimal("<BUY_POOL_FEE_PERCENTAGE>")
+    Decimal("<SELL_POOL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_POOL_FEE_PERCENTAGE>")
 ;
-CALL_METHOD
-    Address("<ACCOUNT_ADDRESS>")
-    "deposit_batch"
-    Expression("ENTIRE_WORKTOP")
-;
-```
 
-`<ACCOUNT_ADDRESS>` is the account of the user buying the coin.  
-`<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
-`<BASE_COIN_AMOUNT>` is the base coin amount to buy the coin. A percentage of `<BUY_SELL_FEE_PERCENTAGE>` of this amount is credited to the component owner who can withdraw it later.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
-`<COIN_ADDRESS>` is the resource address of the coin the user wants to buy.  
+`<COIN_SYMBOL>` is the symbol to assign to the new coin. This is converted to uppercase and checked against all of the previously created coins' symbols and all of the symbols forbidden by the component owner.  
+`<COIN_NAME>` is the name to assign to the new coin. This is checked against all of the previously created coins' names and all of the names forbidden by the component owner.  
+`<COIN_ICON_URL>` is the URL of the image to assign as icon to the new coin; it must be a valid URL.  
+`<COIN_DESCRIPTION>` is a descriptive text that is added to the coin metadata (it can be an empty string).  
+`<COIN_INFO_URL>` is the URL of the website of the coin (it can be an empty string).  
+`<TICKET_PRICE>` is the price (in base coins) of a ticket.  
+`<WINNING_TICKETS>` how many winning tickets will be randomply extracted.  
+`<COINS_PER_WINNING_TICKET>` how many coins a winning ticket will receive.  
+`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can sey a upper limit to this parameter (by default 10%).  
+`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
 
-This method returns a bucket of the requested coin.
-
-A `BuyEvent` event is issued. It contains the resource address of the bought coin, the pool mode (Launching or Normal), the bought amount, the new price, the number of coins currently in the pool and the fees paid to the pool.  
-
-### sell
-
-A user can sell coins using this method to receive base coins back.  
-A Radix network transaction that calls this method adds a very small royalty that goes to the package owner (about $0.005 in XRD).  
-It is not allowed to sell coins in launching mode.
-
-```
-CALL_METHOD
-    Address("<ACCOUNT_ADDRESS>")
-    "withdraw"
-    Address("<COIN_ADDRESS>")
-    Decimal("<COIN_AMOUNT>")
-;
-TAKE_ALL_FROM_WORKTOP
-    Address("<COIN_ADDRESS>")
-    Bucket("coin_bucket")
-;
-CALL_METHOD
-    Address("<COMPONENT_ADDRESS>")
-    "sell"
-    Bucket("coin_bucket")
-;
-CALL_METHOD
-    Address("<ACCOUNT_ADDRESS>")
-    "deposit_batch"
-    Expression("ENTIRE_WORKTOP")
-;
-```
-
-`<ACCOUNT_ADDRESS>` is the account of the user selling the coin.  
-`<COIN_ADDRESS>` is the coin the user wants to sell.  
-`<BASE_COIN_AMOUNT>` is the coin amount the user wants to sell.  
-`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
-
-This method returns a bucket of base coin.
-A percentage of `<BUY_SELL_FEE_PERCENTAGE>` is subtracted from the proceeds of coin sales and is credited to the component owner who can withdraw it later.  
-
-A `SellEvent` event is issued. It contains the resource address of the sold coin, the pool mode (Normal or Liquidation), the sold amount, the new price, the number of coins currently in the pool and the fees paid to the pool.  
+The ticket sale starts when the creator calls the `launch` method and ends when he calls the `terminate_launch` for the first time.  
+The coin creator will get the coins corresponding to a winning ticket but these coins have a time based lock (see `unlock` method).  
+Another winning ticket equivalent is used to initialise the pool, so the total supply is (`<WINNING_TICKETS>` + 2) * `<COINS_PER_WINNING_TICKET>`.  
 
 ### get_fees
 
@@ -572,6 +526,8 @@ CALL_METHOD
 
 Fees can never be increased, you can only reduce them.  
 
+A `FeeUpdateEvent` event is issued.  
+
 ### get_pool_info
 
 This method can be useful for third parties code that needs to interact with a RadixPump component.  
@@ -636,7 +592,7 @@ CALL_METHOD
 
 ### launch
 
-The creator of a coin can call this method to start the launching phase of his fair launched coin.  
+The creator of a coin can call this method to start the launching phase of his fair or random launched coin (quick launch doesn't need it).  
 The minimum possible values for the arguments of this method depends on the values the component owner specified in `update_time_limits`.
 
 ```
@@ -672,6 +628,8 @@ CALL_METHOD
 
 The `deposit_batch` at the end is generally not needed but some hook may cause it to be needed.
 
+Depending on the launch type this method emits a `FairLaunchStartEvent` or a `RandomLaunchStartEvent` event.  
+
 ### terminate_launch
 
 The creator of a coin can call this method to end the launching phase of his fair or random launched coin, it can't happen before the time specified in the `launch` call.
@@ -705,7 +663,9 @@ CALL_METHOD
 
 This call returns the proceeds of the launch sale and starts the unlocking period.  
 
-For random launched coins it is highly probable that this method must be called more than once, in different transactions, waiting a few seconds between them. Only when the creator gets the proceeds of the sale the pool has effectively reached the normal mode.  
+For random launched coins this method must be called more than once, in different transactions, waiting a few seconds between them. Only when the creator gets the proceeds of the sale the pool has effectively reached the normal mode and all of the winners have been extracted.  
+
+Depending on the launch type this method emits a `FairLaunchEndEvent` or a `RandomLaunchEndEvent` (only the last call).  
 
 ### unlock
 
@@ -939,6 +899,10 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<AMOUNT>` is the maximum amount of coins the creator wants to burn. The actual amount depends on the number of currently ignored coins too.  
 
+Is is not possible to burn more than the currently ignored coins in the pool.  
+
+This method emits a `BurnEvent`.  
+
 ### buy_ticket
 
 This method allows to buy one or more tickets during a random launch.
@@ -974,6 +938,8 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.
 `<COIN_ADDRESS>` is the resource address of the random launched coin the user wants to buy the tickets for.
 `<AMOUNT>` is the number of tickets the user wants to buy.
+
+This method emits a `BuyTicketEvent` event.  
 
 ### redeem_ticket
 
@@ -1054,6 +1020,8 @@ CALL_METHOD
 
 The user receives an NFT whose non fungible data contain the amount of base coins and coins added to the pool, the current date and time, the resource address of the coin and informations needed by the pool itsels.  
 
+An `AddLiquidityEvent` is issued.  
+
 ### remove_liquidity
 
 This method allows a user to remove the liquidity he previously deposited in a pool.  
@@ -1088,9 +1056,11 @@ CALL_METHOD
 
 This method returns both base coins and coins in normal mode, while return only base coins in liquidation mode.  
 
+A `RemoveLiquidityEvent` is issued.  
+
 ### swap
 
-This method allows a user to swap one coin for another paying less fees than sell + buy methods.  
+This method allows a user to buy and sell coins for base boins or swap one coin for another.  
 
 ```
 CALL_METHOD
@@ -1121,6 +1091,8 @@ CALL_METHOD
 `<COIN1_AMOUNT>` is the coin amount the user wants to sell.
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.
 `<COIN2_ADDRESS>` is the coin the user wants to buy.
+
+Depending on the coins, a `BuyEvent` and/or a `SellEvent`event is issued. It contains the resource address of the bought coin, the pool mode, the bought or sold amount, the new price, the number of coins currently in the pool and the fees paid to the pool.  
 
 ## Special thanks to:
 

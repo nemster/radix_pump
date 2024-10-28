@@ -38,11 +38,12 @@ pub struct PoolInfo {
 
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
 pub struct CreatorData {
-    pub id: u64,
     pub coin_resource_address: ResourceAddress,
     pub coin_name: String,
     pub coin_symbol: String,
     pub creation_date: Instant,
+    pub lp_token_address: ResourceAddress,
+    pub key_image_url: Url,
     #[mutable]
     pub pool_mode: PoolMode,
 }

@@ -249,7 +249,11 @@ mod pool {
             flash_loan_pool_fee_percentage: Decimal,
             coin_creator_badge_rule: AccessRuleNode,
             base_coin_address: ResourceAddress,
-        ) -> (Global<Pool>, ResourceAddress) {
+        ) -> (
+            Global<Pool>,
+            ResourceAddress,
+            ResourceAddress,
+        ) {
             let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
 
             let resource_manager = Pool::start_resource_manager_creation(
@@ -269,6 +273,14 @@ mod pool {
                 minter_updater => rule!(require(global_caller(component_address)));
             ))
             .create_with_no_initial_supply();
+
+            let lp_resource_manager = Pool::lp_resource_manager(
+                coin_name,
+                UncheckedUrl::of(coin_icon_url),
+                coin_creator_badge_rule,
+                owner_badge_address,
+                component_address,
+            );
 
             let pool = Self {
                 base_coin_vault: Vault::new(base_coin_address),
@@ -290,15 +302,9 @@ mod pool {
                     }
                 ),
                 extracted_tickets: KeyValueStore::new(),
+                lp_resource_manager : lp_resource_manager,
                 total_lp: Decimal::ZERO,
                 total_users_lp: Decimal::ZERO,
-                lp_resource_manager: Pool::lp_resource_manager(
-                    coin_name,
-                    UncheckedUrl::of(coin_icon_url),
-                    coin_creator_badge_rule,
-                    owner_badge_address,
-                    component_address,
-                ),
                 last_lp_id: 0,
                 base_coins_to_lp_providers: Decimal::ZERO,
             }
@@ -311,7 +317,7 @@ mod pool {
             .with_address(address_reservation)
             .globalize();
 
-            (pool, resource_manager.address())
+            (pool, resource_manager.address(), lp_resource_manager.address())
         }
 
         pub fn launch(
@@ -682,10 +688,21 @@ mod pool {
             sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee_percentage: Decimal,
             coin_creator_badge_rule: AccessRuleNode,
-        ) -> Global<Pool> {
+        ) -> (
+            Global<Pool>,
+            ResourceAddress,
+        ) {
             let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
 
-            Self {
+            let lp_resource_manager = Pool::lp_resource_manager(
+                coin_name,
+                coin_icon_url,
+                coin_creator_badge_rule,
+                owner_badge_address,
+                component_address,
+            );
+
+            let pool = Self {
                 base_coin_vault: Vault::new(base_coin_address),
                 coin_vault: LoanSafeVault::new(coin_address),
                 mode: PoolMode::Uninitialised,
@@ -697,13 +714,7 @@ mod pool {
                 extracted_tickets: KeyValueStore::new(),
                 total_lp: Decimal::ZERO,
                 total_users_lp: Decimal::ZERO,
-                lp_resource_manager: Pool::lp_resource_manager(
-                    coin_name,
-                    coin_icon_url,
-                    coin_creator_badge_rule,
-                    owner_badge_address,
-                    component_address,
-                ),
+                lp_resource_manager: lp_resource_manager,
                 last_lp_id: 0,
                 base_coins_to_lp_providers: Decimal::ZERO,
             }
@@ -714,7 +725,9 @@ mod pool {
                 hook => rule!(require(hook_badge_address));
             ))
             .with_address(address_reservation)
-            .globalize()
+            .globalize();
+
+            (pool, lp_resource_manager.address())
         }
 
         pub fn new_quick_launch(
@@ -737,7 +750,8 @@ mod pool {
             Global<Pool>,
             Bucket,
             HookArgument,
-            AnyPoolEvent
+            AnyPoolEvent,
+            ResourceAddress,
         ) {
             let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
 
@@ -783,6 +797,14 @@ mod pool {
 
             let total_lp = coin_bucket.amount() - ignored_coins;
 
+            let lp_resource_manager = Pool::lp_resource_manager(
+                coin_name,
+                UncheckedUrl::of(coin_icon_url),
+                coin_creator_badge_rule,
+                owner_badge_address,
+                component_address,
+            );
+
             let pool = Self {
                 base_coin_vault: Vault::with_bucket(base_coin_bucket),
                 coin_vault: LoanSafeVault::with_bucket(coin_bucket.into()),
@@ -799,13 +821,7 @@ mod pool {
                 extracted_tickets: KeyValueStore::new(),
                 total_lp: total_lp,
                 total_users_lp: Decimal::ZERO,
-                lp_resource_manager: Pool::lp_resource_manager(
-                    coin_name,
-                    UncheckedUrl::of(coin_icon_url),
-                    coin_creator_badge_rule,
-                    owner_badge_address,
-                    component_address,
-                ),
+                lp_resource_manager: lp_resource_manager,
                 last_lp_id: 0,
                 base_coins_to_lp_providers: Decimal::ZERO,
             }
@@ -840,7 +856,8 @@ mod pool {
                         sell_pool_fee_percentage: sell_pool_fee_percentage,
                         flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
                     }
-                )
+                ),
+                lp_resource_manager.address(),
             )
         }
 
@@ -861,7 +878,11 @@ mod pool {
             flash_loan_pool_fee_percentage: Decimal,
             coin_creator_badge_rule: AccessRuleNode,
             base_coin_address: ResourceAddress,
-        ) -> (Global<Pool>, ResourceAddress) {
+        ) -> (
+            Global<Pool>,
+            ResourceAddress,
+            ResourceAddress,
+        ) {
             let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
 
             let ticket_resource_manager = ResourceBuilder::new_integer_non_fungible::<TicketData>(
@@ -957,6 +978,14 @@ mod pool {
             ))
             .create_with_no_initial_supply();
 
+            let lp_resource_manager = Pool::lp_resource_manager(
+                coin_name,
+                UncheckedUrl::of(coin_icon_url),
+                coin_creator_badge_rule,
+                owner_badge_address,
+                component_address,
+            );
+
             let pool = Pool {
                 base_coin_vault: Vault::new(base_coin_address),
                 coin_vault: LoanSafeVault::new(resource_manager.address()),
@@ -988,13 +1017,7 @@ mod pool {
                 extracted_tickets: KeyValueStore::new(),
                 total_lp: Decimal::ZERO,
                 total_users_lp: Decimal::ZERO,
-                lp_resource_manager: Pool::lp_resource_manager(
-                    coin_name,
-                    UncheckedUrl::of(coin_icon_url),
-                    coin_creator_badge_rule,
-                    owner_badge_address,
-                    component_address,
-                ),
+                lp_resource_manager: lp_resource_manager,
                 last_lp_id: 1,
                 base_coins_to_lp_providers: Decimal::ZERO,
             }
@@ -1007,7 +1030,7 @@ mod pool {
             .with_address(address_reservation)
             .globalize();
 
-            (pool, resource_manager.address())
+            (pool, resource_manager.address(), lp_resource_manager.address())
         }
 
         pub fn buy(

@@ -452,13 +452,13 @@ mod radix_pump {
             (coin_symbol, coin_name, coin_icon_url, coin_info_url) =
                 self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
 
-            let (pool, coin_resource_address) = Pool::new_random_launch(
+            let (pool, coin_resource_address, lp_resource_address) = Pool::new_random_launch(
                 self.owner_badge_address,
                 self.proxy_badge_vault.resource_address(),
                 self.hook_badge_vault.resource_address(),
                 coin_symbol.clone(),
                 coin_name.clone(),
-                coin_icon_url,
+                coin_icon_url.clone(),
                 coin_description,
                 coin_info_url,
                 ticket_price,
@@ -483,6 +483,8 @@ mod radix_pump {
                 coin_resource_address,
                 coin_name,
                 coin_symbol,
+                lp_resource_address,
+                UncheckedUrl::of(coin_icon_url),
                 PoolMode::WaitingForLaunch,
             )
         }
@@ -505,13 +507,13 @@ mod radix_pump {
             (coin_symbol, coin_name, coin_icon_url, coin_info_url) =
                 self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
 
-            let (pool, coin_resource_address) = Pool::new_fair_launch(
+            let (pool, coin_resource_address, lp_resource_address) = Pool::new_fair_launch(
                 self.owner_badge_address,
                 self.proxy_badge_vault.resource_address(),
                 self.hook_badge_vault.resource_address(),
                 coin_symbol.clone(),
                 coin_name.clone(),
-                coin_icon_url,
+                coin_icon_url.clone(),
                 coin_description,
                 coin_info_url,
                 launch_price,
@@ -535,6 +537,8 @@ mod radix_pump {
                 coin_resource_address,
                 coin_name,
                 coin_symbol,
+                lp_resource_address,
+                UncheckedUrl::of(coin_icon_url),
                 PoolMode::WaitingForLaunch,
             )
         }
@@ -574,14 +578,14 @@ mod radix_pump {
             (coin_symbol, coin_name, coin_icon_url, coin_info_url) =
                 self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
 
-            let (pool, creator_coin_bucket, hook_argument, event) = Pool::new_quick_launch(
+            let (pool, creator_coin_bucket, hook_argument, event, lp_resource_address) = Pool::new_quick_launch(
                 self.owner_badge_address,
                 self.proxy_badge_vault.resource_address(),
                 self.hook_badge_vault.resource_address(),
                 base_coin_bucket,
                 coin_symbol.clone(),
                 coin_name.clone(),
-                coin_icon_url,
+                coin_icon_url.clone(),
                 coin_description,
                 coin_info_url,
                 coin_supply,
@@ -608,6 +612,8 @@ mod radix_pump {
                 creator_coin_bucket.resource_address(),
                 coin_name,
                 coin_symbol,
+                lp_resource_address,
+                UncheckedUrl::of(coin_icon_url),
                 PoolMode::Normal,
             );
 
@@ -702,7 +708,7 @@ mod radix_pump {
             &mut self,
             creator_proof: Proof,
         ) {
-            let creator_data = self.get_creator_data(creator_proof);
+            let (creator_id, creator_data) = self.get_creator_data(creator_proof);
 
             let pool = self.pools.get(&creator_data.coin_resource_address).expect("Coin not found");
             let (mode, event) = self.proxy_badge_vault.authorize_with_amount(
@@ -712,7 +718,7 @@ mod radix_pump {
 
             self.emit_pool_event(event);
 
-            self.update_mode_in_creator_nft(pool.creator_id, mode);
+            self.update_mode_in_creator_nft(creator_id, mode);
         }
 
         pub fn get_flash_loan(
@@ -813,7 +819,7 @@ mod radix_pump {
                 flash_loan_pool_fee_percentage,
             );
 
-            let creator_data = self.get_creator_data(creator_proof);
+            let (_, creator_data) = self.get_creator_data(creator_proof);
 
             let pool = self.pools.get(&creator_data.coin_resource_address).unwrap();
 
@@ -849,14 +855,23 @@ mod radix_pump {
         fn get_creator_data(
             &self,
             creator_proof: Proof
-        ) -> CreatorData {
-            creator_proof.check_with_message(
+        ) -> (
+            u64,
+            CreatorData,
+        ) {
+            let non_fungible = creator_proof.check_with_message(
                 self.creator_badge_resource_manager.address(),
                 "Wrong badge",
             )
             .as_non_fungible()
-            .non_fungible::<CreatorData>()
-            .data()
+            .non_fungible::<CreatorData>();
+
+            let local_id = match &non_fungible.local_id() {
+                NonFungibleLocalId::Integer(local_id) => local_id.value(),
+                _ => Runtime::panic("WTF".to_string()),
+            };
+
+            (local_id, non_fungible.data())
         }
 
         pub fn update_time_limits(
@@ -893,7 +908,7 @@ mod radix_pump {
                 "Lock time too short",
             );
 
-            let creator_data = self.get_creator_data(creator_proof);
+            let (creator_id, creator_data) = self.get_creator_data(creator_proof);
             let coin_address = creator_data.coin_resource_address;
             let pool = self.pools.get(&coin_address).unwrap();
 
@@ -904,7 +919,7 @@ mod radix_pump {
 
             self.emit_pool_event(event);
 
-            self.update_mode_in_creator_nft(creator_data.id, mode);
+            self.update_mode_in_creator_nft(creator_id, mode);
 
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
@@ -1062,7 +1077,7 @@ mod radix_pump {
             &mut self,
             creator_proof: Proof,
         ) -> (Option<Bucket>, Option<Vec<Bucket>>) {
-            let creator_data = self.get_creator_data(creator_proof);
+            let (creator_id, creator_data) = self.get_creator_data(creator_proof);
             let coin_address = creator_data.coin_resource_address;
 
             let pool = self.pools.get(&coin_address).unwrap();
@@ -1077,7 +1092,7 @@ mod radix_pump {
             }
 
             if mode.is_some() {
-                self.update_mode_in_creator_nft(creator_data.id, mode.unwrap());
+                self.update_mode_in_creator_nft(creator_id, mode.unwrap());
             }
 
             match bucket {
@@ -1112,16 +1127,19 @@ mod radix_pump {
             coin_resource_address: ResourceAddress,
             coin_name: String,
             coin_symbol: String,
+            lp_token_address: ResourceAddress,
+            key_image_url: UncheckedUrl,
             pool_mode: PoolMode
         ) -> Bucket {
             let creator_badge = self.creator_badge_resource_manager.mint_non_fungible(
                 &NonFungibleLocalId::integer(self.next_creator_badge_id.into()),
                 CreatorData {
-                    id: self.next_creator_badge_id,
                     coin_resource_address: coin_resource_address,
                     coin_name: coin_name,
                     coin_symbol: coin_symbol,
                     creation_date: Clock::current_time_rounded_to_seconds(),
+                    lp_token_address: lp_token_address,
+                    key_image_url: key_image_url,
                     pool_mode: pool_mode,
                 }
             );
@@ -1150,7 +1168,7 @@ mod radix_pump {
             amount: Option<Decimal>,
             sell: bool,
         ) -> (Bucket, Vec<Bucket>) {
-            let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
+            let coin_address = self.get_creator_data(creator_proof).1.coin_resource_address;
             let pool = self.pools.get(&coin_address).unwrap();
 
             let coin_bucket = self.proxy_badge_vault.authorize_with_amount(
@@ -1326,7 +1344,7 @@ mod radix_pump {
                 );
             }
 
-            let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
+            let coin_address = self.get_creator_data(creator_proof).1.coin_resource_address;
 
             self.pools.get_mut(&coin_address).unwrap().enabled_hooks.add_hook(
                 &name,
@@ -1352,7 +1370,7 @@ mod radix_pump {
         ) {
             let hook_info = self.registered_hooks.get(&name).expect("Unknown hook");
 
-            let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
+            let coin_address = self.get_creator_data(creator_proof).1.coin_resource_address;
 
             self.pools.get_mut(&coin_address).unwrap().enabled_hooks.remove_hook(
                 &name,
@@ -1375,7 +1393,7 @@ mod radix_pump {
             creator_proof: Proof,
             amount: Decimal,
         ) {
-            let coin_address = self.get_creator_data(creator_proof).coin_resource_address;
+            let coin_address = self.get_creator_data(creator_proof).1.coin_resource_address;
             let pool = self.pools.get(&coin_address).unwrap();
 
             let event = self.proxy_badge_vault.authorize_with_amount(
@@ -1661,14 +1679,14 @@ mod radix_pump {
                 self.next_creator_badge_id
             );
 
-            let pool = Pool::new(
+            let (pool, lp_resource_address) = Pool::new(
                 self.owner_badge_address,
                 self.proxy_badge_vault.resource_address(),
                 self.hook_badge_vault.resource_address(),
                 self.base_coin_address,
                 coin_address,
                 coin_name.clone(),
-                coin_icon_url,
+                coin_icon_url.clone(),
                 buy_pool_fee_percentage,
                 sell_pool_fee_percentage,
                 flash_loan_pool_fee_percentage,
@@ -1687,6 +1705,8 @@ mod radix_pump {
                 coin_address,
                 coin_name,
                 coin_symbol,
+                lp_resource_address,
+                coin_icon_url,
                 PoolMode::Uninitialised,
             )
         }

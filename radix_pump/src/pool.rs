@@ -50,8 +50,17 @@ enum LaunchType {
 
 static MAX_TICKETS_PER_OPERATION: u32 = 50;
 static MAX_CALLS_TO_RANDOM: u32 = 10;
+static MODE_NOT_ALLOWED: &str = "Not allowed in this mode";
+static TYPE_NOT_ALLOWED: &str = "Not allowed for this launch type";
+static SHOULD_NOT_HAPPEN: &str = "Should not happen";
 
 #[blueprint]
+#[types(
+    u64,
+    bool,
+    LPData,
+    TicketData,
+)]
 mod pool {
 
     extern_blueprint!(
@@ -191,7 +200,7 @@ mod pool {
             owner_badge_address: ResourceAddress,
             component_address: ComponentAddress,
         ) -> ResourceManager {
-            ResourceBuilder::new_integer_non_fungible::<LPData>(
+            ResourceBuilder::new_integer_non_fungible_with_registered_type::<LPData>(
                 OwnerRole::Fixed(AccessRule::Protected(coin_creator_badge_rule.clone()))
             )
             .deposit_roles(deposit_roles!(
@@ -301,7 +310,7 @@ mod pool {
                         resource_manager: resource_manager,
                     }
                 ),
-                extracted_tickets: KeyValueStore::new(),
+                extracted_tickets: KeyValueStore::new_with_registered_type(),
                 lp_resource_manager : lp_resource_manager,
                 total_lp: Decimal::ZERO,
                 total_users_lp: Decimal::ZERO,
@@ -396,7 +405,7 @@ mod pool {
                         )
                     )
                 },
-                _ => Runtime::panic("Not allowed for this launch type".to_string()),
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
             }
         }
 
@@ -503,10 +512,10 @@ mod pool {
                                 self.terminate_random_launch()
                             }
                         },
-                        _ => Runtime::panic("Not allowed in this mode".to_string()),
+                        _ => Runtime::panic(MODE_NOT_ALLOWED.to_string()),
                     }
                 },
-                _ => Runtime::panic("Not allowed for this launch type".to_string()),
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
             }
         }
 
@@ -572,7 +581,7 @@ mod pool {
                         )
                     )
                 },
-                _ => Runtime::panic("Should not happen".to_string()),
+                _ => Runtime::panic(SHOULD_NOT_HAPPEN.to_string()),
             }
         }
 
@@ -622,7 +631,7 @@ mod pool {
 
                     (None, None, None, None)
                 },
-                _ => Runtime::panic("Should not happen".to_string()),
+                _ => Runtime::panic(SHOULD_NOT_HAPPEN.to_string()),
             }
         }
 
@@ -672,7 +681,7 @@ mod pool {
 
                     random_launch.locked_vault.take(amount_to_unlock)
                 },
-                _ => Runtime::panic("Not allowed for this launch type".to_string()),
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
             }
         }
 
@@ -711,7 +720,7 @@ mod pool {
                 sell_pool_fee_percentage: sell_pool_fee_percentage,
                 flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
                 launch: LaunchType::AlreadyExistingCoin,
-                extracted_tickets: KeyValueStore::new(),
+                extracted_tickets: KeyValueStore::new_with_registered_type(),
                 total_lp: Decimal::ZERO,
                 total_users_lp: Decimal::ZERO,
                 lp_resource_manager: lp_resource_manager,
@@ -818,7 +827,7 @@ mod pool {
                         ignored_coins: ignored_coins,
                     }
                 ),
-                extracted_tickets: KeyValueStore::new(),
+                extracted_tickets: KeyValueStore::new_with_registered_type(),
                 total_lp: total_lp,
                 total_users_lp: Decimal::ZERO,
                 lp_resource_manager: lp_resource_manager,
@@ -885,7 +894,7 @@ mod pool {
         ) {
             let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
 
-            let ticket_resource_manager = ResourceBuilder::new_integer_non_fungible::<TicketData>(
+            let ticket_resource_manager = ResourceBuilder::new_integer_non_fungible_with_registered_type::<TicketData>(
                 OwnerRole::Fixed(AccessRule::Protected(coin_creator_badge_rule.clone()))
             )
             .mint_roles(mint_roles!(
@@ -1014,7 +1023,7 @@ mod pool {
                         random_badge_resource_manager: random_badge_resource_manager,
                     }
                 ),
-                extracted_tickets: KeyValueStore::new(),
+                extracted_tickets: KeyValueStore::new_with_registered_type(),
                 total_lp: Decimal::ZERO,
                 total_users_lp: Decimal::ZERO,
                 lp_resource_manager: lp_resource_manager,
@@ -1125,9 +1134,9 @@ mod pool {
                         )
                     },
                     LaunchType::Random(_) => Runtime::panic("Use buy_ticket instead".to_string()),
-                    _ => Runtime::panic("Should not happen".to_string()),
+                    _ => Runtime::panic(SHOULD_NOT_HAPPEN.to_string()),
                 },
-                _ => Runtime::panic("Not allowed in this mode".to_string()),
+                _ => Runtime::panic(MODE_NOT_ALLOWED.to_string()),
             }
         }
 
@@ -1219,7 +1228,7 @@ mod pool {
                         )
                     )
                 },
-                _ => Runtime::panic("Not allowed in this mode".to_string()),
+                _ => Runtime::panic(MODE_NOT_ALLOWED.to_string()),
             }
         }
 
@@ -1459,7 +1468,7 @@ mod pool {
 
                     amount
                 },
-                _ => Runtime::panic("Not allowed for this launch type".to_string()),
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
             };
 
             assert!(
@@ -1548,7 +1557,7 @@ mod pool {
                         )
                     )
                 },
-                _ => Runtime::panic("Not allowed for this launch type".to_string()),
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
             }
         }
 
@@ -1594,7 +1603,7 @@ mod pool {
                     random_launch.number_of_extracted_tickets += tickets_to_extract;
 
                 },
-                _ => Runtime::panic("Not allowed for this launch type".to_string()),
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
             }
         }
 
@@ -1613,7 +1622,7 @@ mod pool {
 
                     badge.burn();
                 },
-                _ => Runtime::panic("Not allowed for this launch type".to_string()),
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
             }
         }
 
@@ -1658,7 +1667,7 @@ mod pool {
                                             losers.push(ticket_id.value());
                                         }
                                     },
-                                    _ => Runtime::panic("WTF".to_string()),
+                                    _ => Runtime::panic(SHOULD_NOT_HAPPEN.to_string()),
                                 }
                             }
 
@@ -1706,7 +1715,7 @@ mod pool {
                             for ticket_id in ticket_bucket.as_non_fungible().non_fungible_local_ids().iter() {
                                 match &ticket_id {
                                     NonFungibleLocalId::Integer(ticket_id) => losers.push(ticket_id.value()),
-                                    _ => Runtime::panic("WTF".to_string()),
+                                    _ => Runtime::panic(SHOULD_NOT_HAPPEN.to_string()),
                                 }
                             }
 
@@ -1732,10 +1741,10 @@ mod pool {
                                 None,
                             )
                         },
-                        _ => Runtime::panic("Not allowed in this mode".to_string()),
+                        _ => Runtime::panic(MODE_NOT_ALLOWED.to_string()),
                     }
                 },
-                _ => Runtime::panic("Not allowed for this launch type".to_string()),
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
             }
         }
 
@@ -1800,7 +1809,7 @@ mod pool {
                         None
                     )
                 },
-                _ => Runtime::panic("Not allowed in this mode".to_string()),
+                _ => Runtime::panic(MODE_NOT_ALLOWED.to_string()),
             };
 
             self.total_lp += lp;
@@ -1866,7 +1875,7 @@ mod pool {
                     NonFungibleLocalId::Integer(lp_id) => {
                         ids.push(lp_id.value());
                     },
-                    _ => Runtime::panic("WTF".to_string()),
+                    _ => Runtime::panic(SHOULD_NOT_HAPPEN.to_string()),
                 }
 
                 lp_share += self.lp_resource_manager.get_non_fungible_data::<LPData>(&lp_id).lp_share;
@@ -1895,7 +1904,7 @@ mod pool {
                     None,
                     Decimal::ZERO,
                 ),
-                _ => Runtime::panic("Not allowed in this mode".to_string()),
+                _ => Runtime::panic(MODE_NOT_ALLOWED.to_string()),
             };
 
             lp_bucket.burn();

@@ -11,6 +11,9 @@ static CREATOR_BADGE_NAME: &str = "Coin creator badge";
 // Metadata for the flash loan transient NFT
 static TRANSIENT_NFT_NAME: &str = "Flash loan transient NFT";
 
+// Minimum buy fee for Fair and Random launch
+static MIN_LAUNCH_BUY_FEE: Decimal = dec!("0.1");
+
 // Flash loan transient NFT data
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
 struct FlashLoanData {
@@ -62,10 +65,15 @@ struct PoolStruct {
     HookDisabledEvent,
 )]
 #[types(
-    u64,
     CreatorData,
     FlashLoanData,
+    String,
+    bool,
+    ResourceAddress,
     PoolStruct,
+    HookInfo,
+    HookableOperation,
+    Vec<String>,
 )]
 mod radix_pump {
     enable_method_auth! {
@@ -145,8 +153,8 @@ mod radix_pump {
         flash_loan_nft_resource_manager: ResourceManager,
         next_creator_badge_id: u64,
         last_transient_nft_id: u64,
-        forbidden_symbols: KeyValueStore<String, u64>,
-        forbidden_names: KeyValueStore<String, u64>,
+        forbidden_symbols: KeyValueStore<String, bool>,
+        forbidden_names: KeyValueStore<String, bool>,
         pools: KeyValueStore<ResourceAddress, PoolStruct>,
         creation_fee_percentage: Decimal,
         buy_sell_fee_percentage: Decimal,
@@ -332,8 +340,10 @@ mod radix_pump {
                 flash_loan_nft_resource_manager: flash_loan_nft_resource_manager,
                 next_creator_badge_id: 1,
                 last_transient_nft_id: 0,
-                forbidden_symbols: KeyValueStore::new(),
-                forbidden_names: KeyValueStore::new(),
+                forbidden_symbols: <KeyValueStore<String, bool> as RadixPumpKeyValueStore>::new_with_registered_type(),
+                forbidden_names: <KeyValueStore<String, bool> as RadixPumpKeyValueStore>::new_with_registered_type(),
+                // TODO: why this doesn't work?
+                // pools: <KeyValueStore<ResourceAddress, PoolStruct> as RadixPumpKeyValueStore>::new_with_registered_type(),
                 pools: KeyValueStore::new(),
                 creation_fee_percentage: creation_fee_percentage,
                 buy_sell_fee_percentage: buy_sell_fee_percentage,
@@ -346,7 +356,7 @@ mod radix_pump {
                 proxy_badge_vault: FungibleVault::with_bucket(proxy_badge_bucket),
                 hook_badge_vault: FungibleVault::with_bucket(hook_badge_bucket),
                 read_only_hook_badge_vault: FungibleVault::with_bucket(read_only_hook_badge_bucket),
-                registered_hooks: KeyValueStore::new(),
+                registered_hooks: <KeyValueStore<String, HookInfo> as RadixPumpKeyValueStore>::new_with_registered_type(),
                 registered_hooks_operations: HooksPerOperation::new(),
                 globally_enabled_hooks: HooksPerOperation::new(),
             }
@@ -362,7 +372,7 @@ mod radix_pump {
             symbols: Vec<String>,
         ) {
             for symbol in symbols.iter() {
-                self.forbidden_symbols.insert(symbol.trim().to_uppercase(), 0);
+                self.forbidden_symbols.insert(symbol.trim().to_uppercase(), false);
             }
         }
 
@@ -372,7 +382,7 @@ mod radix_pump {
             names: Vec<String>,
         ) {
             for name in names.iter() {
-                self.forbidden_names.insert(name.trim().to_uppercase(), 0);
+                self.forbidden_names.insert(name.trim().to_uppercase(), false);
             }
         }
 
@@ -381,6 +391,7 @@ mod radix_pump {
             buy_pool_fee_percentage: Decimal,
             sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee_percentage: Decimal,
+            min_buy_fee_apply: bool,
         ) {
             assert!(
                 buy_pool_fee_percentage >= Decimal::ZERO && buy_pool_fee_percentage < self.max_buy_sell_pool_fee_percentage,
@@ -397,6 +408,12 @@ mod radix_pump {
                 "Flash loan pool fee percentage can go from 0 (included) to {} (excluded)",
                 self.max_flash_loan_pool_fee_percentage,
             );
+            if min_buy_fee_apply {
+                assert!(
+                    buy_pool_fee_percentage >= MIN_LAUNCH_BUY_FEE,
+                    "Buy fee to low to initialize the pool",
+                );
+            }
         }
 
         fn check_metadata(
@@ -415,7 +432,7 @@ mod radix_pump {
                 self.forbidden_symbols.get(&coin_symbol).is_none(),
                 "Symbol already used",
             );
-            self.forbidden_symbols.insert(coin_symbol.clone(), self.next_creator_badge_id);
+            self.forbidden_symbols.insert(coin_symbol.clone(), true);
             coin_name = coin_name.trim().to_string();
             assert!(
                 coin_name.len() > 0,
@@ -426,7 +443,7 @@ mod radix_pump {
                 self.forbidden_names.get(&uppercase_coin_name).is_none(),
                 "Name already used",
             );
-            self.forbidden_names.insert(uppercase_coin_name, self.next_creator_badge_id);
+            self.forbidden_names.insert(uppercase_coin_name, true);
             coin_icon_url = coin_icon_url.trim().to_string();
             coin_info_url = coin_info_url.trim().to_string();
 
@@ -447,7 +464,7 @@ mod radix_pump {
             sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee_percentage: Decimal,
         ) -> Bucket {
-            self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee_percentage);
+            self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee_percentage, true);
 
             (coin_symbol, coin_name, coin_icon_url, coin_info_url) =
                 self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
@@ -502,7 +519,7 @@ mod radix_pump {
             sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee_percentage: Decimal,
         ) -> Bucket {
-            self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee_percentage);
+            self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee_percentage, true);
 
             (coin_symbol, coin_name, coin_icon_url, coin_info_url) =
                 self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
@@ -573,7 +590,7 @@ mod radix_pump {
                 )
             );
 
-            self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee_percentage);
+            self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee_percentage, false);
 
             (coin_symbol, coin_name, coin_icon_url, coin_info_url) =
                 self.check_metadata(coin_symbol, coin_name, coin_icon_url, coin_info_url);
@@ -817,6 +834,7 @@ mod radix_pump {
                 buy_pool_fee_percentage,
                 sell_pool_fee_percentage,
                 flash_loan_pool_fee_percentage,
+                false,
             );
 
             let (_, creator_data) = self.get_creator_data(creator_proof);
@@ -1654,6 +1672,7 @@ mod radix_pump {
                 buy_pool_fee_percentage,
                 sell_pool_fee_percentage,
                 flash_loan_pool_fee_percentage,
+                false,
             );
 
             // Get metadata for the existing coin
@@ -1672,11 +1691,11 @@ mod radix_pump {
             // Just add them to the lists if they aren't already there
             self.forbidden_symbols.insert(
                 coin_symbol.to_uppercase().trim().to_string(),
-                self.next_creator_badge_id
+                true,
             );
             self.forbidden_names.insert(
                 coin_name.to_uppercase().trim().to_string(),
-                self.next_creator_badge_id
+                true,
             );
 
             let (pool, lp_resource_address) = Pool::new(

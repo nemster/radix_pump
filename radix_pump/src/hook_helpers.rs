@@ -1,5 +1,6 @@
 use scrypto::prelude::*;
 use crate::common::*;
+use crate::radix_pump::radix_pump::RadixPumpKeyValueStore;
 
 #[derive(ScryptoSbor)]
 pub struct HookInfo {
@@ -21,9 +22,9 @@ impl HooksPerOperation {
     pub fn new() -> HooksPerOperation {
         Self {
             kvs: vec![
-                KeyValueStore::new(),
-                KeyValueStore::new(),
-                KeyValueStore::new(),
+                KeyValueStore::new_with_registered_type(),
+                KeyValueStore::new_with_registered_type(),
+                KeyValueStore::new_with_registered_type(),
             ],
         }
     }

@@ -290,6 +290,7 @@ A `QuickLaunchEvent` event is issued. It contains the resource address of the ne
 
 This method creates a new coin whose initial supply will be distributed to part of the buyers of a ticket.  
 
+```
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "new_random_launch"
@@ -305,6 +306,7 @@ CALL_METHOD
     Decimal("<SELL_POOL_FEE_PERCENTAGE>")
     Decimal("<FLASH_LOAN_POOL_FEE_PERCENTAGE>")
 ;
+```
 
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<COIN_SYMBOL>` is the symbol to assign to the new coin. This is converted to uppercase and checked against all of the previously created coins' symbols and all of the symbols forbidden by the component owner.  
@@ -322,6 +324,37 @@ CALL_METHOD
 The ticket sale starts when the creator calls the `launch` method and ends when he calls the `terminate_launch` for the first time.  
 The coin creator will get the coins corresponding to a winning ticket but these coins have a time based lock (see `unlock` method).  
 Another winning ticket equivalent is used to initialise the pool, so the total supply is (`<WINNING_TICKETS>` + 2) * `<COINS_PER_WINNING_TICKET>`.  
+
+### new_pool
+
+This function creates a pool for an already existing coin, it can only be called by the component owner.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "new_pool"
+    "<COIN_ADDRESS>"
+    Decimal("<BUY_POOL_FEE_PERCENTAGE>")
+    Decimal("<SELL_POOL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_POOL_FEE_PERCENTAGE>")
+;
+
+```
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<COIN_ADDRESS>` is the resource address of the existing coin.  
+`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can sey a upper limit to this parameter (by default 10%).  
+`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+
+The created pool is not initialised: the `add_liquidity` method must be called to make it usable.  
 
 ### get_fees
 

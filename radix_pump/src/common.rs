@@ -9,6 +9,7 @@ pub enum PoolMode {
     TerminatingLaunch,
     Normal,
     Liquidation,
+    Uninitialised,
 }
 
 #[derive(ScryptoSbor)]

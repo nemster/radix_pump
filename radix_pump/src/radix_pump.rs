@@ -99,6 +99,7 @@ mod radix_pump {
             add_liquidity => PUBLIC;
             remove_liquidity => PUBLIC;
             swap => PUBLIC;
+            new_pool => restrict_to: [OWNER];
         }
     }
 
@@ -133,6 +134,7 @@ mod radix_pump {
         add_liquidity => Free;
         remove_liquidity => Free;
         swap => Usd(dec!("0.005"));
+        new_pool => Free;
     }
 
     struct RadixPump {
@@ -693,11 +695,7 @@ mod radix_pump {
 
             self.emit_pool_event(event);
 
-            self.creator_badge_resource_manager.update_non_fungible_data(
-                &NonFungibleLocalId::integer(pool.creator_id.into()),
-                "pool_mode",
-                mode,
-            );
+            self.update_mode_in_creator_nft(pool.creator_id, mode);
         }
 
         pub fn creator_set_liquidation_mode(
@@ -714,11 +712,7 @@ mod radix_pump {
 
             self.emit_pool_event(event);
 
-            self.creator_badge_resource_manager.update_non_fungible_data(
-                &NonFungibleLocalId::integer(creator_data.id.into()),
-                "pool_mode",
-                mode,
-            );
+            self.update_mode_in_creator_nft(pool.creator_id, mode);
         }
 
         pub fn get_flash_loan(
@@ -910,11 +904,7 @@ mod radix_pump {
 
             self.emit_pool_event(event);
 
-            self.creator_badge_resource_manager.update_non_fungible_data(
-                &NonFungibleLocalId::integer(creator_data.id.into()),
-                "pool_mode",
-                mode,
-            );
+            self.update_mode_in_creator_nft(creator_data.id, mode);
 
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
@@ -1087,11 +1077,7 @@ mod radix_pump {
             }
 
             if mode.is_some() {
-                self.creator_badge_resource_manager.update_non_fungible_data(
-                    &NonFungibleLocalId::integer(creator_data.id.into()),
-                    "pool_mode",
-                    mode.unwrap(),
-                );
+                self.update_mode_in_creator_nft(creator_data.id, mode.unwrap());
             }
 
             match bucket {
@@ -1503,21 +1489,26 @@ mod radix_pump {
             coin_bucket: Bucket,
         ) -> (
             Bucket,
-            Bucket,
+            Option<Bucket>,
             Vec<Bucket>,
         ) {
             let coin_address = coin_bucket.resource_address();
             let pool = self.pools.get(&coin_address).expect("Coin not found");
 
-            let (lp_bucket, remainings_bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
-                1,
-                || pool.component_address.add_liquidity(
-                    base_coin_bucket,
-                    coin_bucket,
-                )
-            );
+            let (lp_bucket, remainings_bucket, hook_argument, event, mode) =
+                self.proxy_badge_vault.authorize_with_amount(
+                    1,
+                    || pool.component_address.add_liquidity(
+                        base_coin_bucket,
+                        coin_bucket,
+                    )
+                );
 
             self.emit_pool_event(event);
+
+            if mode.is_some() {
+                self.update_mode_in_creator_nft(pool.creator_id, mode.unwrap());
+            }
 
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
@@ -1627,6 +1618,89 @@ mod radix_pump {
             }
 
             (coin2_bucket, buckets1, buckets2)
+        }
+
+        pub fn new_pool(
+            &mut self,
+            coin_address: ResourceAddress,
+            buy_pool_fee_percentage: Decimal,
+            sell_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee_percentage: Decimal,
+        ) -> Bucket {
+            assert!(
+                self.pools.get(&coin_address).is_none(),
+                "There's already a pool for this coin",
+            );
+
+            self.check_fees(
+                buy_pool_fee_percentage,
+                sell_pool_fee_percentage,
+                flash_loan_pool_fee_percentage,
+            );
+
+            // Get metadata for the existing coin
+            let resource_manager = ResourceManager::from_address(coin_address);
+            let coin_symbol: String = resource_manager.get_metadata("symbol")
+                .expect("Unexpected metadata type")
+                .expect("Coins without symbol are not allowed");
+            let coin_name: String = resource_manager.get_metadata("name")
+                .expect("Unexpected metadata type")
+                .expect("Coins without name are not allowed");
+            let coin_icon_url: UncheckedUrl = resource_manager.get_metadata("icon_url")
+                .expect("Unexpected metadata type")
+                .expect("Coins without icon are not allowed");
+
+            // Do not check if name or symbol are forbidden so we can add well known coins.
+            // Just add them to the lists if they aren't already there
+            self.forbidden_symbols.insert(
+                coin_symbol.to_uppercase().trim().to_string(),
+                self.next_creator_badge_id
+            );
+            self.forbidden_names.insert(
+                coin_name.to_uppercase().trim().to_string(),
+                self.next_creator_badge_id
+            );
+
+            let pool = Pool::new(
+                self.owner_badge_address,
+                self.proxy_badge_vault.resource_address(),
+                self.hook_badge_vault.resource_address(),
+                self.base_coin_address,
+                coin_address,
+                coin_name.clone(),
+                coin_icon_url,
+                buy_pool_fee_percentage,
+                sell_pool_fee_percentage,
+                flash_loan_pool_fee_percentage,
+                self.next_creator_badge_rule(),
+            );
+            self.pools.insert(
+                coin_address,
+                PoolStruct {
+                    component_address: pool,
+                    enabled_hooks: HooksPerOperation::new(),
+                    creator_id: self.next_creator_badge_id,
+                }
+            );
+
+            self.mint_creator_badge(
+                coin_address,
+                coin_name,
+                coin_symbol,
+                PoolMode::Uninitialised,
+            )
+        }
+
+        fn update_mode_in_creator_nft(
+            &self,
+            creator_id: u64,
+            mode: PoolMode,
+        ) {
+            self.creator_badge_resource_manager.update_non_fungible_data(
+                &NonFungibleLocalId::integer(creator_id.into()),
+                "pool_mode",
+                mode,
+            );
         }
     }
 }

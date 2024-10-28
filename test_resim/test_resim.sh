@@ -48,6 +48,7 @@ get_pool_info () {
         'Enum::[2],') echo pool_mode: TerminatingLaunch ;;
         'Enum::[3],') echo pool_mode: Normal ;;
         'Enum::[4],') echo pool_mode: Liquidation ;;
+        'Enum::[5],') echo pool_mode: Uninitialised ;;
       esac
       read lp_resource_address
       read coin_lp_ratio
@@ -661,3 +662,40 @@ echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
 
 echo
 get_pool_info ${quick_launched_coin}
+
+echo
+export symbol=MET
+export name=MyExistingToken
+export supply=1000000
+export icon_url='https://www.cicliserino.com/wp-content/uploads/2018/02/MET-CASCO-MANTA-NERO-ROSSO.jpg'
+echo resim new-token-fixed --name $name --symbol $symbol --icon-url $icon_url $supply
+resim new-token-fixed --name $name --symbol $symbol --icon-url $icon_url $supply >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export met=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
+echo created coin $met
+
+echo
+export buy_pool_fee=0.1
+export sell_pool_fee=0.1
+export flash_loan_pool_fee=0.1
+echo "resim call-method ${radix_pump_component} new_pool $met $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee --proofs ${owner_badge}:${owner_badge_id}"
+resim call-method ${radix_pump_component} new_pool $met $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee --proofs ${owner_badge}:${owner_badge_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export lp_met=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
+export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
+echo Pool for $met created, LP token ${lp_met}, creator badge id ${creator_badge_id}
+
+echo
+get_pool_info $met
+
+echo
+export base_coin_amount=100
+export met_amount=$(($supply / 2))
+echo resim call-method ${radix_pump_component} add_liquidity ${base_coin}:${base_coin_amount} ${met}:${met_amount}
+resim call-method ${radix_pump_component} add_liquidity ${base_coin}:${base_coin_amount} ${met}:${met_amount} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export lp_id="#$(grep -A 1 "ResAddr: ${lp_met}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
+echo Added ${base_coin_amount} ${base_coin} and ${met_amount} ${met} to the pool, LP id ${lp_id} received
+
+echo
+get_pool_info $met
+
+
+

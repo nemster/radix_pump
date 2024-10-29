@@ -1,0 +1,25 @@
+CALL_METHOD
+    Address("${account}")
+    "lock_fee"
+    Decimal("3")
+;
+CALL_METHOD
+    Address("${radix_pump_component}")
+    "new_fair_launch"
+    "${symbol}"
+    "${name}"
+    "${icon}"
+    "${description}"
+    "${info_url}"
+    ${social_url}
+    Decimal("${price}")
+    Decimal("${creator_locked_percentage}")
+    Decimal("${buy_pool_fee}")
+    Decimal("${sell_pool_fee}")
+    Decimal("${flash_loan_pool_fee}")
+;
+CALL_METHOD
+    Address("${account}")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;

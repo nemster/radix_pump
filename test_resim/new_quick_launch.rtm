@@ -1,0 +1,36 @@
+CALL_METHOD
+    Address("${account}")
+    "lock_fee"
+    Decimal("4")
+;
+CALL_METHOD
+    Address("${account}")
+    "withdraw"
+    Address("${base_coin}")
+    Decimal("${base_coin_amount}")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("${base_coin}")
+    Bucket("base_coin_bucket")
+;
+CALL_METHOD
+    Address("${radix_pump_component}")
+    "new_quick_launch"
+    Bucket("base_coin_bucket")
+    "${symbol}"
+    "${name}"
+    "${icon}"
+    "${description}"
+    "${info_url}"
+    ${social_url}
+    Decimal("${supply}")
+    Decimal("${price}")
+    Decimal("${buy_pool_fee}")
+    Decimal("${sell_pool_fee}")
+    Decimal("${flash_loan_pool_fee}")
+;
+CALL_METHOD
+    Address("${account}")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;

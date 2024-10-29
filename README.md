@@ -186,6 +186,7 @@ CALL_METHOD
     "<COIN_ICON_URL>"
     "<COIN_DESCRIPTION>"
     "<COIN_INFO_URL>"
+    Array<String>("<URL>", "<URL>", ...)
     Decimal("<LAUNCH_PRICE>")
     Decimal("<CREATOR_LOCKED_PERCENTAGE>")
     Decimal("<BUY_POOL_FEE_PERCENTAGE>")
@@ -200,6 +201,7 @@ CALL_METHOD
 `<COIN_ICON_URL>` is the URL of the image to assign as icon to the new coin; it must be a valid URL.  
 `<COIN_DESCRIPTION>` is a descriptive text that is added to the coin metadata (it can be an empty string).  
 `<COIN_INFO_URL>` is the URL of the website of the coin (it can be an empty string).  
+`<URL>` is one of the social URL of the coin.  
 `<LAUNCH_PRICE>` is the price that will be constant during the launch phase.  
 `<CREATOR_LOCKED_PERCENTAGE>` percentage of minted coins reserved to the creator (initially locked).  
 `<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
@@ -245,6 +247,7 @@ CALL_METHOD
     "<COIN_ICON_URL>"
     "<COIN_DESCRIPTION>"
     "<COIN_INFO_URL>"
+    Array<String>("<URL>", "<URL>", ...)
     Decimal("<COIN_SUPPLY>")
     Decimal("<PRICE>")
     Decimal("<BUY_POOL_FEE_PERCENTAGE>")
@@ -266,6 +269,7 @@ CALL_METHOD
 `<COIN_ICON_URL>` is the URL of the image to assign as icon to the new coin; it must be a valid URL.  
 `<COIN_DESCRIPTION>` is a descriptive text that is added to the coin metadata (can be empty).  
 `<COIN_INFO_URL>` is the URL of the website of the coin (it can be an empty string).  
+`<URL>` is one of the social URL of the coin.  
 `<COIN_SUPPLY>` is the initial supply of the new coin. It is not be possible to incease the supply later but it can be reduced by burning coins.  
 `<PRICE>` is the initial price of the coin. The creator himself receives coins bought at this price with his base coin deposit.  
 `<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
@@ -299,6 +303,7 @@ CALL_METHOD
     "<COIN_ICON_URL>"
     "<COIN_DESCRIPTION>"
     "<COIN_INFO_URL>"
+    Array<String>("<URL>", "<URL>", ...)
     Decimal("<TICKET_PRICE>")
     <WINNING_TICKETS>u32
     Decimal("<COINS_PER_WINNING_TICKET>")
@@ -314,6 +319,7 @@ CALL_METHOD
 `<COIN_ICON_URL>` is the URL of the image to assign as icon to the new coin; it must be a valid URL.  
 `<COIN_DESCRIPTION>` is a descriptive text that is added to the coin metadata (it can be an empty string).  
 `<COIN_INFO_URL>` is the URL of the website of the coin (it can be an empty string).  
+`<URL>` is one of the social URL of the coin.  
 `<TICKET_PRICE>` is the price (in base coins) of a ticket.  
 `<WINNING_TICKETS>` how many winning tickets will be randomply extracted.  
 `<COINS_PER_WINNING_TICKET>` how many coins a winning ticket will receive.  

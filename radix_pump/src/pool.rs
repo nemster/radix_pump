@@ -137,6 +137,7 @@ mod pool {
             coin_icon_url: String,
             coin_description: String,
             coin_info_url: String,
+            coin_social_url: Vec<String>,
             coin_creator_badge_rule: AccessRuleNode,
         ) -> InProgressResourceBuilder<FungibleResourceType> {
             let resource_manager = ResourceBuilder::new_fungible(OwnerRole::Fixed(AccessRule::Protected(coin_creator_badge_rule.clone())))
@@ -158,9 +159,10 @@ mod pool {
             ))
             .divisibility(DIVISIBILITY_MAXIMUM);
 
-            match coin_info_url.len() {
-                0 => 
-                    resource_manager.metadata(metadata!(
+            // TODO: Any intelligent way to do this?
+            match coin_social_url.len() {
+                0 => match coin_info_url.len() {
+                    0 => resource_manager.metadata(metadata!(
                         roles {
                             metadata_setter => AccessRule::Protected(coin_creator_badge_rule.clone());
                             metadata_setter_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
@@ -174,8 +176,7 @@ mod pool {
                             "description" => coin_description, updatable;
                         }
                     )),
-                _ => 
-                    resource_manager.metadata(metadata!(
+                    _ => resource_manager.metadata(metadata!(
                         roles {
                             metadata_setter => AccessRule::Protected(coin_creator_badge_rule.clone());
                             metadata_setter_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
@@ -190,6 +191,47 @@ mod pool {
                             "info_url" => MetadataValue::Url(UncheckedUrl::of(coin_info_url)), updatable;
                         }
                     )),
+                },
+                _ => {
+                    let mut url: Vec<UncheckedUrl> = vec![];
+                    for string in coin_social_url.iter() {
+                        url.push(UncheckedUrl::of(string));
+                    }
+
+                    match coin_info_url.len() {
+                        0 => resource_manager.metadata(metadata!(
+                            roles {
+                                metadata_setter => AccessRule::Protected(coin_creator_badge_rule.clone());
+                                metadata_setter_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
+                                metadata_locker => AccessRule::Protected(coin_creator_badge_rule.clone());
+                                metadata_locker_updater => AccessRule::Protected(coin_creator_badge_rule);
+                            },
+                            init {
+                                "symbol" => coin_symbol, locked;
+                                "name" => coin_name, locked;
+                                "icon_url" => MetadataValue::Url(UncheckedUrl::of(coin_icon_url)), updatable;
+                                "description" => coin_description, updatable;
+                                "social_url" => url, updatable;
+                            }
+                        )),
+                        _ => resource_manager.metadata(metadata!(
+                            roles {
+                                metadata_setter => AccessRule::Protected(coin_creator_badge_rule.clone());
+                                metadata_setter_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
+                                metadata_locker => AccessRule::Protected(coin_creator_badge_rule.clone());
+                                metadata_locker_updater => AccessRule::Protected(coin_creator_badge_rule);
+                            },
+                            init {
+                                "symbol" => coin_symbol, locked;
+                                "name" => coin_name, locked;
+                                "icon_url" => MetadataValue::Url(UncheckedUrl::of(coin_icon_url)), updatable;
+                                "description" => coin_description, updatable;
+                                "info_url" => MetadataValue::Url(UncheckedUrl::of(coin_info_url)), updatable;
+                                "social_url" => url, updatable;
+                            }
+                        )),
+                    }
+                },
             }
         }
 
@@ -251,6 +293,7 @@ mod pool {
             coin_icon_url: String,
             coin_description: String,
             coin_info_url: String,
+            coin_social_url: Vec<String>,
             launch_price: Decimal,
             creator_locked_percentage: Decimal,
             buy_pool_fee_percentage: Decimal,
@@ -271,6 +314,7 @@ mod pool {
                 coin_icon_url.clone(),
                 coin_description,
                 coin_info_url,
+                coin_social_url.clone(),
                 coin_creator_badge_rule.clone(),
             )
             .burn_roles(burn_roles!(
@@ -749,6 +793,7 @@ mod pool {
             coin_icon_url: String,
             coin_description: String,
             coin_info_url: String,
+            coin_social_url: Vec<String>,
             coin_supply: Decimal,
             coin_price: Decimal,
             buy_pool_fee_percentage: Decimal,
@@ -770,6 +815,7 @@ mod pool {
                 coin_icon_url.clone(),
                 coin_description,
                 coin_info_url,
+                coin_social_url,
                 coin_creator_badge_rule.clone()
             )
             .burn_roles(burn_roles!(
@@ -879,6 +925,7 @@ mod pool {
             coin_icon_url: String,
             coin_description: String,
             coin_info_url: String,
+            coin_social_url: Vec<String>,
             ticket_price: Decimal,
             winning_tickets: u32,
             coins_per_winning_ticket: Decimal,
@@ -964,6 +1011,7 @@ mod pool {
                 coin_icon_url.clone(),
                 coin_description,
                 coin_info_url,
+                coin_social_url,
                 coin_creator_badge_rule.clone(),
             )
             .burn_roles(burn_roles!(

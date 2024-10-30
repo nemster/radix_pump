@@ -54,22 +54,26 @@ Coins created in RadixPump can be borrowed by users.
 The user must return a fee in base coin together with the borrowed coins in the same transaction or it fails:  
 `get_flash_loan` -> do something with the coins -> `return_flash_loan`  
  
-The component owner gets his own fee percentage while the coin creator can set a fee percentage that goes to the pool. Both fees are paid in base coins.  
+The component owner gets his own fee while the coin creator can set a fee that goes to the pool. Both fees are paid in base coins and don't depend on the borrowed amount.  
 
 ## Pool fees
 
 A coin creator can set fees on buy, sell and flash loan operations for his coin.  
 
-The component owner can set the upper limit for buy/sell and flash loan fees; by default this limit is 10%.
+The component owner can set the upper limit for buy/sell fees; by default this limit is 10%.  
 
-No one can retrieve pool fees, the paid base coins just get into the pool itself. The effect is a coin price increase.  
+No one can retrieve pool fees, the paid base coins just get into the pool itself. The effect is a coin price increase agianst the base coin.  
+
+Once a pool is created it is not possible to increase its percentage fees but only reduce them.  
+
+The flash loan fee is fixed (not a percentage), has no uppper limit and can be increased too by the coin creator.  
 
 ## Hooks
 
 Hooks are external components authomatically called by RadixPump when certain operations are performed.  
 
 The component owner can make hooks available by calling the `register_hook` method, he must specify the operations this hook can be attached to.  
-The available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket` and `PostRedeemLousingTicket`. I avoided `Pre` hooks to prevent frontrunning and sandwitch attacks.  
+The available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket`, `PostRedeemLousingTicket`, `PostAddLiquidity` and `PostRemoveLiquidity`. I avoided `Pre` hooks to prevent frontrunning and sandwitch attacks.  
 
 Once an hook is registered the component owner can attach it to one or more operation globally (i.e. for all pools) via the `owner_enable_hook` method.
 A coin owner can attach a registered hook to operations happening on his coin.
@@ -102,7 +106,7 @@ CALL_FUNCTION
     Decimal("<MINIMUM_DEPOSIT>")
     Decimal("<CREATION_FEE_PERCENTAGE>")
     Decimal("<BUY_SELL_FEE_PERCENTAGE>")
-    Decimal("<FLASH_LOAN_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_FEE>")
 ;
 
 CALL_FUNCTION
@@ -119,7 +123,7 @@ CALL_FUNCTION
 `<MINIMUM_DEPOSIT>` is the minimum amount of base coins that a new coin creator must deposit when doing a QuickLaunch.  
 `<CREATION_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by the token creators to the component owner.  
 `<BUY_SELL_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the component owner.  
-`<FLASH_LOAN_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the component owner.  
+`<FLASH_LOAN_FEE>` is the amount of base coins paid by flash borrowers to the component owner.  
 `<HOOKS_BADGE>` is the resource address of the badge created by RadixPump to authenticate towards the hooks; you can get it from `get_pool_info`.
 
 ### forbid_symbols
@@ -184,11 +188,12 @@ CALL_METHOD
     "<COIN_ICON_URL>"
     "<COIN_DESCRIPTION>"
     "<COIN_INFO_URL>"
+    Array<String>("<URL>", "<URL>", ...)
     Decimal("<LAUNCH_PRICE>")
     Decimal("<CREATOR_LOCKED_PERCENTAGE>")
     Decimal("<BUY_POOL_FEE_PERCENTAGE>")
     Decimal("<SELL_POOL_FEE_PERCENTAGE>")
-    Decimal("<FLASH_LOAN_POOL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_POOL_FEE>")
 ;
 ```
 
@@ -198,11 +203,12 @@ CALL_METHOD
 `<COIN_ICON_URL>` is the URL of the image to assign as icon to the new coin; it must be a valid URL.  
 `<COIN_DESCRIPTION>` is a descriptive text that is added to the coin metadata (it can be an empty string).  
 `<COIN_INFO_URL>` is the URL of the website of the coin (it can be an empty string).  
+`<URL>` is one of the social URL of the coin.  
 `<LAUNCH_PRICE>` is the price that will be constant during the launch phase.  
 `<CREATOR_LOCKED_PERCENTAGE>` percentage of minted coins reserved to the creator (initially locked).  
-`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
-`<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
-`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
+`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%). During the launch phase this fee can't be less than 0.1% (fees are needed to initialize the  pool).   
+`<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can sey a upper limit to this parameter (by default 10%).  
+`<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
 
 The name and symbol of the coin are reserved no coin is minted at this stage.  
 
@@ -243,11 +249,12 @@ CALL_METHOD
     "<COIN_ICON_URL>"
     "<COIN_DESCRIPTION>"
     "<COIN_INFO_URL>"
+    Array<String>("<URL>", "<URL>", ...)
     Decimal("<COIN_SUPPLY>")
     Decimal("<PRICE>")
     Decimal("<BUY_POOL_FEE_PERCENTAGE>")
     Decimal("<SELL_POOL_FEE_PERCENTAGE>")
-    Decimal("<FLASH_LOAN_POOL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_POOL_FEE>")
 ;
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
@@ -264,11 +271,12 @@ CALL_METHOD
 `<COIN_ICON_URL>` is the URL of the image to assign as icon to the new coin; it must be a valid URL.  
 `<COIN_DESCRIPTION>` is a descriptive text that is added to the coin metadata (can be empty).  
 `<COIN_INFO_URL>` is the URL of the website of the coin (it can be an empty string).  
+`<URL>` is one of the social URL of the coin.  
 `<COIN_SUPPLY>` is the initial supply of the new coin. It is not be possible to incease the supply later but it can be reduced by burning coins.  
 `<PRICE>` is the initial price of the coin. The creator himself receives coins bought at this price with his base coin deposit.  
-`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
-`<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
-`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool. The component owner can se a upper limit to this parameter (by default 10%).  
+`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
 
 The coin creator receives a creator badge NFT that shows in the wallet a numeric ID, the resource address, name and symbol of the new created coin.  
 This badge allows the creator to:  
@@ -284,84 +292,77 @@ The coin creator also receives a number of coins as if he bought them from the p
 
 A `QuickLaunchEvent` event is issued. It contains the resource address of the new coin, the initial coin price, the amount held by the creator and the number of coins currently in the pool.  
 
-### buy
+### new_random_launch
 
-A user can buy an existing coin calling this method and paying with base coins.  
-A Radix network transaction that calls this method adds a very small royalty that goes to the package owner (about $0.005 in XRD).  
-It is not allowed to buy coins in liquidation mode.
+This method creates a new coin whose initial supply will be distributed to part of the buyers of a ticket.  
+
+```
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "new_random_launch"
+    "<COIN_SYMBOL>"
+    "<COIN_NAME>"
+    "<COIN_ICON_URL>"
+    "<COIN_DESCRIPTION>"
+    "<COIN_INFO_URL>"
+    Array<String>("<URL>", "<URL>", ...)
+    Decimal("<TICKET_PRICE>")
+    <WINNING_TICKETS>u32
+    Decimal("<COINS_PER_WINNING_TICKET>")
+    Decimal("<BUY_POOL_FEE_PERCENTAGE>")
+    Decimal("<SELL_POOL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_POOL_FEE>")
+;
+```
+
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<COIN_SYMBOL>` is the symbol to assign to the new coin. This is converted to uppercase and checked against all of the previously created coins' symbols and all of the symbols forbidden by the component owner.  
+`<COIN_NAME>` is the name to assign to the new coin. This is checked against all of the previously created coins' names and all of the names forbidden by the component owner.  
+`<COIN_ICON_URL>` is the URL of the image to assign as icon to the new coin; it must be a valid URL.  
+`<COIN_DESCRIPTION>` is a descriptive text that is added to the coin metadata (it can be an empty string).  
+`<COIN_INFO_URL>` is the URL of the website of the coin (it can be an empty string).  
+`<URL>` is one of the social URL of the coin.  
+`<TICKET_PRICE>` is the price (in base coins) of a ticket. This includes all fees.   
+`<WINNING_TICKETS>` how many winning tickets will be randomply extracted.  
+`<COINS_PER_WINNING_TICKET>` how many coins a winning ticket will receive.  
+`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%). During the launch phase this fee can't be less than 0.1% (fees are needed to initialize the  pool).  
+`<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can sey a upper limit to this parameter (by default 10%).  
+`<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
+
+The ticket sale starts when the creator calls the `launch` method and ends when he calls the `terminate_launch` for the first time.  
+The coin creator will get the coins corresponding to a winning ticket but these coins have a time based lock (see `unlock` method).  
+Another winning ticket equivalent is used to initialise the pool, so the total supply is (`<WINNING_TICKETS>` + 2) * `<COINS_PER_WINNING_TICKET>`.  
+
+### new_pool
+
+This function creates a pool for an already existing coin, it can only be called by the component owner.  
 
 ```
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
-    "withdraw"
-    Address("<BASE_COIN_ADDRESS>")
-    Decimal("<BASE_COIN_AMOUNT>")
-;
-TAKE_ALL_FROM_WORKTOP
-    Address("<BASE_COIN_ADDRESS>")
-    Bucket("base_coin_bucket")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
-    "buy"
-    Address("<COIN_ADDRESS>")
-    Bucket("base_coin_bucket")
+    "new_pool"
+    "<COIN_ADDRESS>"
+    Decimal("<BUY_POOL_FEE_PERCENTAGE>")
+    Decimal("<SELL_POOL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_POOL_FEE>")
 ;
-CALL_METHOD
-    Address("<ACCOUNT_ADDRESS>")
-    "deposit_batch"
-    Expression("ENTIRE_WORKTOP")
-;
-```
 
-`<ACCOUNT_ADDRESS>` is the account of the user buying the coin.  
-`<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
-`<BASE_COIN_AMOUNT>` is the base coin amount to buy the coin. A percentage of `<BUY_SELL_FEE_PERCENTAGE>` of this amount is credited to the component owner who can withdraw it later.  
+```
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
-`<COIN_ADDRESS>` is the resource address of the coin the user wants to buy.  
+`<COIN_ADDRESS>` is the resource address of the existing coin.  
+`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can sey a upper limit to this parameter (by default 10%).  
+`<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
 
-This method returns a bucket of the requested coin.
-
-A `BuyEvent` event is issued. It contains the resource address of the bought coin, the pool mode (Launching or Normal), the bought amount, the new price, the number of coins currently in the pool and the fees paid to the pool.  
-
-### sell
-
-A user can sell coins using this method to receive base coins back.  
-A Radix network transaction that calls this method adds a very small royalty that goes to the package owner (about $0.005 in XRD).  
-It is not allowed to sell coins in launching mode.
-
-```
-CALL_METHOD
-    Address("<ACCOUNT_ADDRESS>")
-    "withdraw"
-    Address("<COIN_ADDRESS>")
-    Decimal("<COIN_AMOUNT>")
-;
-TAKE_ALL_FROM_WORKTOP
-    Address("<COIN_ADDRESS>")
-    Bucket("coin_bucket")
-;
-CALL_METHOD
-    Address("<COMPONENT_ADDRESS>")
-    "sell"
-    Bucket("coin_bucket")
-;
-CALL_METHOD
-    Address("<ACCOUNT_ADDRESS>")
-    "deposit_batch"
-    Expression("ENTIRE_WORKTOP")
-;
-```
-
-`<ACCOUNT_ADDRESS>` is the account of the user selling the coin.  
-`<COIN_ADDRESS>` is the coin the user wants to sell.  
-`<BASE_COIN_AMOUNT>` is the coin amount the user wants to sell.  
-`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
-
-This method returns a bucket of base coin.
-A percentage of `<BUY_SELL_FEE_PERCENTAGE>` is subtracted from the proceeds of coin sales and is credited to the component owner who can withdraw it later.  
-
-A `SellEvent` event is issued. It contains the resource address of the sold coin, the pool mode (Normal or Liquidation), the sold amount, the new price, the number of coins currently in the pool and the fees paid to the pool.  
+The created pool is not initialised: the `add_liquidity` method must be called to make it usable.  
 
 ### get_fees
 
@@ -407,9 +408,8 @@ CALL_METHOD
     "update_fees"
     Decimal("<CREATION_FEE_PERCENTAGE>")
     Decimal("<BUY_SELL_FEE_PERCENTAGE>")
-    Decimal("<FLASH_LOAN_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_FEE>")
     Decimal("<MAX_BUY_SELL_POOL_FEE_PERCENTAGE>")
-    Decimal("<MAX_FLASH_LOAN_POOL_FEE_PERCENTAGE>")
 ;
 ```
 
@@ -418,9 +418,8 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<CREATION_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by the token creators.  
 `<BUY_SELL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers.  
-`<FLASH_LOAN_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the component owner.  
+`<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
 `<MAX_BUY_SELL_POOL_FEE_PERCENTAGE>` is the upper limit to the `buy_sell_pool_fee_percentage` a coin creator can set (by default 10).  
-`<MAX_FLASH_LOAN_POOL_FEE_PERCENTAGE>` is the upper limit to the `flash_loan_pool_fee_percentage` a coin creator can set (by default 10).  
 
 ### owner_set_liquidation_mode
 
@@ -525,14 +524,14 @@ CALL_METHOD
 ```
 `<TRANSIENT_NFT_ADDRESS>` is the address of the transient NFT returned by the `get_flash_loan`. This is known at the component instantiation and never changes.  
 `<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
-`<FEES>` is the total fees the user must pay to the component owner and the pool.  
+`<FEES>` is the total fees the user must pay to the component owner and the pool. This is a straight number per pool, does not depend on the loan amount.  
 `<COIN_ADDRESS>` is the resource address of the coin the user borrowed.  
 `<LOAN_AMOUNT>` is the requested loan amount.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 
 A `FlashLoanEvent` event is issued. It contains the resource address of the borrowed coin, the amount returned and the fees paid to the pool.  
 
-### update_pool_fee_percentage
+### update_pool_fees
 
 A coin creator can modify the pool fees specified at coin creation time.  
 
@@ -552,7 +551,7 @@ CALL_METHOD
     Proof("creator_proof")
     Decimal("<BUY_POOL_FEE_PERCENTAGE>")
     Decimal("<SELL_POOL_FEE_PERCENTAGE>")
-    Decimal("<FLASH_LOAN_POOL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_POOL_FEE>")
 ;
 ```
 
@@ -562,7 +561,11 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<BUY_POOL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the pool. The upper limit for this parameter can be changed by the componet owner.  
 `<SELL_POOL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the pool. The upper limit for this parameter can be changed by the componet owner.  
-`<FLASH_LOAN_POOL_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the pool. The upper limit for this parameter can be changed by the componet owner.  
+`<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
+
+Percentage fees can never be increased, you can only reduce them.  
+
+A `FeeUpdateEvent` event is issued.  
 
 ### get_pool_info
 
@@ -580,19 +583,26 @@ CALL_METHOD
 `<COIN_ADDRESS>` is the resource address of the coin the user wants to receve information about.  
 
 The method returns a `PoolInfo` struct containing these information:  
-- the amount of base coins in the coin pool.  
+- the address of the pool component.  
+- the amount of base coins in the pool.  
 - the amount of coins in the pool.  
 - the price of the last buy or sell operation.  
 - total (component owner + pool) buy fee percentage.  
 - total (component owner + pool) sell fee percentage.  
-- total (component owner + pool) flash loan fee percentage.  
-- the pool mode (WaitingForLaunch, Launching, Normal or Liquidation).  
-- the end of the launch period (FairLaunch only)
-- the end of the lock period (FairLaunch only)
-- the creator allocation initially locked (FairLaunch only)
-- the currently claimed creator allocation  (FairLaunch only)
+- total (component owner + pool) flash loan fee.  
+- the pool mode (WaitingForLaunch, Launching, TerminatingLaunch, Normal or Liquidation).  
+- the resource address of the liquidity NFT of the pool.  
+- the number of coins currently corresponding to 1 `lp_share` in the liquidity NFT.  
+- the end of the launch period (FairLaunch and RandomLaunch only).  
+- the end of the lock period (FairLaunch and RandomLaunch only).  
+- the creator allocation initially locked (FairLaunch and RandomLaunch only).  
+- the currently claimed creator allocation  (FairLaunch and RandomLaunch only).  
+- the cost of a ticket (RandomLaunch only).  
+- the number of winning tickets (RandomLaunch only).  
+- how many coins a winning ticket will receive after launch (RandomLaunch only).  
 - the resource address of the transient NFT used in flash loans (it's the same for all of the coins).  
-- the respurce address of the badge the component uses to authenticate against hooks.  
+- the resource address of the badge the component uses to authenticate against hooks and hooks can use to authenticate against the pools.  
+- the resource address of the badge the component uses to authenticate against read only hooks.  
 
 ### update_time_limits
 
@@ -621,7 +631,7 @@ CALL_METHOD
 
 ### launch
 
-The creator of a coin can call this method to start the launching phase of his fair launched coin.  
+The creator of a coin can call this method to start the launching phase of his fair or random launched coin (quick launch doesn't need it).  
 The minimum possible values for the arguments of this method depends on the values the component owner specified in `update_time_limits`.
 
 ```
@@ -657,9 +667,11 @@ CALL_METHOD
 
 The `deposit_batch` at the end is generally not needed but some hook may cause it to be needed.
 
+Depending on the launch type this method emits a `FairLaunchStartEvent` or a `RandomLaunchStartEvent` event.  
+
 ### terminate_launch
 
-The creator of a coin can call this method to end the launching phase of his fair launched coin, it can't happen before the time specified in the `launch` call.
+The creator of a coin can call this method to end the launching phase of his fair or random launched coin, it can't happen before the time specified in the `launch` call.
 
 ```
 CALL_METHOD
@@ -690,9 +702,13 @@ CALL_METHOD
 
 This call returns the proceeds of the launch sale and starts the unlocking period.  
 
+For random launched coins this method must be called more than once, in different transactions, waiting a few seconds between them. Only when the creator gets the proceeds of the sale the pool has effectively reached the normal mode and all of the winners have been extracted.  
+
+Depending on the launch type this method emits a `FairLaunchEndEvent` or a `RandomLaunchEndEvent` (only the last call).  
+
 ### unlock
 
-Allows the creator of a fair launched coin to withdraw his previously locked coins.  
+Allows the creator of a fair or random launched coin to withdraw his previously locked coins.  
 This method can only be called in Normal mode. If a pool gets into Liquidation mode it will never be possible to withdraw the creator's coin.  
 
 ```
@@ -748,7 +764,7 @@ CALL_METHOD
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<HOOK_NAME>` is the name that will be used to refer to this hook.  
-`<OPERATION>` is one of the operations the hooks can be attached to. Available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket` and `PostRedeemLousingTicket`.  
+`<OPERATION>` is one of the operations the hooks can be attached to. Available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket`, `PostRedeemLousingTicket`, `PostAddLiquidity` and `PostRemoveLiquidity`.  
 `<HOOK_ADDRESS>` is the component address of the hook.  
 
 ### unregister_hook
@@ -922,6 +938,10 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<AMOUNT>` is the maximum amount of coins the creator wants to burn. The actual amount depends on the number of currently ignored coins too.  
 
+Is is not possible to burn more than the currently ignored coins in the pool.  
+
+This method emits a `BurnEvent`.  
+
 ### buy_ticket
 
 This method allows to buy one or more tickets during a random launch.
@@ -956,7 +976,9 @@ CALL_METHOD
 `<BASE_COIN_AMOUNT>` is the base coin amount to buy the tickets.
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.
 `<COIN_ADDRESS>` is the resource address of the random launched coin the user wants to buy the tickets for.
-`<AMOUNT>` is the number of coins the user wants to buy.
+`<AMOUNT>` is the number of tickets the user wants to buy.
+
+This method emits a `BuyTicketEvent` event.  
 
 ### redeem_ticket
 
@@ -984,10 +1006,132 @@ CALL_METHOD
     Expression("ENTIRE_WORKTOP")
 ;
 ```
+
 `<ACCOUNT_ADDRESS>` is the account of the user redeeming the tickets.  
 `<TICKET_ADDRESS>` is the resource address of the tickets.  
 `<TICKET_ID>` is one of the numeric ids of the tickets to redeem.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+
+### add_liquidity
+
+This method allows a user to add liquidity to a pool.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw"
+    Address("<BASE_COIN_ADDRESS>")
+    Decimal("<BASE_COIN_AMOUNT>")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("<BASELCOIN_ADDRESS>")
+    Bucket("base_coin_bucket")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw"
+    Address("<COIN_ADDRESS>")
+    Decimal("<COIN_AMOUNT>")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("<COIN_ADDRESS>")
+    Bucket("coin_bucket")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "add_liquidity"
+    Bucket("base_coin_bucket")
+    Bucket("coin_bucket")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account of the user adding liquidity to the pool.  
+`<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
+`<BASE_COIN_AMOUNT>` is the base coin amount to add to the pool.  
+`<COIN_ADDRESS>` is the resource address of the coin of the pool.  
+`<COIN_AMOUNT>` is the coin amount to add to the pool.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+
+The user receives an NFT whose non fungible data contain the amount of base coins and coins added to the pool, the current date and time, the resource address of the coin and informations needed by the pool itsels.  
+
+An `AddLiquidityEvent` is issued.  
+
+### remove_liquidity
+
+This method allows a user to remove the liquidity he previously deposited in a pool.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw_non_fungibles"
+    Address("<LP_NFT_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<LP_NFT_ID>#"), NonFungibleLocalId("#<LP_NFT_ID>#")...)
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("<LP_NFT_ADDRESS>")
+    Bucket("lp_bucket")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "remove_liquidity"
+    Bucket("lp_bucket")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account of the user removing the liquidity.  
+`<LP_NFT_ADDRESS>` is the resource address of the liquidity NFT.  
+`<LP_NFT_ID>` is one of the numeric ids of the liquidity NFTs to return.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+
+This method returns both base coins and coins in normal mode, while return only base coins in liquidation mode.  
+
+A `RemoveLiquidityEvent` is issued.  
+
+### swap
+
+This method allows a user to buy and sell coins for base boins or swap one coin for another.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw"
+    Address("<COIN1_ADDRESS>")
+    Decimal("<COIN1_AMOUNT>")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("<COIN1_ADDRESS>") 
+    Bucket("coin_bucket")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "swap"
+    Bucket("coin1_bucket")
+    Address("<COIN2_ADDRESS>")
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+; 
+```
+
+`<ACCOUNT_ADDRESS>` is the account of the user swapping the coins.
+`<COIN1_ADDRESS>` is the coin the user wants to sell.
+`<COIN1_AMOUNT>` is the coin amount the user wants to sell.
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.
+`<COIN2_ADDRESS>` is the coin the user wants to buy.
+
+Depending on the coins, a `BuyEvent` and/or a `SellEvent`event is issued. It contains the resource address of the bought coin, the pool mode, the bought or sold amount, the new price, the number of coins currently in the pool and the fees paid to the pool.  
 
 ## Special thanks to:
 

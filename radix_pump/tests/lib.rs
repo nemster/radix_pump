@@ -1,6 +1,5 @@
 use scrypto_test::prelude::*;
 use radix_pump::radix_pump::radix_pump_test::*;
-use radix_pump::hook::hook_test::*;
 use scrypto::NonFungibleData;
 
 #[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]

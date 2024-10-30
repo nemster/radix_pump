@@ -26,7 +26,8 @@ increase_in_wallet() {
 get_pool_info () {
   echo PoolInfo for $1
   resim call-method $radix_pump_component get_pool_info $1 |
-    grep -A 50 '├─ Tuple(' | (
+    grep -A 100 '├─ Tuple(' | (
+      read x
       read x
       read base_coin_amount
       echo base_coin_amount: $(echo $base_coin_amount | cut -d '"' -f 2)
@@ -38,8 +39,8 @@ get_pool_info () {
       echo total_buy_fee_percentage: $(echo $total_buy_fee_percentage | cut -d '"' -f 2)
       read total_sell_fee_percentage
       echo total_sell_fee_percentage: $(echo $total_sell_fee_percentage | cut -d '"' -f 2)
-      read total_flash_loan_fee_percentage
-      echo total_flash_loan_fee_percentage: $(echo $total_flash_loan_fee_percentage | cut -d '"' -f 2)
+      read total_flash_loan_fee
+      echo total_flash_loan_fee: $(echo $total_flash_loan_fee | cut -d '"' -f 2)
       read pool_mode
       case $pool_mode in 
         'Enum::[0],') echo pool_mode: WaitingForLaunch ;;
@@ -47,7 +48,11 @@ get_pool_info () {
         'Enum::[2],') echo pool_mode: TerminatingLaunch ;;
         'Enum::[3],') echo pool_mode: Normal ;;
         'Enum::[4],') echo pool_mode: Liquidation ;;
+        'Enum::[5],') echo pool_mode: Uninitialised ;;
       esac
+      read lp_resource_address
+      read coin_lp_ratio
+      echo coin_lp_ratio : $(echo $coin_lp_ratio | cut -d '"' -f 2)
       read end_launch_time
       if [ "$end_launch_time" = "Enum::[1](" ]
       then
@@ -121,9 +126,11 @@ export random_component_package=$(grep 'Success! New Package:' $OUTPUTFILE | cut
 echo RandomComponent package: ${random_component_package}
 
 echo
+echo resim call-function ${random_component_package} RandomComponent new
 resim call-function ${random_component_package} RandomComponent new >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export random_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 echo RandomComponent: ${random_component}
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 resim publish ../radix_pump >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
@@ -135,23 +142,30 @@ export base_coin=resource_sim1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxak
 export minimum_deposit=1000
 export creation_fee_percentage=0.1
 export buy_sell_fee_percentage=0.1
-export flash_loan_fee_percentage=0.1
-resim call-function ${radix_pump_package} RadixPump new ${owner_badge} ${base_coin} ${minimum_deposit} ${creation_fee_percentage} ${buy_sell_fee_percentage} ${flash_loan_fee_percentage} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export flash_loan_fee=1
+echo resim call-function ${radix_pump_package} RadixPump new ${owner_badge} ${base_coin} ${minimum_deposit} ${creation_fee_percentage} ${buy_sell_fee_percentage} ${flash_loan_fee}
+resim call-function ${radix_pump_package} RadixPump new ${owner_badge} ${base_coin} ${minimum_deposit} ${creation_fee_percentage} ${buy_sell_fee_percentage} ${flash_loan_fee} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export radix_pump_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 export creator_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export flash_loan_nft=$(grep 'Resource:' $OUTPUTFILE | head -n 2 | tail -n 1 | cut -d ' ' -f 3)
-export hooks_badge=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)
-echo -e "RadixPump component: ${radix_pump_component}\nCreator badge: ${creator_badge}\nFlash loan transient NFT: ${flash_loan_nft}\nHooks authentication badge: ${hooks_badge}"
+export hooks_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 3 | tail -n 1 | cut -d ' ' -f 3)
+export ro_hooks_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 4 | tail -n 1 | cut -d ' ' -f 3)
+echo -e "RadixPump component: ${radix_pump_component}\nCreator badge: ${creator_badge}\nFlash loan transient NFT: ${flash_loan_nft}\nHooks authentication badge: ${hooks_badge}\nRead only hooks authentication badge: ${ro_hooks_badge}"
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export forbidden_symbols='"XRD"'
+echo resim run forbid_symbols.rtm
 resim run forbid_symbols.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Symbols ${forbidden_symbols} forbidden
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export forbidden_names='"Radix"'
+echo resim run forbid_names.rtm
 resim run forbid_names.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Names ${forbidden_names} forbidden
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 resim publish ../hooks >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
@@ -159,94 +173,120 @@ export hooks_package=$(grep 'Success! New Package:' $OUTPUTFILE | cut -d ' ' -f 
 echo Hooks package: ${hooks_package}
 
 echo
-resim call-function ${hooks_package} TestHook new ${owner_badge} ${hooks_badge} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-function ${hooks_package} TestHook new ${owner_badge} ${ro_hooks_badge}
+resim call-function ${hooks_package} TestHook new ${owner_badge} ${ro_hooks_badge} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export test_hook_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 export test_hook_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 echo -e "TestHook component: ${test_hook_component}\nTestHook coin: ${test_hook_coin}"
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export hook_name=TestHook
-export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch", "PostTerminateRandomLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan", "PostBuyTicket", "PostRedeemWinningTicket", "PostRedeemLousingTicket"'
+export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch", "PostTerminateRandomLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan", "PostBuyTicket", "PostRedeemWinningTicket", "PostRedeemLousingTicket", "PostAddLiquidity", "PostRemoveLiquidity"'
+echo resim run register_hook.rtm
 resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export globally_enabled_operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch"'
+echo resim run owner_enable_hook.rtm
 resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export globally_disabled_operations='"PostFairLaunch"'
+echo resim run owner_disable_hook.rtm
 resim run owner_disable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally disabled hook ${hook_name} for operations ${globally_disabled_operations}
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 update_wallet_amounts
+export base_coin_amount=${minimum_deposit}
 export symbol=QL
 export name=QuickLaunchedCoin
 export icon=https://media-cdn.tripadvisor.com/media/photo-s/1a/ce/31/66/photo-de-profil.jpg
 export description="Quick launched coin"
 export info_url=""
+export social_url='Array<String>()'
 export supply=1000000
 export price=10
 export buy_pool_fee=0.1
 export sell_pool_fee=0.1
-export flash_loan_pool_fee=0.1
-resim call-method ${radix_pump_component} new_quick_launch ${base_coin}:${minimum_deposit} $symbol $name $icon "$description" "${info_url}" $supply $price $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export quick_launched_coin=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
+export flash_loan_pool_fee=1
+echo run new_quick_launch.rtm
+resim run new_quick_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export quick_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
+export lp_quick=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
 export quick_launched_coin_received=$(grep -A 1 "ResAddr: ${quick_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
 echo Quick launched ${quick_launched_coin}, received $(increase_in_wallet ${quick_launched_coin})
 echo Creator badge id: ${creator_badge_id}
+echo LP token: ${lp_quick}
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${quick_launched_coin}
 
 echo
 export name=SameSymbolCoin
-resim call-method ${radix_pump_component} new_quick_launch ${base_coin}:${minimum_deposit} $symbol $name $icon "$description" "${info_url}" $supply $price $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo run new_quick_launch.rtm
+run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with the same symbol and the transaction failed as expected
 
 echo
 export symbol=QL2
 export name=QuickLaunchedCoin
-resim call-method ${radix_pump_component} new_quick_launch ${base_coin}:${minimum_deposit} $symbol $name $icon "$description" "${info_url}" $supply $price $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo run new_quick_launch.rtm
+run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with the same name and the transaction failed as expected
 
 echo
 export symbol=XRD
 export name=FakeRadix
-resim call-method ${radix_pump_component} new_quick_launch ${base_coin}:${minimum_deposit} $symbol $name $icon "$description" "${info_url}" $supply $price $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo run new_quick_launch.rtm
+run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with XRD as symbol and the transaction failed as expected
 
 echo
 export symbol=XXX
 export name=Radix
-resim call-method ${radix_pump_component} new_quick_launch ${base_coin}:${minimum_deposit} $symbol $name $icon "$description" "${info_url}" $supply $price $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo run new_quick_launch.rtm
+run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with Radix as name and the transaction failed as expected
 
 echo
+export base_coin_amount=$((${minimum_deposit} - 1))
 export name=YYY
-resim call-method ${radix_pump_component} new_quick_launch ${base_coin}:$((${minimum_deposit} - 1)) $symbol $name $icon "$description" "${info_url}" $supply $price $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo run new_quick_launch.rtm
+run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with an insufficient base coin deposit and the transaction failed as expected
 
 echo
 export enabled_operations='"PostBuy", "PostSell", "PostReturnFlashLoan"'
+echo resim run creator_enable_hook.rtm
 resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${quick_launched_coin}
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export disabled_operations='"PostSell"'
+echo resim run creator_disable_hook.rtm
 resim run creator_disable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Disabled hook ${hook_name} for operations ${disabled_operations} on ${quick_launched_coin}
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 update_wallet_amounts
 export payment=1000
-resim call-method ${radix_pump_component} buy ${quick_launched_coin} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${quick_launched_coin}
+resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${quick_launched_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${quick_launched_coin}) ${quick_launched_coin} for $payment ${base_coin}
 echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${quick_launched_coin}
@@ -254,51 +294,29 @@ get_pool_info ${quick_launched_coin}
 echo
 update_wallet_amounts
 export payment=10
-increase_in_wallet ${base_coin} >/dev/null
-resim call-method ${radix_pump_component} sell ${quick_launched_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin}
+resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin}
 echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${quick_launched_coin}
 
 echo
 export burn_amount=100000000
+echo resim run burn.rtm
 resim run burn.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo The creator tried to burn $burn_amount ${quick_launched_coin}
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${quick_launched_coin}
 
 echo
+echo resim run burn.rtm
 resim run burn.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo The creator tried to burn $burn_amount ${quick_launched_coin} but the transaction failed becaouse all of the excess coins have already been burned
-
-echo
-resim call-method ${radix_pump_component} owner_set_liquidation_mode ${quick_launched_coin} --proofs ${owner_badge}:${owner_badge_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-echo Component owner set liquidation mode for ${quick_launched_coin}
-
-echo
-get_pool_info ${quick_launched_coin}
-
-echo
-update_wallet_amounts
-export payment=1
-increase_in_wallet ${base_coin} >/dev/null
-resim call-method ${radix_pump_component} sell ${quick_launched_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-echo Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin}
-echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
-
-echo
-update_wallet_amounts
-export payment=1
-increase_in_wallet ${base_coin} >/dev/null
-resim call-method ${radix_pump_component} sell ${quick_launched_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-echo "Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin} (price should not change)"
-echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
-
-echo
-get_pool_info ${quick_launched_coin}
 
 echo
 update_wallet_amounts
@@ -311,13 +329,15 @@ export price=100
 export creator_locked_percentage=10
 export buy_pool_fee=5
 export sell_pool_fee=0.1
-export flash_loan_pool_fee=0.1
-resim call-method ${radix_pump_component} new_fair_launch $symbol $name $icon "$description" "${info_url}" $price $creator_locked_percentage $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export fair_launched_coin=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
+export flash_loan_pool_fee=1
+echo resim run new_fair_launch.rtm
+resim run new_fair_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export fair_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
 echo Fair launched ${fair_launched_coin}, received $(increase_in_wallet ${fair_launched_coin})
 echo Creator badge id: ${creator_badge_id}
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${fair_launched_coin}
@@ -325,8 +345,10 @@ get_pool_info ${fair_launched_coin}
 echo
 export min_launch_duration=604800
 export min_lock_duration=5184000
+echo "resim call-method ${radix_pump_component} update_time_limits $min_launch_duration $min_lock_duration --proofs ${owner_badge}:${owner_badge_id}"
 resim call-method ${radix_pump_component} update_time_limits $min_launch_duration $min_lock_duration --proofs ${owner_badge}:${owner_badge_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Set limits min_launch_duration: 604800 min_lock_duration: 5184000
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export unix_epoch=1800000000
@@ -335,12 +357,14 @@ resim set-current-time $date
 echo Date is now $unix_epoch
 export end_launch_time=$(($unix_epoch + $min_launch_duration -1))
 export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration))
+echo resim run launch.rtm
 resim run launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to launch with a launching perdiod too short, the transaction faild as expected
 
 echo
 export end_launch_time=$(($unix_epoch + $min_launch_duration))
 export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration - 1))
+echo resim run launch.rtm
 resim run launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to launch with an unlocking perdiod too short, the transaction faild as expected
 
@@ -348,9 +372,11 @@ echo
 update_wallet_amounts
 export end_launch_time=$(($unix_epoch + $min_launch_duration))
 export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration))
+echo resim run launch.rtm
 resim run launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Fair sale launched for ${fair_launched_coin}, received $(increase_in_wallet ${fair_launched_coin})
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${fair_launched_coin}
@@ -358,23 +384,28 @@ get_pool_info ${fair_launched_coin}
 echo
 update_wallet_amounts
 export payment=1000
-resim call-method ${radix_pump_component} buy ${fair_launched_coin} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin}
+resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${fair_launched_coin}) ${fair_launched_coin} for $payment ${base_coin}
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 update_wallet_amounts
 export payment=1000
-resim call-method ${radix_pump_component} buy ${fair_launched_coin} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin}
+resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${fair_launched_coin}) ${fair_launched_coin} for $payment ${base_coin}
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${fair_launched_coin}
 
 echo
 export payment=1
-resim call-method ${radix_pump_component} sell ${fair_launched_coin}:$payment >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin}
+resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin} >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to sellf ${fair_launched_coin} during fair launch, it is forbidden so the transaction failed
 
 echo
@@ -382,6 +413,7 @@ unix_epoch=$(($end_launch_time -1))
 date=$(date -u -d @$unix_epoch +"%Y-%m-%dT%H:%M:%SZ")
 resim set-current-time $date
 echo Date is now $unix_epoch
+echo resim run terminate_launch.rtm
 resim run terminate_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to terminate launch ahead of time and the transaction failed as expected
 
@@ -390,9 +422,11 @@ date=$(date -u -d @$end_launch_time +"%Y-%m-%dT%H:%M:%SZ")
 resim set-current-time $date
 echo Date is now $end_launch_time
 update_wallet_amounts
+echo resim run terminate_launch.rtm
 resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Fair launch terminated for ${fair_launched_coin}, received $(increase_in_wallet ${fair_launched_coin})
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${fair_launched_coin}
@@ -400,9 +434,11 @@ get_pool_info ${fair_launched_coin}
 echo
 update_wallet_amounts
 export payment=1
-resim call-method ${radix_pump_component} sell ${fair_launched_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin}
+resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Sold $payment ${fair_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin}
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${fair_launched_coin}
@@ -415,8 +451,10 @@ echo Date is now $unix_epoch
 update_wallet_amounts
 export amount=100000
 export sell=false
+echo resim run unlock.rtm
 resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Unlock up to $amount $fair_launched_coin, $(increase_in_wallet ${fair_launched_coin}) received
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${fair_launched_coin}
@@ -425,8 +463,10 @@ echo
 update_wallet_amounts
 export amount=100000
 export sell=false
+echo resim run unlock.rtm
 resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Unlock up to $amount $fair_launched_coin, $(increase_in_wallet ${fair_launched_coin}) received
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 unix_epoch=$(($unlocking_time + 604800))
@@ -436,23 +476,29 @@ echo Date is now $unix_epoch
 update_wallet_amounts
 export amount=1
 export sell=true
+echo resim run unlock.rtm
 resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Unlock up to $amount $fair_launched_coin and sell them, $(increase_in_wallet ${fair_launched_coin}) received
 echo $(increase_in_wallet ${base_coin}) ${base_coin} received
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${fair_launched_coin}
 
 echo
+echo resim run creator_set_liquidation_mode.rtm
 resim run creator_set_liquidation_mode.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo The coin creator set liquidation mode for $fair_launched_coin
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${fair_launched_coin}
 
 echo
+echo resim run unlock.rtm
 resim run unlock.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo The coin creator tried to unlock coins but the transaction failed because this is not allowed in Liquidation mode: creator coins are now locked forever
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 update_wallet_amounts
@@ -462,50 +508,72 @@ export icon=https://img.evients.com/images/f480x480/e7/b5/09/51/e7b50951be9149fe
 export description="Random launched coin"
 export info_url=""
 export ticket_price=10
-export winning_tickets=10
+export winning_tickets=30
 export coins_per_winning_ticket=10
 export buy_pool_fee=5
 export sell_pool_fee=0.1
-export flash_loan_pool_fee=0.1
-resim call-method ${radix_pump_component} new_random_launch $symbol $name $icon "$description" "${info_url}" $ticket_price $winning_tickets $coins_per_winning_ticket $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export flash_loan_pool_fee=1
+echo resim run new_random_launch.rtm
+resim run new_random_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export random_ticket=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
-export random_launched_coin=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)
+export random_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 2 | tail -n 1 | cut -d ' ' -f 3)
+export random_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 3 | tail -n 1 | cut -d ' ' -f 3)
+export lp_random=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
 echo Random launch coin created $random_launched_coin
+echo LP token: $lp_random
 echo ticket: $random_ticket
+echo Random badge: $random_badge
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${random_launched_coin}
 
 echo
 export payment=1000
-resim call-method ${radix_pump_component} buy ${random_launched_coin} ${base_coin}:$payment >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${random_launched_coin}
+resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${random_launched_coin} >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Someone tried to buy ${random_launched_coin} before it was launched, the transaction failed
 
 echo
 update_wallet_amounts
 export end_launch_time=$(($unix_epoch + $min_launch_duration))
 export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration))
+echo resim run launch.rtm
 resim run launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Random sale launched for ${random_launched_coin}, received $(increase_in_wallet ${random_launched_coin})
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${random_launched_coin}
 
 echo
 export amount=50
-export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${amount} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee})) - 0.0000001" | bc)
+export payment=$(echo "${ticket_price} * ${amount} - 0.0000001" | bc)
+echo resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} $amount ${base_coin}:$payment
 resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} $amount ${base_coin}:$payment >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Failed attempt to buy one ticket without paying ticket_price + total_buy_fee
 
 echo
 update_wallet_amounts
-export bought_tickets=50
-export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${bought_tickets} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee}))" | bc)
-resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} $amount ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export bought_tickets1=20
+export payment=$(echo "${ticket_price} * ${bought_tickets1}" | bc)
+echo resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets1} ${base_coin}:$payment
+resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets1} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${random_ticket}) tickets for $payment $base_coin
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+update_wallet_amounts
+export bought_tickets2=30
+export payment=$(echo "${ticket_price} * ${bought_tickets2}" | bc)
+echo resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets2} ${base_coin}:$payment
+resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets2} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Bought $(increase_in_wallet ${random_ticket}) tickets for $payment $base_coin
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${random_launched_coin}
@@ -514,38 +582,164 @@ echo
 unix_epoch=$(($unix_epoch + 604800))
 date=$(date -u -d @$unix_epoch +"%Y-%m-%dT%H:%M:%SZ")
 resim set-current-time $date
+echo resim run terminate_launch.rtm
 resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Random launch termination started for ${random_launched_coin}
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${random_launched_coin}
 
 echo
-resim call-method ${random_component} do_callback $(($RANDOM * $RANDOM * $RANDOM * $RANDOM)) >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export random1=$RANDOM
+export random2=$RANDOM
+export random3=$RANDOM
+export random4=$RANDOM
+echo resim call-method ${random_component} do_callback $(($random1 * $random2 * $random3 * $random4))
+resim call-method ${random_component} do_callback $(($random1 * $random2 * $random3 * $random4)) >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Called the do_callback method of the random component
 
 echo
 update_wallet_amounts
+echo resim run terminate_launch.rtm
 resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-echo Random launch termination started for ${random_launched_coin}
+echo Random launch termination completed for ${random_launched_coin}
 echo $(increase_in_wallet ${base_coin}) ${base_coin} received
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${random_launched_coin}
 
 echo
 export enabled_operations='"PostRedeemLousingTicket"'
+echo resim run creator_enable_hook.rtm
 resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${random_launched_coin}
+grep 'Transaction Cost: ' $OUTPUTFILE
 
-resim show | grep -A ${bought_tickets} ${random_ticket} | grep -v ${random_ticket} | while read x ticket_id
+resim show | grep -A $((${bought_tickets1} + ${bought_tickets2})) ${random_ticket} | grep -v ${random_ticket} | while read x ticket_id
 do
   echo
   update_wallet_amounts
+  echo resim call-method ${radix_pump_component} redeem_ticket ${random_ticket}:${ticket_id}
   resim call-method ${radix_pump_component} redeem_ticket ${random_ticket}:${ticket_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
   echo Ticket ${ticket_id} redeemed
   echo $(increase_in_wallet ${random_launched_coin}) ${random_launched_coin} received
   echo $(increase_in_wallet ${base_coin}) ${base_coin} received
   echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+  grep 'Transaction Cost: ' $OUTPUTFILE
 done
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+update_wallet_amounts
+export coin=${random_launched_coin}
+export loan_amount=9
+export sell_amount=9
+export fee=$(($flash_loan_fee + $flash_loan_pool_fee))
+echo resim run flash_loan_attack_sell.rtm
+resim run flash_loan_attack_sell.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo "Tried to manipulate price via flash loan: get flash loan -> sell when the pool has few coins (so the price should be high) -> return loan -> buy"
+echo "${random_launched_coin} variation in wallet: $(increase_in_wallet ${random_launched_coin}) (if negative the attack failed)"
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+update_wallet_amounts
+export coin=${random_launched_coin}
+export coin_amount=9
+export base_coin_amount=12.149159002 # coin_amount x last_price
+export loan_amount=9
+export lp=${lp_random}
+export fee=$(($flash_loan_fee + $flash_loan_pool_fee))
+echo resim run flash_loan_attack_lp.rtm
+resim run flash_loan_attack_lp.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo "Tried to steal liquidity via flash loan: get flash loan -> add liquidity when the pool has few coins (so the share should be high) -> return loan -> withdraw liquidity"
+echo "${random_launched_coin} variation in wallet: $(increase_in_wallet ${random_launched_coin})"
+echo "${base_coin} variation in wallet: $(increase_in_wallet ${base_coin}) (if both are negative the attack failed)"
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+update_wallet_amounts
+export sell_amount=2
+echo resim call-method ${radix_pump_component} swap ${random_launched_coin}:${sell_amount} ${quick_launched_coin}
+resim call-method ${radix_pump_component} swap ${random_launched_coin}:${sell_amount} ${quick_launched_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Swapped ${sell_amount} ${random_launched_coin} for $(increase_in_wallet ${quick_launched_coin}) ${quick_launched_coin}
+echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+get_pool_info ${quick_launched_coin}
+
+echo
+echo resim call-method ${radix_pump_component} owner_set_liquidation_mode ${quick_launched_coin} --proofs ${owner_badge}:${owner_badge_id}
+resim call-method ${radix_pump_component} owner_set_liquidation_mode ${quick_launched_coin} --proofs ${owner_badge}:${owner_badge_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Component owner set liquidation mode for ${quick_launched_coin}
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+get_pool_info ${quick_launched_coin}
+
+echo
+update_wallet_amounts
+export payment=1
+echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin}
+resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin}
+echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+update_wallet_amounts
+export payment=1
+echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin}
+resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo "Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin} (price should not change)"
+echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+get_pool_info ${quick_launched_coin}
+
+echo
+export symbol=MET
+export name=MyExistingToken
+export supply=1000000
+export icon_url='https://www.cicliserino.com/wp-content/uploads/2018/02/MET-CASCO-MANTA-NERO-ROSSO.jpg'
+echo resim new-token-fixed --name $name --symbol $symbol --icon-url $icon_url $supply
+resim new-token-fixed --name $name --symbol $symbol --icon-url $icon_url $supply >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export met=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
+echo created coin $met
+
+echo
+export buy_pool_fee=0.1
+export sell_pool_fee=0.1
+export flash_loan_pool_fee=1
+echo "resim call-method ${radix_pump_component} new_pool $met $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee --proofs ${owner_badge}:${owner_badge_id}"
+resim call-method ${radix_pump_component} new_pool $met $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee --proofs ${owner_badge}:${owner_badge_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export lp_met=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
+export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
+echo Pool for $met created, LP token ${lp_met}, creator badge id ${creator_badge_id}
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+get_pool_info $met
+
+echo
+export base_coin_amount=100
+export met_amount=$(($supply / 2))
+echo resim call-method ${radix_pump_component} add_liquidity ${base_coin}:${base_coin_amount} ${met}:${met_amount}
+resim call-method ${radix_pump_component} add_liquidity ${base_coin}:${base_coin_amount} ${met}:${met_amount} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export lp_id="#$(grep -A 1 "ResAddr: ${lp_met}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
+echo Added ${base_coin_amount} ${base_coin} and ${met_amount} ${met} to the pool, LP id ${lp_id} received
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+get_pool_info $met
+
+

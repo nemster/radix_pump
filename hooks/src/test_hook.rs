@@ -1,6 +1,5 @@
 use scrypto::prelude::*;
 use crate::common::*;
-use crate::hook::*;
 use scrypto_interface::*;
 
 #[derive(ScryptoSbor, ScryptoEvent)]
@@ -15,23 +14,15 @@ struct TestHookEvent {
 #[blueprint_with_traits]
 #[events(TestHookEvent)]
 mod test_hook {
-    enable_method_auth! {
-        roles {
-            radix_pump => updatable_by: [OWNER];
-        },
-        methods {
-            hook => restrict_to: [radix_pump];
-        }
-    }
-
     struct TestHook {
+        hook_badge_address: ResourceAddress,
         resource_manager: ResourceManager,
     }
 
     impl TestHook {
         pub fn new(
             owner_badge_address: ResourceAddress,
-            caller_badge_address: ResourceAddress,
+            hook_badge_address: ResourceAddress,
         ) -> Global<TestHook> {
             let resource_manager = ResourceBuilder::new_fungible(OwnerRole::None)
             .mint_roles(mint_roles!(
@@ -41,22 +32,34 @@ mod test_hook {
             .create_with_no_initial_supply();
 
             Self {
+                hook_badge_address: hook_badge_address,
                 resource_manager: resource_manager,
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Fixed(rule!(require(owner_badge_address))))
-            .roles(roles!(
-                radix_pump => rule!(require(caller_badge_address));
-            ))
             .globalize()
         }
     }
 
     impl HookInterfaceTrait for TestHook {
         fn hook(
-            &self,
+            &mut self,
             argument: HookArgument,
-        ) -> Option<Bucket> {
+            hook_badge_bucket: FungibleBucket,
+        ) -> (
+            FungibleBucket,
+            Option<Bucket>,
+            Vec<AnyPoolEvent>,
+            Vec<HookArgument>,
+        ) {
+
+            // Make sure the proxy component is the caller
+            assert!(
+                hook_badge_bucket.resource_address() == self.hook_badge_address &&
+                hook_badge_bucket.amount() == dec!(1),
+                "Wrong badge",
+            );
+
             Runtime::emit_event(
                 TestHookEvent {
                     coin_address: argument.coin_address,
@@ -67,8 +70,15 @@ mod test_hook {
                 }
             );
 
-            Some(self.resource_manager.mint(1))
+            (
+                hook_badge_bucket, // The hook_badge_bucket must always be returned!
+                Some(self.resource_manager.mint(1)),
+                vec![],
+                vec![],
+            )
         }
+
+        fn get_hook_info(&self) -> (HookExecutionRound, bool) {(2, false)}
     }
 }
 

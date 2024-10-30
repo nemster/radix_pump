@@ -3,16 +3,19 @@ version = "1.0.0"
 edition = "2021"
 
 [workspace.dependencies]
-#sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
-#utils = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
-#scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
-#radix-common = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
-#radix-transactions = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
-#radix-engine = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
-#radix-engine-interface = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
-#radix-substate-store-interface = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
-#scrypto-test = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.2.0" }
-#state-manager = { git = "https://github.com/radixdlt/babylon-node", tag = "v1.2.1" }
+sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "506293ad5c3ebde32cc2595053996153bc986a01" }
+scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "506293ad5c3ebde32cc2595053996153bc986a01" }
+scrypto-test = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "506293ad5c3ebde32cc2595053996153bc986a01" }
+radix-engine = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "506293ad5c3ebde32cc2595053996153bc986a01" }
+radix-common = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "506293ad5c3ebde32cc2595053996153bc986a01" }
+radix-engine-interface = { git = "https://github.com/radixdlt/radixdlt-scrypto", rev = "506293ad5c3ebde32cc2595053996153bc986a01" }
+radix-blueprint-schema-init = { git = "https://www.github.com/radixdlt/radixdlt-scrypto", rev = "506293ad5c3ebde32cc2595053996153bc986a01" }
+
+[patch.'https://github.com/radixdlt/radixdlt-scrypto']
+sbor = { git = "https://www.github.com/radixdlt/radixdlt-scrypto.git", rev = "506293ad5c3ebde32cc2595053996153bc986a01" }
+radix-common = { git = "https://www.github.com/radixdlt/radixdlt-scrypto.git", rev = "506293ad5c3ebde32cc2595053996153bc986a01" }
+radix-engine-interface = { git = "https://www.github.com/radixdlt/radixdlt-scrypto.git", rev = "506293ad5c3ebde32cc2595053996153bc986a01" }
+radix-blueprint-schema-init = { git = "https://www.github.com/radixdlt/radixdlt-scrypto.git", rev = "506293ad5c3ebde32cc2595053996153bc986a01" }
 
 [profile.release]
 opt-level = 'z'        # Optimize for size.

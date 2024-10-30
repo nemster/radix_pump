@@ -39,8 +39,8 @@ get_pool_info () {
       echo total_buy_fee_percentage: $(echo $total_buy_fee_percentage | cut -d '"' -f 2)
       read total_sell_fee_percentage
       echo total_sell_fee_percentage: $(echo $total_sell_fee_percentage | cut -d '"' -f 2)
-      read total_flash_loan_fee_percentage
-      echo total_flash_loan_fee_percentage: $(echo $total_flash_loan_fee_percentage | cut -d '"' -f 2)
+      read total_flash_loan_fee
+      echo total_flash_loan_fee: $(echo $total_flash_loan_fee | cut -d '"' -f 2)
       read pool_mode
       case $pool_mode in 
         'Enum::[0],') echo pool_mode: WaitingForLaunch ;;
@@ -142,9 +142,9 @@ export base_coin=resource_sim1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxak
 export minimum_deposit=1000
 export creation_fee_percentage=0.1
 export buy_sell_fee_percentage=0.1
-export flash_loan_fee_percentage=0.1
-echo resim call-function ${radix_pump_package} RadixPump new ${owner_badge} ${base_coin} ${minimum_deposit} ${creation_fee_percentage} ${buy_sell_fee_percentage} ${flash_loan_fee_percentage}
-resim call-function ${radix_pump_package} RadixPump new ${owner_badge} ${base_coin} ${minimum_deposit} ${creation_fee_percentage} ${buy_sell_fee_percentage} ${flash_loan_fee_percentage} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export flash_loan_fee=1
+echo resim call-function ${radix_pump_package} RadixPump new ${owner_badge} ${base_coin} ${minimum_deposit} ${creation_fee_percentage} ${buy_sell_fee_percentage} ${flash_loan_fee}
+resim call-function ${radix_pump_package} RadixPump new ${owner_badge} ${base_coin} ${minimum_deposit} ${creation_fee_percentage} ${buy_sell_fee_percentage} ${flash_loan_fee} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export radix_pump_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 export creator_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export flash_loan_nft=$(grep 'Resource:' $OUTPUTFILE | head -n 2 | tail -n 1 | cut -d ' ' -f 3)
@@ -215,7 +215,7 @@ export supply=1000000
 export price=10
 export buy_pool_fee=0.1
 export sell_pool_fee=0.1
-export flash_loan_pool_fee=0.1
+export flash_loan_pool_fee=1
 echo run new_quick_launch.rtm
 resim run new_quick_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export quick_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
@@ -329,7 +329,7 @@ export price=100
 export creator_locked_percentage=10
 export buy_pool_fee=5
 export sell_pool_fee=0.1
-export flash_loan_pool_fee=0.1
+export flash_loan_pool_fee=1
 echo resim run new_fair_launch.rtm
 resim run new_fair_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export fair_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
@@ -512,7 +512,7 @@ export winning_tickets=30
 export coins_per_winning_ticket=10
 export buy_pool_fee=5
 export sell_pool_fee=0.1
-export flash_loan_pool_fee=0.1
+export flash_loan_pool_fee=1
 echo resim run new_random_launch.rtm
 resim run new_random_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export random_ticket=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
@@ -550,7 +550,7 @@ get_pool_info ${random_launched_coin}
 
 echo
 export amount=50
-export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${amount} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee})) - 0.0000001" | bc)
+export payment=$(echo "${ticket_price} * ${amount} - 0.0000001" | bc)
 echo resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} $amount ${base_coin}:$payment
 resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} $amount ${base_coin}:$payment >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Failed attempt to buy one ticket without paying ticket_price + total_buy_fee
@@ -558,7 +558,7 @@ echo Failed attempt to buy one ticket without paying ticket_price + total_buy_fe
 echo
 update_wallet_amounts
 export bought_tickets1=20
-export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${bought_tickets1} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee}))" | bc)
+export payment=$(echo "${ticket_price} * ${bought_tickets1}" | bc)
 echo resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets1} ${base_coin}:$payment
 resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets1} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${random_ticket}) tickets for $payment $base_coin
@@ -568,7 +568,7 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 update_wallet_amounts
 export bought_tickets2=30
-export payment=$(echo -e "scale = 18\n10000 * ${ticket_price} * ${bought_tickets2} / ((100 - ${buy_sell_fee_percentage}) * (100 - ${buy_pool_fee}))" | bc)
+export payment=$(echo "${ticket_price} * ${bought_tickets2}" | bc)
 echo resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets2} ${base_coin}:$payment
 resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets2} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${random_ticket}) tickets for $payment $base_coin
@@ -639,7 +639,7 @@ update_wallet_amounts
 export coin=${random_launched_coin}
 export loan_amount=9
 export sell_amount=9
-export fee=0.047368421052631578 # loan_amount x last_price x total_flash_loan_fee_percentage / 100
+export fee=$(($flash_loan_fee + $flash_loan_pool_fee))
 echo resim run flash_loan_attack_sell.rtm
 resim run flash_loan_attack_sell.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo "Tried to manipulate price via flash loan: get flash loan -> sell when the pool has few coins (so the price should be high) -> return loan -> buy"
@@ -653,10 +653,10 @@ echo
 update_wallet_amounts
 export coin=${random_launched_coin}
 export coin_amount=9
-export base_coin_amount=12.788588423 # coin_amount x last_price
+export base_coin_amount=12.149159002 # coin_amount x last_price
 export loan_amount=9
 export lp=${lp_random}
-export fee=0.047368421052631578 # loan_amount x last_price x total_flash_loan_fee_percentage / 100
+export fee=$(($flash_loan_fee + $flash_loan_pool_fee))
 echo resim run flash_loan_attack_lp.rtm
 resim run flash_loan_attack_lp.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo "Tried to steal liquidity via flash loan: get flash loan -> add liquidity when the pool has few coins (so the share should be high) -> return loan -> withdraw liquidity"
@@ -719,7 +719,7 @@ echo created coin $met
 echo
 export buy_pool_fee=0.1
 export sell_pool_fee=0.1
-export flash_loan_pool_fee=0.1
+export flash_loan_pool_fee=1
 echo "resim call-method ${radix_pump_component} new_pool $met $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee --proofs ${owner_badge}:${owner_badge_id}"
 resim call-method ${radix_pump_component} new_pool $met $buy_pool_fee $sell_pool_fee $flash_loan_pool_fee --proofs ${owner_badge}:${owner_badge_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export lp_met=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)

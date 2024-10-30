@@ -97,7 +97,7 @@ mod pool {
             get_flash_loan => restrict_to: [proxy];
             return_flash_loan => restrict_to: [proxy];
             get_pool_info => PUBLIC;
-            update_pool_fee_percentage => restrict_to: [proxy];
+            update_pool_fees => restrict_to: [proxy];
             burn => restrict_to: [proxy];
             buy_ticket => restrict_to: [proxy, hook];
             redeem_ticket => restrict_to: [proxy, hook];
@@ -115,7 +115,7 @@ mod pool {
         last_price: Decimal,
         buy_pool_fee_percentage: Decimal,
         sell_pool_fee_percentage: Decimal,
-        flash_loan_pool_fee_percentage: Decimal,
+        flash_loan_pool_fee: Decimal,
         launch: LaunchType,
 
         // This is only needed by RandomLaunch but unfortunately I can't put it into RandomLaunchDetails
@@ -298,7 +298,7 @@ mod pool {
             creator_locked_percentage: Decimal,
             buy_pool_fee_percentage: Decimal,
             sell_pool_fee_percentage: Decimal,
-            flash_loan_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee: Decimal,
             coin_creator_badge_rule: AccessRuleNode,
             base_coin_address: ResourceAddress,
         ) -> (
@@ -342,7 +342,7 @@ mod pool {
                 last_price: launch_price,
                 buy_pool_fee_percentage: buy_pool_fee_percentage,
                 sell_pool_fee_percentage: sell_pool_fee_percentage,
-                flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
+                flash_loan_pool_fee: flash_loan_pool_fee,
                 launch: LaunchType::Fair(
                     FairLaunchDetails {
                         end_launch_time: 0,
@@ -414,7 +414,7 @@ mod pool {
                                 unlocking_time: unlocking_time,
                                 buy_pool_fee_percentage: self.buy_pool_fee_percentage,
                                 sell_pool_fee_percentage: self.sell_pool_fee_percentage,
-                                flash_loan_pool_fee_percentage: self.flash_loan_pool_fee_percentage,
+                                flash_loan_pool_fee: self.flash_loan_pool_fee,
                             }
                         )
                     )
@@ -444,7 +444,7 @@ mod pool {
                                 unlocking_time: unlocking_time,
                                 buy_pool_fee_percentage: self.buy_pool_fee_percentage,
                                 sell_pool_fee_percentage: self.sell_pool_fee_percentage,
-                                flash_loan_pool_fee_percentage: self.flash_loan_pool_fee_percentage,
+                                flash_loan_pool_fee: self.flash_loan_pool_fee,
                             }
                         )
                     )
@@ -548,7 +548,7 @@ mod pool {
                             } else {
                                 random_launch.refunds_vault.put(
                                     self.base_coin_vault.take_advanced(
-                                        (random_launch.sold_tickets - random_launch.winning_tickets) * random_launch.ticket_price,
+                                        (random_launch.sold_tickets - random_launch.winning_tickets) * random_launch.ticket_price * ((100 - self.buy_pool_fee_percentage) / 100),
                                         WithdrawStrategy::Rounded(RoundingMode::AwayFromZero),
                                     )
                                 );
@@ -589,7 +589,7 @@ mod pool {
                     let supply = random_launch.resource_manager.total_supply();
 
                     let base_coin_bucket = self.base_coin_vault.take_advanced(
-                        random_launch.winning_tickets * random_launch.ticket_price,
+                        random_launch.winning_tickets * random_launch.ticket_price * ((100 - self.buy_pool_fee_percentage) / 100),
                         WithdrawStrategy::Rounded(RoundingMode::ToZero),
                     );
                     let base_coin_bucket_amount = base_coin_bucket.amount();
@@ -739,7 +739,7 @@ mod pool {
             coin_icon_url: UncheckedUrl,
             buy_pool_fee_percentage: Decimal,
             sell_pool_fee_percentage: Decimal,
-            flash_loan_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee: Decimal,
             coin_creator_badge_rule: AccessRuleNode,
         ) -> (
             Global<Pool>,
@@ -762,7 +762,7 @@ mod pool {
                 last_price: Decimal::ONE,
                 buy_pool_fee_percentage: buy_pool_fee_percentage,
                 sell_pool_fee_percentage: sell_pool_fee_percentage,
-                flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
+                flash_loan_pool_fee: flash_loan_pool_fee,
                 launch: LaunchType::AlreadyExistingCoin,
                 extracted_tickets: KeyValueStore::new_with_registered_type(),
                 total_lp: Decimal::ZERO,
@@ -798,7 +798,7 @@ mod pool {
             coin_price: Decimal,
             buy_pool_fee_percentage: Decimal,
             sell_pool_fee_percentage: Decimal,
-            flash_loan_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee: Decimal,
             coin_creator_badge_rule: AccessRuleNode,
         ) -> (
             Global<Pool>,
@@ -867,7 +867,7 @@ mod pool {
                 last_price: coin_price,
                 buy_pool_fee_percentage: buy_pool_fee_percentage,
                 sell_pool_fee_percentage: sell_pool_fee_percentage,
-                flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
+                flash_loan_pool_fee: flash_loan_pool_fee,
                 launch: LaunchType::Quick(
                     QuickLaunchDetails {
                         ignored_coins: ignored_coins,
@@ -909,7 +909,7 @@ mod pool {
                         creator_allocation: creator_amount,
                         buy_pool_fee_percentage: buy_pool_fee_percentage,
                         sell_pool_fee_percentage: sell_pool_fee_percentage,
-                        flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
+                        flash_loan_pool_fee: flash_loan_pool_fee,
                     }
                 ),
                 lp_resource_manager.address(),
@@ -931,7 +931,7 @@ mod pool {
             coins_per_winning_ticket: Decimal,
             buy_pool_fee_percentage: Decimal,
             sell_pool_fee_percentage: Decimal,
-            flash_loan_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee: Decimal,
             coin_creator_badge_rule: AccessRuleNode,
             base_coin_address: ResourceAddress,
         ) -> (
@@ -1050,7 +1050,7 @@ mod pool {
                 last_price: ticket_price / coins_per_winning_ticket,
                 buy_pool_fee_percentage: buy_pool_fee_percentage,
                 sell_pool_fee_percentage: sell_pool_fee_percentage,
-                flash_loan_pool_fee_percentage: flash_loan_pool_fee_percentage,
+                flash_loan_pool_fee: flash_loan_pool_fee,
                 launch: LaunchType::Random(
                     RandomLaunchDetails {
                         end_launch_time: 0,
@@ -1342,18 +1342,14 @@ mod pool {
         pub fn get_flash_loan(
             &mut self,
             amount: Decimal,
-        ) -> (
-            Bucket, // bucket of coins
-            Decimal, // price
-        ) {
-            (self.coin_vault.get_loan(amount), self.last_price)
+        ) -> Bucket {
+            self.coin_vault.get_loan(amount)
         }
 
         pub fn return_flash_loan(
             &mut self,
             base_coin_bucket: Bucket,
             coin_bucket: Bucket,
-            price: Decimal,
         ) -> (
             HookArgument,
             AnyPoolEvent,
@@ -1363,7 +1359,7 @@ mod pool {
                 "Not allowed in this mode",
             );
             assert!(
-                base_coin_bucket.amount() >= coin_bucket.amount() * price * self.flash_loan_pool_fee_percentage / dec!(100),
+                base_coin_bucket.amount() >= self.flash_loan_pool_fee,
                 "Insufficient fee paid to the pool",
             );
 
@@ -1382,7 +1378,7 @@ mod pool {
                     operation: HookableOperation::PostReturnFlashLoan,
                     amount: Some(coin_bucket_amount),
                     mode: PoolMode::Normal,
-                    price: Some(price),
+                    price: Some(self.last_price),
                     ids: vec![],
                 },
                 AnyPoolEvent::FlashLoanEvent(
@@ -1413,7 +1409,7 @@ mod pool {
                 last_price: self.last_price,
                 total_buy_fee_percentage: self.buy_pool_fee_percentage,
                 total_sell_fee_percentage: self.sell_pool_fee_percentage,
-                total_flash_loan_fee_percentage: self.flash_loan_pool_fee_percentage,
+                total_flash_loan_fee: self.flash_loan_pool_fee,
                 pool_mode: self.mode,
                 lp_resource_address: self.lp_resource_manager.address(),
                 coin_lp_ratio: coin_lp_ratio,
@@ -1456,11 +1452,11 @@ mod pool {
             }
         }
 
-        pub fn update_pool_fee_percentage(
+        pub fn update_pool_fees(
             &mut self,
             buy_pool_fee_percentage: Decimal,
             sell_pool_fee_percentage: Decimal,
-            flash_loan_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee: Decimal,
         ) -> AnyPoolEvent {
             assert!(
                 self.mode == PoolMode::WaitingForLaunch ||
@@ -1471,28 +1467,27 @@ mod pool {
 
             assert!(
                 buy_pool_fee_percentage <= self.buy_pool_fee_percentage &&
-                sell_pool_fee_percentage <= self.sell_pool_fee_percentage &&
-                flash_loan_pool_fee_percentage <= self.flash_loan_pool_fee_percentage,
-                "You can't increase pool fees",
+                sell_pool_fee_percentage <= self.sell_pool_fee_percentage,
+                "You can't increase pool percentage fees",
             );
 
             assert!(
                 buy_pool_fee_percentage < self.buy_pool_fee_percentage ||
                 sell_pool_fee_percentage < self.sell_pool_fee_percentage ||
-                flash_loan_pool_fee_percentage < self.flash_loan_pool_fee_percentage,
+                flash_loan_pool_fee != self.flash_loan_pool_fee,
                 "No changes made",
             );
 
             self.buy_pool_fee_percentage = buy_pool_fee_percentage;
             self.sell_pool_fee_percentage = sell_pool_fee_percentage;
-            self.flash_loan_pool_fee_percentage = flash_loan_pool_fee_percentage;
+            self.flash_loan_pool_fee = flash_loan_pool_fee;
 
             AnyPoolEvent::FeeUpdateEvent(
                 FeeUpdateEvent {
                     resource_address: self.coin_vault.resource_address(),
                     buy_pool_fee_percentage: buy_pool_fee_percentage,
                     sell_pool_fee_percentage: sell_pool_fee_percentage,
-                    flash_loan_pool_fee_percentage: sell_pool_fee_percentage,
+                    flash_loan_pool_fee: flash_loan_pool_fee,
                 }
             )
         }
@@ -1549,16 +1544,15 @@ mod pool {
             );
             assert!(
                 amount <= MAX_TICKETS_PER_OPERATION,
-                "It is not allowed to buy more than {} tickets in a single operation",
+                "It is not permitted to buy more than {} tickets in a single operation",
                 MAX_TICKETS_PER_OPERATION,
             );
         
             match self.launch {
                 LaunchType::Random(ref mut random_launch) => {
                     let fee = base_coin_bucket.amount() * self.buy_pool_fee_percentage / 100;
-                    let available_base_coin_amount = base_coin_bucket.amount() - fee;
                     assert!(
-                        available_base_coin_amount >= Decimal::try_from(amount).unwrap() * random_launch.ticket_price,
+                        base_coin_bucket.amount() >= Decimal::try_from(amount).unwrap() * random_launch.ticket_price,
                         "Not enough cois to buy that amount of tickets",
                     );
 
@@ -1711,7 +1705,13 @@ mod pool {
                                             coin_bucket.put(random_launch.winners_vault.take(random_launch.coins_per_winning_ticket));
                                             winners.push(ticket_id.value());
                                         } else {
-                                            base_coin_bucket.put(random_launch.refunds_vault.take(random_launch.ticket_price));
+                                            base_coin_bucket.put(
+                                                random_launch.refunds_vault.take_advanced(
+                                                    // TODO: this is not correct if fee has changed
+                                                    random_launch.ticket_price * (100 - self.buy_pool_fee_percentage) / 100,
+                                                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                                                )
+                                            );
                                             losers.push(ticket_id.value());
                                         }
                                     },

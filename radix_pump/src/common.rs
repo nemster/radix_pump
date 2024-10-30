@@ -20,7 +20,7 @@ pub struct PoolInfo {
     pub last_price: Decimal,
     pub total_buy_fee_percentage: Decimal,
     pub total_sell_fee_percentage: Decimal,
-    pub total_flash_loan_fee_percentage: Decimal,
+    pub total_flash_loan_fee: Decimal,
     pub pool_mode: PoolMode,
     pub lp_resource_address: ResourceAddress,
     pub coin_lp_ratio: Decimal,
@@ -74,7 +74,7 @@ pub struct FairLaunchStartEvent {
     pub unlocking_time: i64,
     pub buy_pool_fee_percentage: Decimal,
     pub sell_pool_fee_percentage: Decimal,
-    pub flash_loan_pool_fee_percentage: Decimal,
+    pub flash_loan_pool_fee: Decimal,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent, Clone)]
@@ -94,7 +94,7 @@ pub struct QuickLaunchEvent {
     pub creator_allocation: Decimal,
     pub buy_pool_fee_percentage: Decimal,
     pub sell_pool_fee_percentage: Decimal,
-    pub flash_loan_pool_fee_percentage: Decimal,
+    pub flash_loan_pool_fee: Decimal,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent, Clone)]
@@ -107,7 +107,7 @@ pub struct RandomLaunchStartEvent {
     pub unlocking_time: i64,
     pub buy_pool_fee_percentage: Decimal,
     pub sell_pool_fee_percentage: Decimal,
-    pub flash_loan_pool_fee_percentage: Decimal,
+    pub flash_loan_pool_fee: Decimal,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent, Clone)]
@@ -167,7 +167,7 @@ pub struct FeeUpdateEvent {
     pub resource_address: ResourceAddress,
     pub buy_pool_fee_percentage: Decimal,
     pub sell_pool_fee_percentage: Decimal,
-    pub flash_loan_pool_fee_percentage: Decimal,
+    pub flash_loan_pool_fee: Decimal,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent, Clone)]

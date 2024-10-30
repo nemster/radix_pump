@@ -54,17 +54,19 @@ Coins created in RadixPump can be borrowed by users.
 The user must return a fee in base coin together with the borrowed coins in the same transaction or it fails:  
 `get_flash_loan` -> do something with the coins -> `return_flash_loan`  
  
-The component owner gets his own fee percentage while the coin creator can set a fee percentage that goes to the pool. Both fees are paid in base coins.  
+The component owner gets his own fee while the coin creator can set a fee that goes to the pool. Both fees are paid in base coins and don't depend on the borrowed amount.  
 
 ## Pool fees
 
 A coin creator can set fees on buy, sell and flash loan operations for his coin.  
 
-The component owner can set the upper limit for buy/sell and flash loan fees; by default this limit is 10%.
+The component owner can set the upper limit for buy/sell fees; by default this limit is 10%.  
 
-No one can retrieve pool fees, the paid base coins just get into the pool itself. The effect is a coin price increase.  
+No one can retrieve pool fees, the paid base coins just get into the pool itself. The effect is a coin price increase agianst the base coin.  
 
-Once a pool is created it is not possible to increase its fees but only reduce them.  
+Once a pool is created it is not possible to increase its percentage fees but only reduce them.  
+
+The flash loan fee is fixed (not a percentage), has no uppper limit and can be increased too by the coin creator.  
 
 ## Hooks
 
@@ -104,7 +106,7 @@ CALL_FUNCTION
     Decimal("<MINIMUM_DEPOSIT>")
     Decimal("<CREATION_FEE_PERCENTAGE>")
     Decimal("<BUY_SELL_FEE_PERCENTAGE>")
-    Decimal("<FLASH_LOAN_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_FEE>")
 ;
 
 CALL_FUNCTION
@@ -121,7 +123,7 @@ CALL_FUNCTION
 `<MINIMUM_DEPOSIT>` is the minimum amount of base coins that a new coin creator must deposit when doing a QuickLaunch.  
 `<CREATION_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by the token creators to the component owner.  
 `<BUY_SELL_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the component owner.  
-`<FLASH_LOAN_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the component owner.  
+`<FLASH_LOAN_FEE>` is the amount of base coins paid by flash borrowers to the component owner.  
 `<HOOKS_BADGE>` is the resource address of the badge created by RadixPump to authenticate towards the hooks; you can get it from `get_pool_info`.
 
 ### forbid_symbols
@@ -191,7 +193,7 @@ CALL_METHOD
     Decimal("<CREATOR_LOCKED_PERCENTAGE>")
     Decimal("<BUY_POOL_FEE_PERCENTAGE>")
     Decimal("<SELL_POOL_FEE_PERCENTAGE>")
-    Decimal("<FLASH_LOAN_POOL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_POOL_FEE>")
 ;
 ```
 
@@ -204,9 +206,9 @@ CALL_METHOD
 `<URL>` is one of the social URL of the coin.  
 `<LAUNCH_PRICE>` is the price that will be constant during the launch phase.  
 `<CREATOR_LOCKED_PERCENTAGE>` percentage of minted coins reserved to the creator (initially locked).  
-`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%). During the launch phase this fee can't be less than 0.1% (fees are needed to initialize the  pool).   
 `<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can sey a upper limit to this parameter (by default 10%).  
-`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
 
 The name and symbol of the coin are reserved no coin is minted at this stage.  
 
@@ -252,7 +254,7 @@ CALL_METHOD
     Decimal("<PRICE>")
     Decimal("<BUY_POOL_FEE_PERCENTAGE>")
     Decimal("<SELL_POOL_FEE_PERCENTAGE>")
-    Decimal("<FLASH_LOAN_POOL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_POOL_FEE>")
 ;
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
@@ -274,7 +276,7 @@ CALL_METHOD
 `<PRICE>` is the initial price of the coin. The creator himself receives coins bought at this price with his base coin deposit.  
 `<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
 `<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
-`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
 
 The coin creator receives a creator badge NFT that shows in the wallet a numeric ID, the resource address, name and symbol of the new created coin.  
 This badge allows the creator to:  
@@ -309,7 +311,7 @@ CALL_METHOD
     Decimal("<COINS_PER_WINNING_TICKET>")
     Decimal("<BUY_POOL_FEE_PERCENTAGE>")
     Decimal("<SELL_POOL_FEE_PERCENTAGE>")
-    Decimal("<FLASH_LOAN_POOL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_POOL_FEE>")
 ;
 ```
 
@@ -320,12 +322,12 @@ CALL_METHOD
 `<COIN_DESCRIPTION>` is a descriptive text that is added to the coin metadata (it can be an empty string).  
 `<COIN_INFO_URL>` is the URL of the website of the coin (it can be an empty string).  
 `<URL>` is one of the social URL of the coin.  
-`<TICKET_PRICE>` is the price (in base coins) of a ticket.  
+`<TICKET_PRICE>` is the price (in base coins) of a ticket. This includes all fees.   
 `<WINNING_TICKETS>` how many winning tickets will be randomply extracted.  
 `<COINS_PER_WINNING_TICKET>` how many coins a winning ticket will receive.  
-`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%). During the launch phase this fee can't be less than 0.1% (fees are needed to initialize the  pool).  
 `<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can sey a upper limit to this parameter (by default 10%).  
-`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
 
 The ticket sale starts when the creator calls the `launch` method and ends when he calls the `terminate_launch` for the first time.  
 The coin creator will get the coins corresponding to a winning ticket but these coins have a time based lock (see `unlock` method).  
@@ -348,7 +350,7 @@ CALL_METHOD
     "<COIN_ADDRESS>"
     Decimal("<BUY_POOL_FEE_PERCENTAGE>")
     Decimal("<SELL_POOL_FEE_PERCENTAGE>")
-    Decimal("<FLASH_LOAN_POOL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_POOL_FEE>")
 ;
 
 ```
@@ -358,7 +360,7 @@ CALL_METHOD
 `<COIN_ADDRESS>` is the resource address of the existing coin.  
 `<BUY_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
 `<SELL_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by sellers to the coin pool. The component owner can sey a upper limit to this parameter (by default 10%).  
-`<FLASH_LOAN_POOL_FEE_PERCENTAGE>`  is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the coin pool. The component owner can set a upper limit to this parameter (by default 10%).  
+`<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
 
 The created pool is not initialised: the `add_liquidity` method must be called to make it usable.  
 
@@ -406,9 +408,8 @@ CALL_METHOD
     "update_fees"
     Decimal("<CREATION_FEE_PERCENTAGE>")
     Decimal("<BUY_SELL_FEE_PERCENTAGE>")
-    Decimal("<FLASH_LOAN_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_FEE>")
     Decimal("<MAX_BUY_SELL_POOL_FEE_PERCENTAGE>")
-    Decimal("<MAX_FLASH_LOAN_POOL_FEE_PERCENTAGE>")
 ;
 ```
 
@@ -417,9 +418,8 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<CREATION_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by the token creators.  
 `<BUY_SELL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers.  
-`<FLASH_LOAN_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the component owner.  
+`<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
 `<MAX_BUY_SELL_POOL_FEE_PERCENTAGE>` is the upper limit to the `buy_sell_pool_fee_percentage` a coin creator can set (by default 10).  
-`<MAX_FLASH_LOAN_POOL_FEE_PERCENTAGE>` is the upper limit to the `flash_loan_pool_fee_percentage` a coin creator can set (by default 10).  
 
 ### owner_set_liquidation_mode
 
@@ -524,14 +524,14 @@ CALL_METHOD
 ```
 `<TRANSIENT_NFT_ADDRESS>` is the address of the transient NFT returned by the `get_flash_loan`. This is known at the component instantiation and never changes.  
 `<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
-`<FEES>` is the total fees the user must pay to the component owner and the pool.  
+`<FEES>` is the total fees the user must pay to the component owner and the pool. This is a straight number per pool, does not depend on the loan amount.  
 `<COIN_ADDRESS>` is the resource address of the coin the user borrowed.  
 `<LOAN_AMOUNT>` is the requested loan amount.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 
 A `FlashLoanEvent` event is issued. It contains the resource address of the borrowed coin, the amount returned and the fees paid to the pool.  
 
-### update_pool_fee_percentage
+### update_pool_fees
 
 A coin creator can modify the pool fees specified at coin creation time.  
 
@@ -551,7 +551,7 @@ CALL_METHOD
     Proof("creator_proof")
     Decimal("<BUY_POOL_FEE_PERCENTAGE>")
     Decimal("<SELL_POOL_FEE_PERCENTAGE>")
-    Decimal("<FLASH_LOAN_POOL_FEE_PERCENTAGE>")
+    Decimal("<FLASH_LOAN_POOL_FEE>")
 ;
 ```
 
@@ -561,9 +561,9 @@ CALL_METHOD
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<BUY_POOL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the pool. The upper limit for this parameter can be changed by the componet owner.  
 `<SELL_POOL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the pool. The upper limit for this parameter can be changed by the componet owner.  
-`<FLASH_LOAN_POOL_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by flash borrowers to the pool. The upper limit for this parameter can be changed by the componet owner.  
+`<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
 
-Fees can never be increased, you can only reduce them.  
+Percentage fees can never be increased, you can only reduce them.  
 
 A `FeeUpdateEvent` event is issued.  
 
@@ -589,7 +589,7 @@ The method returns a `PoolInfo` struct containing these information:
 - the price of the last buy or sell operation.  
 - total (component owner + pool) buy fee percentage.  
 - total (component owner + pool) sell fee percentage.  
-- total (component owner + pool) flash loan fee percentage.  
+- total (component owner + pool) flash loan fee.  
 - the pool mode (WaitingForLaunch, Launching, TerminatingLaunch, Normal or Liquidation).  
 - the resource address of the liquidity NFT of the pool.  
 - the number of coins currently corresponding to 1 `lp_share` in the liquidity NFT.  

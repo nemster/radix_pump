@@ -74,6 +74,26 @@ struct PoolStruct {
     Vec<String>,
 )]
 mod radix_pump {
+
+    extern_blueprint!(
+        "package_tdx_2_1pk4su4de0gqlx9ljw3c9ydf6xzf8tfsy3eydjx0tky0v4529f5gp27",
+        RandomComponent {
+            fn request_random(
+                &self, address: ComponentAddress,
+                method_name: String,
+                on_error: String,
+                key: u32,
+                badge_opt:
+                Option<FungibleBucket>,
+                expected_fee: u8
+            ) -> u32;
+        }
+    );
+    const RNG: Global<RandomComponent> = global_component!(
+        RandomComponent,
+        "component_tdx_2_1cryx5n3tmzw3uhy93ckdcjujzacc8wfftxplykssfjm7krwlutwhpc"
+    );
+
     enable_method_auth! {
         methods {
             forbid_symbols => restrict_to: [OWNER];

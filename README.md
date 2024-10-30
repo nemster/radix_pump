@@ -1136,7 +1136,6 @@ Depending on the coins, a `BuyEvent` and/or a `SellEvent`event is issued. It con
 ## Special thanks to:
 
 - Mleekko for the dot-random service  
-- razi90 for updating the scrypto-interface library to Scrypto 1.2.0  
 - The HIT & FOMO teams for supporting me during the development of this project
 
 ## Copyright

@@ -64,7 +64,7 @@ static SHOULD_NOT_HAPPEN: &str = "Should not happen";
 mod pool {
 
     extern_blueprint!(
-        "package_sim1pk3cmat8st4ja2ms8mjqy2e9ptk8y6cx40v4qnfrkgnxcp2krkpr92",
+        "package_tdx_2_1pk4su4de0gqlx9ljw3c9ydf6xzf8tfsy3eydjx0tky0v4529f5gp27",
         RandomComponent {
             fn request_random(
                 &self, address: ComponentAddress,
@@ -79,7 +79,7 @@ mod pool {
     );
     const RNG: Global<RandomComponent> = global_component!(
         RandomComponent,
-        "component_sim1crmulhl5yrk6hh4jsyldps5sdrp08r5v9wusupvzxgqvhlp4k00px7"
+        "component_tdx_2_1cryx5n3tmzw3uhy93ckdcjujzacc8wfftxplykssfjm7krwlutwhpc"
     );
 
     enable_method_auth! {

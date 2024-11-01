@@ -65,7 +65,7 @@ pub enum HookableOperation {
     PostRemoveLiquidity,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct FairLaunchStartEvent {
     pub resource_address: ResourceAddress,
     pub price: Decimal,
@@ -77,7 +77,7 @@ pub struct FairLaunchStartEvent {
     pub flash_loan_pool_fee: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct FairLaunchEndEvent {
     pub resource_address: ResourceAddress,
     pub creator_proceeds: Decimal,
@@ -86,7 +86,7 @@ pub struct FairLaunchEndEvent {
     pub coins_in_pool: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct QuickLaunchEvent {
     pub resource_address: ResourceAddress,
     pub price: Decimal,
@@ -97,7 +97,7 @@ pub struct QuickLaunchEvent {
     pub flash_loan_pool_fee: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct RandomLaunchStartEvent {
     pub resource_address: ResourceAddress,
     pub ticket_price: Decimal,
@@ -110,7 +110,7 @@ pub struct RandomLaunchStartEvent {
     pub flash_loan_pool_fee: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct RandomLaunchEndEvent {
     pub resource_address: ResourceAddress,
     pub creator_proceeds: Decimal,
@@ -119,7 +119,7 @@ pub struct RandomLaunchEndEvent {
     pub coins_in_pool: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct BuyEvent {
     pub resource_address: ResourceAddress,
     pub mode: PoolMode,
@@ -127,9 +127,10 @@ pub struct BuyEvent {
     pub price: Decimal,
     pub coins_in_pool: Decimal,
     pub fee_paid_to_the_pool: Decimal,
+    pub integrator_id: u64,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct SellEvent {
     pub resource_address: ResourceAddress,
     pub mode: PoolMode,
@@ -137,22 +138,24 @@ pub struct SellEvent {
     pub price: Decimal,
     pub coins_in_pool: Decimal,
     pub fee_paid_to_the_pool: Decimal,
+    pub integrator_id: u64,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct LiquidationEvent {
     pub resource_address: ResourceAddress,
     pub price: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct FlashLoanEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
     pub fee_paid_to_the_pool: Decimal,
+    pub integrator_id: u64,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct BuyTicketEvent {
     pub resource_address: ResourceAddress,
     pub amount: u32,
@@ -162,7 +165,7 @@ pub struct BuyTicketEvent {
     pub fee_paid_to_the_pool: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct FeeUpdateEvent {
     pub resource_address: ResourceAddress,
     pub buy_pool_fee_percentage: Decimal,
@@ -170,25 +173,25 @@ pub struct FeeUpdateEvent {
     pub flash_loan_pool_fee: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct BurnEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct AddLiquidityEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct RemoveLiquidityEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
 }
 
-#[derive(ScryptoSbor, Clone)]
+#[derive(ScryptoSbor, Clone, Copy)]
 pub enum AnyPoolEvent {
     FairLaunchStartEvent(FairLaunchStartEvent),
     FairLaunchEndEvent(FairLaunchEndEvent),

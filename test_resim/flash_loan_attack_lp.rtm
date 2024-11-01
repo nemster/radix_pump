@@ -63,6 +63,7 @@ CALL_METHOD
     Bucket("transient_nft_bucket")
     Bucket("base_coin_bucket2")
     Bucket("coin_bucket2")
+    ${integrator_id}u64
 ;
 
 TAKE_ALL_FROM_WORKTOP

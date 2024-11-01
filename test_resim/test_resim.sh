@@ -282,8 +282,9 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 update_wallet_amounts
 export payment=1000
-echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${quick_launched_coin}
-resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${quick_launched_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export integrator_id=0
+echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${quick_launched_coin} ${integrator_id}
+resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${quick_launched_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${quick_launched_coin}) ${quick_launched_coin} for $payment ${base_coin}
 echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -294,8 +295,8 @@ get_pool_info ${quick_launched_coin}
 echo
 update_wallet_amounts
 export payment=10
-echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin}
-resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} ${integrator_id}
+resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin}
 echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -384,8 +385,8 @@ get_pool_info ${fair_launched_coin}
 echo
 update_wallet_amounts
 export payment=1000
-echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin}
-resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin} ${integrator_id}
+resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${fair_launched_coin}) ${fair_launched_coin} for $payment ${base_coin}
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -393,8 +394,8 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 update_wallet_amounts
 export payment=1000
-echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin}
-resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin} ${integrator_id}
+resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${fair_launched_coin}) ${fair_launched_coin} for $payment ${base_coin}
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -404,8 +405,8 @@ get_pool_info ${fair_launched_coin}
 
 echo
 export payment=1
-echo resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin}
-resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin} >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin} ${integrator_id}
+resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin} ${integrator_id} >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to sellf ${fair_launched_coin} during fair launch, it is forbidden so the transaction failed
 
 echo
@@ -434,8 +435,8 @@ get_pool_info ${fair_launched_coin}
 echo
 update_wallet_amounts
 export payment=1
-echo resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin}
-resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin} ${integrator_id}
+resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Sold $payment ${fair_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin}
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -531,8 +532,8 @@ get_pool_info ${random_launched_coin}
 
 echo
 export payment=1000
-echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${random_launched_coin}
-resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${random_launched_coin} >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${random_launched_coin} ${integrator_id}
+resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${random_launched_coin} ${integrator_id} >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Someone tried to buy ${random_launched_coin} before it was launched, the transaction failed
 
 echo
@@ -667,8 +668,8 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 update_wallet_amounts
 export sell_amount=2
-echo resim call-method ${radix_pump_component} swap ${random_launched_coin}:${sell_amount} ${quick_launched_coin}
-resim call-method ${radix_pump_component} swap ${random_launched_coin}:${sell_amount} ${quick_launched_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${random_launched_coin}:${sell_amount} ${quick_launched_coin} ${integrator_id}
+resim call-method ${radix_pump_component} swap ${random_launched_coin}:${sell_amount} ${quick_launched_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Swapped ${sell_amount} ${random_launched_coin} for $(increase_in_wallet ${quick_launched_coin}) ${quick_launched_coin}
 echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -688,8 +689,8 @@ get_pool_info ${quick_launched_coin}
 echo
 update_wallet_amounts
 export payment=1
-echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin}
-resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} ${integrator_id}
+resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin}
 echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -697,8 +698,8 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 update_wallet_amounts
 export payment=1
-echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin}
-resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} ${integrator_id}
+resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo "Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin} (price should not change)"
 echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -741,5 +742,4 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info $met
-
 

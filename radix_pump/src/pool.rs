@@ -1138,6 +1138,7 @@ mod pool {
                                 price: self.last_price,
                                 coins_in_pool: self.coin_vault.amount(),
                                 fee_paid_to_the_pool: fee,
+                                integrator_id: 0,
                             }
                         )
                     )
@@ -1177,6 +1178,7 @@ mod pool {
                                     price: self.last_price,
                                     coins_in_pool: self.coin_vault.amount(),
                                     fee_paid_to_the_pool: fee,
+                                    integrator_id: 0,
                                 }
                             )
                         )
@@ -1241,6 +1243,7 @@ mod pool {
                                 price: self.last_price,
                                 coins_in_pool: self.coin_vault.amount(),
                                 fee_paid_to_the_pool: fee_amount,
+                                integrator_id: 0,
                             }
                         )
                     )
@@ -1272,6 +1275,7 @@ mod pool {
                                 price: self.last_price,
                                 coins_in_pool: self.coin_vault.amount(),
                                 fee_paid_to_the_pool: Decimal::ZERO,
+                                integrator_id: 0,
                             }
                         )
                     )
@@ -1386,6 +1390,7 @@ mod pool {
                         resource_address: self.coin_vault.resource_address(),
                         amount: coin_bucket_amount,
                         fee_paid_to_the_pool: base_coin_bucket_amount,
+                        integrator_id: 0,
                     }
                 )
             )

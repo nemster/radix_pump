@@ -90,6 +90,20 @@ An hook can never steal the buckets intended for the user; it can only add new b
 
 RadixPump uses a proof of a badge when calling an hook, so the hook can be sure about the caller.  
 
+## Integrators
+
+The owner of a RadixPump component can let third party integrators build their interfaces around it and get fees from the users interacting with the component trough their interfaces.  
+
+The component owner can ask the component to mint an integrator badge to give to a specific integrator.  
+
+Each badge has an unique numeric id that can be specified in the `swap` and `return_flash_loan` methods. When an integrator\_id is specified, the RadixPump collected fee (as opposed to the pool collected fee) will go to the integrator. In this case the component owner receives no fee at all.   
+
+The component owner has the permission to deactivate an integrator badge, this blueprint doesn't offer this feature, the active field in the NonFungibleData can be changed by the Radix developer console. An inactive integrator can still withdraw his past fees but will not be accrued new fees.  
+
+If a non existing or inactive `integrator_id` is specified (as an example `0u64`) the component owner receives the fee.  
+
+Both the component owner and the integrators can withdraw the fees by using the `get_fees` method.  
+
 ## Transaction manifests
 
 ### Instantiate (Stokenet)
@@ -366,14 +380,15 @@ The created pool is not initialised: the `add_liquidity` method must be called t
 
 ### get_fees
 
-The component owner can call this method to claim the fees paid by creators, buyers, sellers and borrowers.  
+The component owner and the integrators can call this method to get fees collected by the platform.  
 
 ```
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
-    "create_proof_of_amount"
-    Address("<OWNER_BADGE_ADDRESS>")
-    Decimal("1")
+    "create_proof_of_non_fungibles"
+    Address("<INTEGRATOR_BADGE_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<INTEGRATOR_BADGE_ID>#"))
+    
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
@@ -387,10 +402,13 @@ CALL_METHOD
 ```
 
 `<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
-`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<INTEGRATOR_BADGE_ADDRESS>` is the resource address of the integrator badge.  
+`<INTEGRATOR_BADGE_ID>` is the numeric id of the integrator badge.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 
 The fees are always base coins (probably XRD).  
+
+If you are the component owner, replace the first call with the `create_proof_of_amount` you see in the owner reserved methods (as an example `update_fees`).  
 
 ### update_fees
 
@@ -520,6 +538,7 @@ CALL_METHOD
     Bucket("transient_nft_bucket")
     Bucket("base_coin_bucket")
     Bucket("coin_bucket")
+    <INTEGRATOR_ID>u64
 ;
 ```
 `<TRANSIENT_NFT_ADDRESS>` is the address of the transient NFT returned by the `get_flash_loan`. This is known at the component instantiation and never changes.  
@@ -528,6 +547,7 @@ CALL_METHOD
 `<COIN_ADDRESS>` is the resource address of the coin the user borrowed.  
 `<LOAN_AMOUNT>` is the requested loan amount.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<INTEGRATOR_ID>` is 0 or the id of the badge of the integrator that will receive the platform fees.  
 
 A `FlashLoanEvent` event is issued. It contains the resource address of the borrowed coin, the amount returned and the fees paid to the pool.  
 
@@ -1117,6 +1137,7 @@ CALL_METHOD
     "swap"
     Bucket("coin1_bucket")
     Address("<COIN2_ADDRESS>")
+    <INTEGRATOR_ID>u64
 ;
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
@@ -1130,8 +1151,37 @@ CALL_METHOD
 `<COIN1_AMOUNT>` is the coin amount the user wants to sell.
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.
 `<COIN2_ADDRESS>` is the coin the user wants to buy.
+`<INTEGRATOR_ID>` is 0 or the id of the badge of the integrator that will receive the platform fees.  
 
 Depending on the coins, a `BuyEvent` and/or a `SellEvent`event is issued. It contains the resource address of the bought coin, the pool mode, the bought or sold amount, the new price, the number of coins currently in the pool and the fees paid to the pool.  
+
+### new_integrator
+
+The component owner can use this method to mint an integrator badge.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "new_integrator"
+    "<NAME>"
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.
+`<NAME>` is the name assigned to the integrator. It has no real use: it's just a reminder for the owner of the badges he created.  
 
 ## Special thanks to:
 

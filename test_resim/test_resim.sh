@@ -233,36 +233,36 @@ get_pool_info ${quick_launched_coin}
 
 echo
 export name=SameSymbolCoin
-echo run new_quick_launch.rtm
-run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run new_quick_launch.rtm
+resim run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with the same symbol and the transaction failed as expected
 
 echo
 export symbol=QL2
 export name=QuickLaunchedCoin
-echo run new_quick_launch.rtm
-run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run new_quick_launch.rtm
+resim run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with the same name and the transaction failed as expected
 
 echo
 export symbol=XRD
 export name=FakeRadix
-echo run new_quick_launch.rtm
-run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run new_quick_launch.rtm
+resim run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with XRD as symbol and the transaction failed as expected
 
 echo
 export symbol=XXX
 export name=Radix
-echo run new_quick_launch.rtm
-run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run new_quick_launch.rtm
+resim run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with Radix as name and the transaction failed as expected
 
 echo
 export base_coin_amount=$((${minimum_deposit} - 1))
 export name=YYY
-echo run new_quick_launch.rtm
-run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run new_quick_launch.rtm
+resim run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with an insufficient base coin deposit and the transaction failed as expected
 
 echo

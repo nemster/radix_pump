@@ -243,7 +243,6 @@ version = "1.0.0"
 dependencies = [
  "radix-common 1.2.0-dev",
  "radix-engine-interface 1.2.0-dev",
- "random",
  "scrypto 1.2.0-dev",
  "scrypto-interface",
 ]

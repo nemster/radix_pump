@@ -1,6 +1,5 @@
 use scrypto::prelude::*;
 use scrypto_interface::*;
-use crate::pool::pool::*;
 
 #[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
 pub enum PoolMode {
@@ -14,7 +13,7 @@ pub enum PoolMode {
 
 #[derive(ScryptoSbor)]
 pub struct PoolInfo {
-    pub component: Global<Pool>,
+    pub component: RadixPumpPoolInterfaceScryptoStub,
     pub base_coin_amount: Decimal,
     pub coin_amount: Decimal,
     pub last_price: Decimal,
@@ -226,7 +225,7 @@ pub struct LPData {
 
 #[derive(ScryptoSbor, Clone)]
 pub struct HookArgument {
-//TODO: why this doesn't work?    pub component: Global<Pool>,
+    pub component: RadixPumpPoolInterfaceScryptoStub,
     pub coin_address: ResourceAddress,
     pub operation: HookableOperation,
     pub amount: Option<Decimal>,
@@ -292,5 +291,77 @@ define_interface! {
             // For round 0 hooks this must be false.
             bool,
         );
+    }
+}
+
+define_interface! {
+    RadixPumpPool impl [ScryptoStub, Trait, ScryptoTestStub] {
+
+// THE FOLLOWING METHOD REQUIRES NO AUTHENTICATION, IT CAN BE CALLED BY ANYONE
+
+        fn get_pool_info(&self) -> PoolInfo;
+
+// THE FOLLOWING METHODS CAN ONLY BE CALLED BY ROUND 0 AND 1 HOOKS AND BY THE PROXY COMPONENT
+
+        fn buy(
+            &mut self,
+            base_coin_bucket: Bucket,
+        ) -> (
+            Bucket,
+            HookArgument,
+            AnyPoolEvent,
+        );
+
+        fn sell(
+            &mut self,
+            coin_bucket: Bucket,
+        ) -> (
+            Bucket,
+            HookArgument,
+            AnyPoolEvent,
+        );
+
+        fn buy_ticket(
+            &mut self,
+            amount: u32,
+            base_coin_bucket: Bucket,
+        ) -> (
+            Bucket,
+            HookArgument,
+            AnyPoolEvent,
+        );
+
+        fn redeem_ticket(
+            &mut self,
+            ticket_bucket: Bucket,
+        ) -> (
+            Bucket, // base coin bucket
+            Option<Bucket>, // coin bucket
+            Option<HookArgument>,
+            Option<HookArgument>,
+        );
+
+        fn add_liquidity(
+            &mut self,
+            base_coin_bucket: Bucket,
+            coin_bucket: Bucket,
+        ) -> (  
+            Bucket,
+            Option<Bucket>,
+            HookArgument, 
+            AnyPoolEvent,
+            Option<PoolMode>,
+        );
+
+        fn remove_liquidity(
+            &mut self,
+            lp_bucket: Bucket,
+        ) -> (  
+            Bucket, 
+            Option<Bucket>,
+            HookArgument,
+            AnyPoolEvent,
+        );
+
     }
 }

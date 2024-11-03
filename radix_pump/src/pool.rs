@@ -198,7 +198,7 @@ mod pool {
             }
         }
 
-// THE FOLLOWING METHODS CAN ONLY BE CALLED BY ROUND 0 AND 1 HOOKS AND BY THE PROXY COMPONENT
+// THE FOLLOWING METHODS CAN ONLY BE CALLED BY ROUND 0 AND 1 HOOKS AND BY THE RadixPump COMPONENT
 
         fn buy(
             &mut self,
@@ -783,9 +783,962 @@ mod pool {
             )
         }
 
+// THE FOLLOWING METHODS CAN ONLY BE CALLED BY THE RadixPump COMPONENT
+
+        fn launch(
+            &mut self,
+            end_launch_time: i64,
+            unlocking_time: i64,
+        ) -> (
+            PoolMode,
+            HookArgument,
+            AnyPoolEvent,
+        ) {
+            assert!(
+                self.mode == PoolMode::WaitingForLaunch,
+                "Not allowed in this mode",
+            );
+
+            self.mode = PoolMode::Launching;
+
+            match self.launch {
+                LaunchType::Fair(ref mut fair_launch) => {
+                    fair_launch.end_launch_time = end_launch_time;
+                    fair_launch.unlocking_time = unlocking_time;
+
+                    (
+                        PoolMode::Launching,
+                        HookArgument {
+                            component: Runtime::global_address().into(),
+                            coin_address: self.coin_vault.resource_address(),
+                            operation: HookableOperation::PostFairLaunch,
+                            amount: None,
+                            mode: self.mode,
+                            price: Some(self.last_price),
+                            ids: vec![],
+                        },
+                        AnyPoolEvent::FairLaunchStartEvent(
+                            FairLaunchStartEvent {
+                                resource_address: fair_launch.resource_manager.address(),
+                                price: self.last_price,
+                                creator_locked_percentage: fair_launch.creator_locked_percentage,
+                                end_launch_time: end_launch_time,
+                                unlocking_time: unlocking_time,
+                                buy_pool_fee_percentage: self.buy_pool_fee_percentage,
+                                sell_pool_fee_percentage: self.sell_pool_fee_percentage,
+                                flash_loan_pool_fee: self.flash_loan_pool_fee,
+                            }
+                        )
+                    )
+                },
+                LaunchType::Random(ref mut random_launch) => {
+                    random_launch.end_launch_time = end_launch_time;
+                    random_launch.unlocking_time = unlocking_time;
+
+                    (
+                        PoolMode::Launching,
+                        HookArgument {
+                            component: Runtime::global_address().into(),
+                            coin_address: self.coin_vault.resource_address(),
+                            operation: HookableOperation::PostRandomLaunch,
+                            amount: None,
+                            mode: self.mode,
+                            price: Some(self.last_price),
+                            ids: vec![],
+                        },
+                        AnyPoolEvent::RandomLaunchStartEvent(
+                            RandomLaunchStartEvent {
+                                resource_address: random_launch.resource_manager.address(),
+                                ticket_price: random_launch.ticket_price,
+                                winning_tickets: random_launch.winning_tickets,
+                                coins_per_winning_ticket: random_launch.coins_per_winning_ticket,
+                                end_launch_time: end_launch_time,
+                                unlocking_time: unlocking_time,
+                                buy_pool_fee_percentage: self.buy_pool_fee_percentage,
+                                sell_pool_fee_percentage: self.sell_pool_fee_percentage,
+                                flash_loan_pool_fee: self.flash_loan_pool_fee,
+                            }
+                        )
+                    )
+                },
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
+            }
+        }
+
+        fn terminate_launch(&mut self) -> (
+            Option<Bucket>,
+            Option<PoolMode>,
+            Option<HookArgument>,
+            Option<AnyPoolEvent>,
+        ) {
+            match self.launch {
+                LaunchType::Fair(ref mut fair_launch) => {
+                    assert!(
+                        self.mode == PoolMode::Launching,
+                        "Not allowed in this mode",
+                    );
+
+                    let now = Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch;
+                    assert!(
+                        now >= fair_launch.end_launch_time,
+                        "Too soon",
+                    );
+                    fair_launch.end_launch_time = now;
+
+                    self.mode = PoolMode::Normal;
+
+                    let base_coin_bucket = self.base_coin_vault.take_advanced(
+                        self.base_coin_vault.amount() * (100 - self.buy_pool_fee_percentage) / 100,
+                        WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                    );
+                    let base_coin_bucket_amount = base_coin_bucket.amount();
+
+                    fair_launch.initial_locked_amount = fair_launch.resource_manager.total_supply().unwrap() *
+                        fair_launch.creator_locked_percentage / (dec!(100) - fair_launch.creator_locked_percentage);
+                    fair_launch.locked_vault.put(fair_launch.resource_manager.mint(fair_launch.initial_locked_amount));
+
+                    fair_launch.resource_manager.set_mintable(rule!(deny_all));
+                    fair_launch.resource_manager.lock_mintable();
+
+                    let supply = fair_launch.resource_manager.total_supply();
+
+                    self.total_lp = self.coin_vault.amount();
+
+                    (
+                        Some(base_coin_bucket),
+                        Some(PoolMode::Normal),
+                        Some(
+                            HookArgument {
+                                component: Runtime::global_address().into(),
+                                coin_address: self.coin_vault.resource_address(),
+                                operation: HookableOperation::PostTerminateFairLaunch,
+                                amount: supply,
+                                mode: PoolMode::Normal,
+                                price: Some(self.last_price),
+                                ids: vec![],
+                            }
+                        ),
+                        Some(
+                            AnyPoolEvent::FairLaunchEndEvent(
+                                FairLaunchEndEvent {
+                                    resource_address: fair_launch.resource_manager.address(),
+                                    creator_proceeds: base_coin_bucket_amount,
+                                    creator_locked_allocation: fair_launch.locked_vault.amount(),
+                                    supply: supply.unwrap(),
+                                    coins_in_pool: self.coin_vault.amount(),
+                                }
+                            )
+                        )
+                    )
+                },
+                LaunchType::Random(ref mut random_launch) => {
+                    match self.mode {
+                        PoolMode::Launching => {
+                            let now = Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch;
+                            assert!(
+                                now >= random_launch.end_launch_time,
+                                "Too soon",
+                            );
+                            random_launch.end_launch_time = now;
+
+                            random_launch.winning_tickets = min(random_launch.winning_tickets, random_launch.sold_tickets);
+
+                            if random_launch.winning_tickets == random_launch.sold_tickets {
+                                random_launch.extract_winners = false;
+
+                                self.terminate_random_launch()
+                            } else {
+                                self.mode = PoolMode::TerminatingLaunch;
+
+                                self.prepare_tickets_extraction()
+                            }
+                        },
+                        PoolMode::TerminatingLaunch => {
+                            if random_launch.extract_winners && random_launch.number_of_extracted_tickets < random_launch.winning_tickets ||
+                               !random_launch.extract_winners && random_launch.sold_tickets - random_launch.winning_tickets < random_launch.number_of_extracted_tickets {
+                                self.prepare_tickets_extraction()
+                            } else {
+                                random_launch.refunds_vault.put(
+                                    self.base_coin_vault.take_advanced(
+                                        (random_launch.sold_tickets - random_launch.winning_tickets) * random_launch.ticket_price * ((100 - self.buy_pool_fee_percentage) / 100),
+                                        WithdrawStrategy::Rounded(RoundingMode::AwayFromZero),
+                                    )
+                                );
+
+                                self.terminate_random_launch()
+                            }
+                        },
+                        _ => Runtime::panic(MODE_NOT_ALLOWED.to_string()),
+                    }
+                },
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
+            }
+        }
+
+        fn unlock(
+            &mut self,
+            amount: Option<Decimal>,
+        ) -> Bucket {
+            assert!(
+                self.mode == PoolMode::Normal,
+                "Not allowed in this mode",
+            );
+
+            match self.launch {
+                LaunchType::Fair(ref mut fair_launch) => {
+                    let now = min(Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch, fair_launch.unlocking_time);
+                    let unlockable_amount =
+                        fair_launch.initial_locked_amount *
+                        (now - fair_launch.end_launch_time) / (fair_launch.unlocking_time - fair_launch.end_launch_time) -
+                        fair_launch.unlocked_amount;
+                    let amount_to_unlock = min(
+                        fair_launch.locked_vault.amount(),
+                        match amount {
+                            None => unlockable_amount,
+                            Some(amount) => min(unlockable_amount, amount),
+                        }
+                    );
+
+                    fair_launch.unlocked_amount += amount_to_unlock;
+
+                    fair_launch.locked_vault.take(amount_to_unlock)
+                },
+                LaunchType::Random(ref mut random_launch) => {
+                    let now = min(Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch, random_launch.unlocking_time);
+                    let unlockable_amount =
+                        random_launch.coins_per_winning_ticket *
+                        (now - random_launch.end_launch_time) / (random_launch.unlocking_time - random_launch.end_launch_time) -
+                        random_launch.unlocked_amount;
+                    let amount_to_unlock = min(
+                        random_launch.locked_vault.amount(),
+                        match amount {
+                            None => unlockable_amount,
+                            Some(amount) => min(unlockable_amount, amount),
+                        }
+                    );
+
+                    random_launch.unlocked_amount += amount_to_unlock;
+
+                    random_launch.locked_vault.take(amount_to_unlock)
+                },
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
+            }
+        }
+
+        fn set_liquidation_mode(&mut self) -> (
+            PoolMode,
+            AnyPoolEvent,
+        ) {
+            assert!(
+                self.mode == PoolMode::Normal ||
+                self.mode == PoolMode::Launching ||
+                self.mode == PoolMode::TerminatingLaunch,
+                "Not allowed in this mode",
+            );
+
+            self.mode = PoolMode::Liquidation;
+
+            let coin_resource_manager = ResourceManager::from_address(
+                self.coin_vault.resource_address()
+            );
+            let coin_supply = coin_resource_manager.total_supply().unwrap();
+
+            // This is the number of coins needed to repay LP providers.
+            // The factor 2 exist because we have to repay both coins and base coins provided.
+            // total_users_lp / total_lp represents the share of the coin in the pool that belogs to
+            // LP providers,
+            let coin_equivalent_lp: PreciseDecimal = 2 * PreciseDecimal::from(self.coins_in_pool()) * self.total_users_lp / self.total_lp;
+
+            let coin_circulating_supply: PreciseDecimal = match &self.launch {
+                LaunchType::Random(random_launch) =>
+                    coin_supply +
+                    coin_equivalent_lp -
+                    random_launch.locked_vault.amount() -
+                    self.coin_vault.amount(),
+                LaunchType::Fair(fair_launch) =>
+                    coin_supply +
+                    coin_equivalent_lp -
+                    fair_launch.locked_vault.amount() -
+                    self.coin_vault.amount(),
+                _ =>
+                    coin_supply +
+                    coin_equivalent_lp -
+                    self.coin_vault.amount(),
+            };
+
+            // We have to repay the coin circulating supply with the base coins in the pool
+            self.last_price = (self.base_coin_vault.amount() / coin_circulating_supply)
+                .checked_truncate(RoundingMode::ToZero).unwrap();
+
+            self.base_coins_to_lp_providers = (coin_equivalent_lp * self.base_coin_vault.amount() / coin_circulating_supply)
+                .checked_truncate(RoundingMode::ToZero).unwrap();
+
+            (
+                PoolMode::Liquidation,
+                AnyPoolEvent::LiquidationEvent(
+                    LiquidationEvent {
+                        resource_address: self.coin_vault.resource_address(),
+                        price: self.last_price,
+                    }
+                )
+            )
+        }
+
+        fn get_flash_loan(
+            &mut self,
+            amount: Decimal,
+        ) -> Bucket {
+            self.coin_vault.get_loan(amount)
+        }
+
+        fn return_flash_loan(
+            &mut self,
+            base_coin_bucket: Bucket,
+            coin_bucket: Bucket,
+        ) -> (
+            HookArgument,
+            AnyPoolEvent,
+        ) {
+            assert!(
+                self.mode == PoolMode::Normal,
+                "Not allowed in this mode",
+            );
+            assert!(
+                base_coin_bucket.amount() >= self.flash_loan_pool_fee,
+                "Insufficient fee paid to the pool",
+            );
+
+            let coin_bucket_amount = coin_bucket.amount();
+            let base_coin_bucket_amount = base_coin_bucket.amount();
+
+            self.base_coin_vault.put(base_coin_bucket);
+            self.coin_vault.return_loan(coin_bucket);
+
+            self.update_ignored_coins();
+
+            (
+                HookArgument { 
+                    component: Runtime::global_address().into(),
+                    coin_address: self.coin_vault.resource_address(),
+                    operation: HookableOperation::PostReturnFlashLoan,
+                    amount: Some(coin_bucket_amount),
+                    mode: PoolMode::Normal,
+                    price: Some(self.last_price),
+                    ids: vec![],
+                },
+                AnyPoolEvent::FlashLoanEvent(
+                    FlashLoanEvent {
+                        resource_address: self.coin_vault.resource_address(),
+                        amount: coin_bucket_amount,
+                        fee_paid_to_the_pool: base_coin_bucket_amount,
+                        integrator_id: 0,
+                    }
+                )
+            )
+        }
+
+        fn update_pool_fees(
+            &mut self,
+            buy_pool_fee_percentage: Decimal,
+            sell_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee: Decimal,
+        ) -> AnyPoolEvent {
+            assert!(
+                self.mode == PoolMode::WaitingForLaunch ||
+                self.mode == PoolMode::TerminatingLaunch ||
+                self.mode == PoolMode::Normal,
+                "Not allowed in this mode",
+            );
+
+            assert!(
+                buy_pool_fee_percentage <= self.buy_pool_fee_percentage &&
+                sell_pool_fee_percentage <= self.sell_pool_fee_percentage,
+                "You can't increase pool percentage fees",
+            );
+
+            assert!(
+                buy_pool_fee_percentage < self.buy_pool_fee_percentage ||
+                sell_pool_fee_percentage < self.sell_pool_fee_percentage ||
+                flash_loan_pool_fee != self.flash_loan_pool_fee,
+                "No changes made",
+            );
+
+            self.buy_pool_fee_percentage = buy_pool_fee_percentage;
+            self.sell_pool_fee_percentage = sell_pool_fee_percentage;
+            self.flash_loan_pool_fee = flash_loan_pool_fee;
+
+            AnyPoolEvent::FeeUpdateEvent(
+                FeeUpdateEvent {
+                    resource_address: self.coin_vault.resource_address(),
+                    buy_pool_fee_percentage: buy_pool_fee_percentage,
+                    sell_pool_fee_percentage: sell_pool_fee_percentage,
+                    flash_loan_pool_fee: flash_loan_pool_fee,
+                }
+            )
+        }
+
+        fn burn(
+            &mut self,
+            mut amount: Decimal,
+        ) -> AnyPoolEvent {
+            assert!(
+                self.mode == PoolMode::Normal,
+                "Not allowed in this mode",
+            );
+
+            amount = match self.launch {
+                LaunchType::Quick(ref mut quick_launch) => {
+                    let amount = min(
+                        amount,
+                        quick_launch.ignored_coins,
+                    );
+                    quick_launch.ignored_coins -= amount;
+
+                    amount
+                },
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
+            };
+
+            assert!(
+                amount > Decimal::ZERO,
+                "No coins to burn",
+            );
+
+            self.coin_vault.take(amount).burn();
+
+            AnyPoolEvent::BurnEvent(
+                BurnEvent {
+                    resource_address: self.coin_vault.resource_address(),
+                    amount: amount,
+                }
+            )
+        }
+
     }
 
     impl Pool {
+
+// CONSTRUCTORS. ONLY THE RadixPump COMPONENT IS SUPPOSED TO CALL THEM
+
+        pub fn new_fair_launch(
+            owner_badge_address: ResourceAddress,
+            proxy_badge_address: ResourceAddress,
+            hook_badge_address: ResourceAddress,
+            coin_symbol: String,
+            coin_name: String,
+            coin_icon_url: String,
+            coin_description: String,
+            coin_info_url: String,
+            coin_social_url: Vec<String>,
+            launch_price: Decimal,
+            creator_locked_percentage: Decimal,
+            buy_pool_fee_percentage: Decimal,
+            sell_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee: Decimal,
+            coin_creator_badge_rule: AccessRuleNode,
+            base_coin_address: ResourceAddress,
+        ) -> (
+            ComponentAddress,
+            ResourceAddress,
+            ResourceAddress,
+        ) {
+            let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
+
+            let resource_manager = Pool::start_resource_manager_creation(
+                coin_symbol,
+                coin_name.clone(),
+                coin_icon_url.clone(),
+                coin_description,
+                coin_info_url,
+                coin_social_url.clone(),
+                coin_creator_badge_rule.clone(),
+            )
+            .burn_roles(burn_roles!(
+                burner => AccessRule::Protected(coin_creator_badge_rule.clone());
+                burner_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
+            ))
+            .mint_roles(mint_roles!(
+                minter => rule!(require(global_caller(component_address)));
+                minter_updater => rule!(require(global_caller(component_address)));
+            ))
+            .create_with_no_initial_supply();
+
+            let lp_resource_manager = Pool::lp_resource_manager(
+                coin_name,
+                UncheckedUrl::of(coin_icon_url),
+                coin_creator_badge_rule,
+                owner_badge_address,
+                component_address,
+            );
+
+            Self {
+                base_coin_vault: Vault::new(base_coin_address),
+                coin_vault: LoanSafeVault::new(resource_manager.address()),
+                mode: PoolMode::WaitingForLaunch,
+                last_price: launch_price,
+                buy_pool_fee_percentage: buy_pool_fee_percentage,
+                sell_pool_fee_percentage: sell_pool_fee_percentage,
+                flash_loan_pool_fee: flash_loan_pool_fee,
+                launch: LaunchType::Fair(
+                    FairLaunchDetails {
+                        end_launch_time: 0,
+                        creator_locked_percentage: creator_locked_percentage,
+                        locked_vault: Vault::new(resource_manager.address()),
+                        unlocking_time: 0,
+                        initial_locked_amount: Decimal::ZERO,
+                        unlocked_amount: Decimal::ZERO,
+                        resource_manager: resource_manager,
+                    }
+                ),
+                extracted_tickets: KeyValueStore::new_with_registered_type(),
+                lp_resource_manager : lp_resource_manager,
+                total_lp: Decimal::ZERO,
+                total_users_lp: Decimal::ZERO,
+                last_lp_id: 0,
+                base_coins_to_lp_providers: Decimal::ZERO,
+            }
+            .instantiate()
+            .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            .roles(roles!(
+                proxy => rule!(require(proxy_badge_address));
+                hook => rule!(require(hook_badge_address));
+            ))
+            .with_address(address_reservation)
+            .globalize();
+
+            (component_address, resource_manager.address(), lp_resource_manager.address())
+        }
+
+        pub fn new(
+            owner_badge_address: ResourceAddress,
+            proxy_badge_address: ResourceAddress,
+            hook_badge_address: ResourceAddress,
+            base_coin_address: ResourceAddress,
+            coin_address: ResourceAddress,
+            coin_name: String,
+            coin_icon_url: UncheckedUrl,
+            buy_pool_fee_percentage: Decimal,
+            sell_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee: Decimal,
+            coin_creator_badge_rule: AccessRuleNode,
+        ) -> (
+            ComponentAddress,
+            ResourceAddress,
+        ) {
+            let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
+
+            let lp_resource_manager = Pool::lp_resource_manager(
+                coin_name,
+                coin_icon_url,
+                coin_creator_badge_rule,
+                owner_badge_address,
+                component_address,
+            );
+
+            Self {
+                base_coin_vault: Vault::new(base_coin_address),
+                coin_vault: LoanSafeVault::new(coin_address),
+                mode: PoolMode::Uninitialised,
+                last_price: Decimal::ONE,
+                buy_pool_fee_percentage: buy_pool_fee_percentage,
+                sell_pool_fee_percentage: sell_pool_fee_percentage,
+                flash_loan_pool_fee: flash_loan_pool_fee,
+                launch: LaunchType::AlreadyExistingCoin,
+                extracted_tickets: KeyValueStore::new_with_registered_type(),
+                total_lp: Decimal::ZERO,
+                total_users_lp: Decimal::ZERO,
+                lp_resource_manager: lp_resource_manager,
+                last_lp_id: 0,
+                base_coins_to_lp_providers: Decimal::ZERO,
+            }
+            .instantiate()
+            .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            .roles(roles!(
+                proxy => rule!(require(proxy_badge_address));
+                hook => rule!(require(hook_badge_address));
+            ))
+            .with_address(address_reservation)
+            .globalize();
+
+            (component_address, lp_resource_manager.address())
+        }
+
+        pub fn new_quick_launch(
+            owner_badge_address: ResourceAddress,
+            proxy_badge_address: ResourceAddress,
+            hook_badge_address: ResourceAddress,
+            base_coin_bucket: Bucket,
+            coin_symbol: String,
+            coin_name: String,
+            coin_icon_url: String,
+            coin_description: String,
+            coin_info_url: String,
+            coin_social_url: Vec<String>,
+            coin_supply: Decimal,
+            coin_price: Decimal,
+            buy_pool_fee_percentage: Decimal,
+            sell_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee: Decimal,
+            coin_creator_badge_rule: AccessRuleNode,
+        ) -> (
+            ComponentAddress,
+            Bucket,
+            HookArgument,
+            AnyPoolEvent,
+            ResourceAddress,
+        ) {
+            let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
+
+            let mut coin_bucket = Pool::start_resource_manager_creation(
+                coin_symbol,
+                coin_name.clone(),
+                coin_icon_url.clone(),
+                coin_description,
+                coin_info_url,
+                coin_social_url,
+                coin_creator_badge_rule.clone()
+            )
+            .burn_roles(burn_roles!(
+                burner => AccessRule::Protected(
+                    AccessRuleNode::AnyOf(
+                        vec![
+                            coin_creator_badge_rule.clone(),
+                            AccessRuleNode::ProofRule(
+                                ProofRule::Require(
+                                    global_caller(component_address)
+                                )
+                            )
+                        ]
+                    )
+                );
+                burner_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
+            ))
+            .mint_roles(mint_roles!(
+                minter => rule!(deny_all);
+                minter_updater => rule!(deny_all);
+            ))
+            .mint_initial_supply(coin_supply);
+
+            let coin_address = coin_bucket.resource_address();
+
+            let creator_amount = base_coin_bucket.amount() / coin_price;
+            assert!(
+                coin_supply >= dec!(2) * creator_amount,
+                "Supply is too low",
+            );
+            let creator_coin_bucket = coin_bucket.take(creator_amount);
+
+            let ignored_coins = coin_bucket.amount() - base_coin_bucket.amount() / coin_price;
+
+            let total_lp = coin_bucket.amount() - ignored_coins;
+
+            let lp_resource_manager = Pool::lp_resource_manager(
+                coin_name,
+                UncheckedUrl::of(coin_icon_url),
+                coin_creator_badge_rule,
+                owner_badge_address,
+                component_address,
+            );
+
+            Self {
+                base_coin_vault: Vault::with_bucket(base_coin_bucket),
+                coin_vault: LoanSafeVault::with_bucket(coin_bucket.into()),
+                mode: PoolMode::Normal,
+                last_price: coin_price,
+                buy_pool_fee_percentage: buy_pool_fee_percentage,
+                sell_pool_fee_percentage: sell_pool_fee_percentage,
+                flash_loan_pool_fee: flash_loan_pool_fee,
+                launch: LaunchType::Quick(
+                    QuickLaunchDetails {
+                        ignored_coins: ignored_coins,
+                    }
+                ),
+                extracted_tickets: KeyValueStore::new_with_registered_type(),
+                total_lp: total_lp,
+                total_users_lp: Decimal::ZERO,
+                lp_resource_manager: lp_resource_manager,
+                last_lp_id: 0,
+                base_coins_to_lp_providers: Decimal::ZERO,
+            }
+            .instantiate()
+            .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            .roles(roles!(
+                proxy => rule!(require(proxy_badge_address));
+                hook => rule!(require(hook_badge_address));
+            ))
+            .with_address(address_reservation)
+            .globalize();
+
+            (
+                component_address,
+                creator_coin_bucket.into(),
+                HookArgument {
+                    component: Runtime::global_address().into(),
+                    coin_address: coin_address,
+                    operation: HookableOperation::PostQuickLaunch,
+                    amount: Some(coin_supply),
+                    mode: PoolMode::Normal,
+                    price: Some(coin_price),
+                    ids: vec![],
+                },
+                AnyPoolEvent::QuickLaunchEvent(
+                    QuickLaunchEvent {
+                        resource_address: coin_address,
+                        price: coin_price,
+                        coins_in_pool: coin_supply - creator_amount,
+                        creator_allocation: creator_amount,
+                        buy_pool_fee_percentage: buy_pool_fee_percentage,
+                        sell_pool_fee_percentage: sell_pool_fee_percentage,
+                        flash_loan_pool_fee: flash_loan_pool_fee,
+                    }
+                ),
+                lp_resource_manager.address(),
+            )
+        }
+
+        pub fn new_random_launch(
+            owner_badge_address: ResourceAddress,
+            proxy_badge_address: ResourceAddress,
+            hook_badge_address: ResourceAddress,
+            coin_symbol: String,
+            coin_name: String,
+            coin_icon_url: String,
+            coin_description: String,
+            coin_info_url: String,
+            coin_social_url: Vec<String>,
+            ticket_price: Decimal,
+            winning_tickets: u32,
+            coins_per_winning_ticket: Decimal,
+            buy_pool_fee_percentage: Decimal,
+            sell_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee: Decimal,
+            coin_creator_badge_rule: AccessRuleNode,
+            base_coin_address: ResourceAddress,
+        ) -> (
+            ComponentAddress,
+            ResourceAddress,
+            ResourceAddress,
+        ) {
+            let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
+
+            let ticket_resource_manager = ResourceBuilder::new_integer_non_fungible_with_registered_type::<TicketData>(
+                OwnerRole::Fixed(AccessRule::Protected(coin_creator_badge_rule.clone()))
+            )
+            .mint_roles(mint_roles!(
+                minter => rule!(require(global_caller(component_address)));
+                minter_updater => rule!(require(global_caller(component_address)));
+            ))
+            .burn_roles(burn_roles!(
+                burner => rule!(require(global_caller(component_address)));
+                burner_updater => rule!(deny_all);
+            ))
+            .deposit_roles(deposit_roles!(
+                depositor => rule!(allow_all);
+                depositor_updater => rule!(deny_all);
+            ))
+            .withdraw_roles(withdraw_roles!(
+                withdrawer => rule!(allow_all);
+                withdrawer_updater => rule!(deny_all);
+            ))
+            .recall_roles(recall_roles!(
+                recaller => rule!(deny_all);
+                recaller_updater => rule!(deny_all);
+            ))
+            .freeze_roles(freeze_roles!(
+                freezer => rule!(deny_all);
+                freezer_updater => rule!(deny_all);
+            ))
+            .metadata(metadata!(
+                roles {
+                    metadata_setter => AccessRule::Protected(coin_creator_badge_rule.clone());
+                    metadata_setter_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
+                    metadata_locker => AccessRule::Protected(coin_creator_badge_rule.clone());
+                    metadata_locker_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
+                },
+                init {
+                    "name" => format!("Ticket for the launch of {}", coin_name), updatable;
+                    "icon_url" => MetadataValue::Url(UncheckedUrl::of(coin_icon_url.clone())), updatable;
+                    "description" => coin_description.clone(), updatable;
+                }
+            ))
+            .create_with_no_initial_supply();
+
+            let random_badge_resource_manager = ResourceBuilder::new_fungible(OwnerRole::Fixed(rule!(require(owner_badge_address))))
+            .mint_roles(mint_roles!(
+                minter => rule!(require(global_caller(component_address)));
+                minter_updater => rule!(deny_all);
+            ))
+            .burn_roles(burn_roles!(
+                burner => rule!(require(global_caller(component_address)));
+                burner_updater => rule!(deny_all);
+            ))
+            .metadata(metadata!(
+                roles {
+                    metadata_setter => rule!(require(owner_badge_address));
+                    metadata_setter_updater => rule!(require(owner_badge_address));
+                    metadata_locker => rule!(require(owner_badge_address));
+                    metadata_locker_updater => rule!(require(owner_badge_address));
+                },
+                init {
+                    "name" => format!("Random badge"), updatable;
+                }
+            ))
+            .create_with_no_initial_supply();
+
+            let resource_manager = Pool::start_resource_manager_creation(
+                coin_symbol,
+                coin_name.clone(),
+                coin_icon_url.clone(),
+                coin_description,
+                coin_info_url,
+                coin_social_url,
+                coin_creator_badge_rule.clone(),
+            )
+            .burn_roles(burn_roles!(
+                burner => AccessRule::Protected(
+                    AccessRuleNode::AnyOf(
+                        vec![
+                            coin_creator_badge_rule.clone(),
+                            AccessRuleNode::ProofRule(
+                                ProofRule::Require(
+                                    global_caller(component_address)
+                                )
+                            )
+                        ]
+                    )
+                );
+                burner_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
+            ))
+            .mint_roles(mint_roles!(
+                minter => rule!(require(global_caller(component_address)));
+                minter_updater => rule!(require(global_caller(component_address)));
+            ))
+            .create_with_no_initial_supply();
+
+            let lp_resource_manager = Pool::lp_resource_manager(
+                coin_name,
+                UncheckedUrl::of(coin_icon_url),
+                coin_creator_badge_rule,
+                owner_badge_address,
+                component_address,
+            );
+
+            Self {
+                base_coin_vault: Vault::new(base_coin_address),
+                coin_vault: LoanSafeVault::new(resource_manager.address()),
+                mode: PoolMode::WaitingForLaunch,
+                last_price: ticket_price / coins_per_winning_ticket,
+                buy_pool_fee_percentage: buy_pool_fee_percentage,
+                sell_pool_fee_percentage: sell_pool_fee_percentage,
+                flash_loan_pool_fee: flash_loan_pool_fee,
+                launch: LaunchType::Random(
+                    RandomLaunchDetails {
+                        end_launch_time: 0,
+                        winners_vault: Vault::new(resource_manager.address()),
+                        locked_vault: Vault::new(resource_manager.address()),
+                        unlocking_time: 0,
+                        ticket_price: ticket_price,
+                        winning_tickets: winning_tickets,
+                        coins_per_winning_ticket: coins_per_winning_ticket,
+                        sold_tickets: 0,
+                        resource_manager: resource_manager,
+                        ticket_resource_manager: ticket_resource_manager,
+                        unlocked_amount: Decimal::ZERO,
+                        extract_winners: true,
+                        number_of_extracted_tickets: 0,
+                        refunds_vault: Vault::new(base_coin_address),
+                        key_random: 0,
+                        random_badge_resource_manager: random_badge_resource_manager,
+                    }
+                ),
+                extracted_tickets: KeyValueStore::new_with_registered_type(),
+                total_lp: Decimal::ZERO,
+                total_users_lp: Decimal::ZERO,
+                lp_resource_manager: lp_resource_manager,
+                last_lp_id: 1,
+                base_coins_to_lp_providers: Decimal::ZERO,
+            }
+            .instantiate()
+            .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            .roles(roles!(
+                proxy => rule!(require(proxy_badge_address));
+                hook => rule!(require(hook_badge_address));
+            ))
+            .with_address(address_reservation)
+            .globalize();
+
+            (component_address, resource_manager.address(), lp_resource_manager.address())
+        }
+
+// ONLY THE RandomComponent IS SUPPOSED TO CALL THE FOLLOWING METHODS AUTHENTICATION IS HANDLED BY A BADGE, MINTED BY
+// random_badge_resource_manager, THAT THIS COMPONENT PASSES TO THE RandomComponent, EXPECT TO RECEIVE BACK AND BURNS
+
+        pub fn random_callback(
+            &mut self,
+            _key: u32,
+            badge: FungibleBucket,
+            random_seed: Vec<u8>
+        ) {
+            match self.launch {
+                LaunchType::Random(ref mut random_launch) => {
+                    assert!(
+                        badge.resource_address() == random_launch.random_badge_resource_manager.address() &&
+                        badge.amount() == Decimal::ONE,
+                        "Wrong badge",
+                    );
+
+                    badge.burn();
+
+                    let tickets_to_extract = min(
+                        MAX_TICKETS_PER_OPERATION,
+                        match random_launch.extract_winners {
+                            true => random_launch.winning_tickets,
+                            false => random_launch.sold_tickets - random_launch.winning_tickets,
+                        } - random_launch.number_of_extracted_tickets,
+                    );
+
+                    // Fail quietly if there's nothing left to do
+                    if self.mode != PoolMode::TerminatingLaunch ||
+                        tickets_to_extract == 0 {
+                        return;
+                    }
+
+                    let mut random: Random = Random::new(&random_seed);
+                    for _i in 0..tickets_to_extract {
+                        let mut ticket_id = random.in_range::<u64>(0, random_launch.sold_tickets.into());
+                        while self.extracted_tickets.get(&ticket_id).is_some() {
+                            ticket_id = random.in_range::<u64>(0, random_launch.sold_tickets.into());
+                        }
+                        self.extracted_tickets.insert(ticket_id, random_launch.extract_winners);
+                    }
+
+                    random_launch.number_of_extracted_tickets += tickets_to_extract;
+
+                },
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
+            }
+        }
+
+        pub fn random_on_error(
+            &self,
+            _key: u32,
+            badge: FungibleBucket
+        ) {
+            match &self.launch {
+                LaunchType::Random(random_launch) => {
+                    assert!(
+                        badge.resource_address() == random_launch.random_badge_resource_manager.address() &&
+                        badge.amount() == Decimal::ONE,
+                        "Wrong badge",
+                    );
+
+                    badge.burn();
+                },
+                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
+            }
+        }
+
+// PRIVATE METHODS
 
         fn start_resource_manager_creation(
             coin_symbol: String,
@@ -940,285 +1893,6 @@ mod pool {
             .create_with_no_initial_supply()
         }
 
-        pub fn new_fair_launch(
-            owner_badge_address: ResourceAddress,
-            proxy_badge_address: ResourceAddress,
-            hook_badge_address: ResourceAddress,
-            coin_symbol: String,
-            coin_name: String,
-            coin_icon_url: String,
-            coin_description: String,
-            coin_info_url: String,
-            coin_social_url: Vec<String>,
-            launch_price: Decimal,
-            creator_locked_percentage: Decimal,
-            buy_pool_fee_percentage: Decimal,
-            sell_pool_fee_percentage: Decimal,
-            flash_loan_pool_fee: Decimal,
-            coin_creator_badge_rule: AccessRuleNode,
-            base_coin_address: ResourceAddress,
-        ) -> (
-            Global<Pool>,
-            ResourceAddress,
-            ResourceAddress,
-        ) {
-            let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
-
-            let resource_manager = Pool::start_resource_manager_creation(
-                coin_symbol,
-                coin_name.clone(),
-                coin_icon_url.clone(),
-                coin_description,
-                coin_info_url,
-                coin_social_url.clone(),
-                coin_creator_badge_rule.clone(),
-            )
-            .burn_roles(burn_roles!(
-                burner => AccessRule::Protected(coin_creator_badge_rule.clone());
-                burner_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
-            ))
-            .mint_roles(mint_roles!(
-                minter => rule!(require(global_caller(component_address)));
-                minter_updater => rule!(require(global_caller(component_address)));
-            ))
-            .create_with_no_initial_supply();
-
-            let lp_resource_manager = Pool::lp_resource_manager(
-                coin_name,
-                UncheckedUrl::of(coin_icon_url),
-                coin_creator_badge_rule,
-                owner_badge_address,
-                component_address,
-            );
-
-            let pool = Self {
-                base_coin_vault: Vault::new(base_coin_address),
-                coin_vault: LoanSafeVault::new(resource_manager.address()),
-                mode: PoolMode::WaitingForLaunch,
-                last_price: launch_price,
-                buy_pool_fee_percentage: buy_pool_fee_percentage,
-                sell_pool_fee_percentage: sell_pool_fee_percentage,
-                flash_loan_pool_fee: flash_loan_pool_fee,
-                launch: LaunchType::Fair(
-                    FairLaunchDetails {
-                        end_launch_time: 0,
-                        creator_locked_percentage: creator_locked_percentage,
-                        locked_vault: Vault::new(resource_manager.address()),
-                        unlocking_time: 0,
-                        initial_locked_amount: Decimal::ZERO,
-                        unlocked_amount: Decimal::ZERO,
-                        resource_manager: resource_manager,
-                    }
-                ),
-                extracted_tickets: KeyValueStore::new_with_registered_type(),
-                lp_resource_manager : lp_resource_manager,
-                total_lp: Decimal::ZERO,
-                total_users_lp: Decimal::ZERO,
-                last_lp_id: 0,
-                base_coins_to_lp_providers: Decimal::ZERO,
-            }
-            .instantiate()
-            .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
-            .roles(roles!(
-                proxy => rule!(require(proxy_badge_address));
-                hook => rule!(require(hook_badge_address));
-            ))
-            .with_address(address_reservation)
-            .globalize();
-
-            (pool, resource_manager.address(), lp_resource_manager.address())
-        }
-
-        pub fn launch(
-            &mut self,
-            end_launch_time: i64,
-            unlocking_time: i64,
-        ) -> (
-            PoolMode,
-            HookArgument,
-            AnyPoolEvent,
-        ) {
-            assert!(
-                self.mode == PoolMode::WaitingForLaunch,
-                "Not allowed in this mode",
-            );
-
-            self.mode = PoolMode::Launching;
-
-            match self.launch {
-                LaunchType::Fair(ref mut fair_launch) => {
-                    fair_launch.end_launch_time = end_launch_time;
-                    fair_launch.unlocking_time = unlocking_time;
-
-                    (
-                        PoolMode::Launching,
-                        HookArgument {
-                            component: Runtime::global_address().into(),
-                            coin_address: self.coin_vault.resource_address(),
-                            operation: HookableOperation::PostFairLaunch,
-                            amount: None,
-                            mode: self.mode,
-                            price: Some(self.last_price),
-                            ids: vec![],
-                        },
-                        AnyPoolEvent::FairLaunchStartEvent(
-                            FairLaunchStartEvent {
-                                resource_address: fair_launch.resource_manager.address(),
-                                price: self.last_price,
-                                creator_locked_percentage: fair_launch.creator_locked_percentage,
-                                end_launch_time: end_launch_time,
-                                unlocking_time: unlocking_time,
-                                buy_pool_fee_percentage: self.buy_pool_fee_percentage,
-                                sell_pool_fee_percentage: self.sell_pool_fee_percentage,
-                                flash_loan_pool_fee: self.flash_loan_pool_fee,
-                            }
-                        )
-                    )
-                },
-                LaunchType::Random(ref mut random_launch) => {
-                    random_launch.end_launch_time = end_launch_time;
-                    random_launch.unlocking_time = unlocking_time;
-
-                    (
-                        PoolMode::Launching,
-                        HookArgument {
-                            component: Runtime::global_address().into(),
-                            coin_address: self.coin_vault.resource_address(),
-                            operation: HookableOperation::PostRandomLaunch,
-                            amount: None,
-                            mode: self.mode,
-                            price: Some(self.last_price),
-                            ids: vec![],
-                        },
-                        AnyPoolEvent::RandomLaunchStartEvent(
-                            RandomLaunchStartEvent {
-                                resource_address: random_launch.resource_manager.address(),
-                                ticket_price: random_launch.ticket_price,
-                                winning_tickets: random_launch.winning_tickets,
-                                coins_per_winning_ticket: random_launch.coins_per_winning_ticket,
-                                end_launch_time: end_launch_time,
-                                unlocking_time: unlocking_time,
-                                buy_pool_fee_percentage: self.buy_pool_fee_percentage,
-                                sell_pool_fee_percentage: self.sell_pool_fee_percentage,
-                                flash_loan_pool_fee: self.flash_loan_pool_fee,
-                            }
-                        )
-                    )
-                },
-                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
-            }
-        }
-
-        pub fn terminate_launch(&mut self) -> (
-            Option<Bucket>,
-            Option<PoolMode>,
-            Option<HookArgument>,
-            Option<AnyPoolEvent>,
-        ) {
-            match self.launch {
-                LaunchType::Fair(ref mut fair_launch) => {
-                    assert!(
-                        self.mode == PoolMode::Launching,
-                        "Not allowed in this mode",
-                    );
-
-                    let now = Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch;
-                    assert!(
-                        now >= fair_launch.end_launch_time,
-                        "Too soon",
-                    );
-                    fair_launch.end_launch_time = now;
-
-                    self.mode = PoolMode::Normal;
-
-                    let base_coin_bucket = self.base_coin_vault.take_advanced(
-                        self.base_coin_vault.amount() * (100 - self.buy_pool_fee_percentage) / 100,
-                        WithdrawStrategy::Rounded(RoundingMode::ToZero),
-                    );
-                    let base_coin_bucket_amount = base_coin_bucket.amount();
-
-                    fair_launch.initial_locked_amount = fair_launch.resource_manager.total_supply().unwrap() *
-                        fair_launch.creator_locked_percentage / (dec!(100) - fair_launch.creator_locked_percentage);
-                    fair_launch.locked_vault.put(fair_launch.resource_manager.mint(fair_launch.initial_locked_amount));
-
-                    fair_launch.resource_manager.set_mintable(rule!(deny_all));
-                    fair_launch.resource_manager.lock_mintable();
-
-                    let supply = fair_launch.resource_manager.total_supply();
-
-                    self.total_lp = self.coin_vault.amount();
-
-                    (
-                        Some(base_coin_bucket),
-                        Some(PoolMode::Normal),
-                        Some(
-                            HookArgument {
-                                component: Runtime::global_address().into(),
-                                coin_address: self.coin_vault.resource_address(),
-                                operation: HookableOperation::PostTerminateFairLaunch,
-                                amount: supply,
-                                mode: PoolMode::Normal,
-                                price: Some(self.last_price),
-                                ids: vec![],
-                            }
-                        ),
-                        Some(
-                            AnyPoolEvent::FairLaunchEndEvent(
-                                FairLaunchEndEvent {
-                                    resource_address: fair_launch.resource_manager.address(),
-                                    creator_proceeds: base_coin_bucket_amount,
-                                    creator_locked_allocation: fair_launch.locked_vault.amount(),
-                                    supply: supply.unwrap(),
-                                    coins_in_pool: self.coin_vault.amount(),
-                                }
-                            )
-                        )
-                    )
-                },
-                LaunchType::Random(ref mut random_launch) => {
-                    match self.mode {
-                        PoolMode::Launching => {
-                            let now = Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch;
-                            assert!(
-                                now >= random_launch.end_launch_time,
-                                "Too soon",
-                            );
-                            random_launch.end_launch_time = now;
-
-                            random_launch.winning_tickets = min(random_launch.winning_tickets, random_launch.sold_tickets);
-
-                            if random_launch.winning_tickets == random_launch.sold_tickets {
-                                random_launch.extract_winners = false;
-
-                                self.terminate_random_launch()
-                            } else {
-                                self.mode = PoolMode::TerminatingLaunch;
-
-                                self.prepare_tickets_extraction()
-                            }
-                        },
-                        PoolMode::TerminatingLaunch => {
-                            if random_launch.extract_winners && random_launch.number_of_extracted_tickets < random_launch.winning_tickets ||
-                               !random_launch.extract_winners && random_launch.sold_tickets - random_launch.winning_tickets < random_launch.number_of_extracted_tickets {
-                                self.prepare_tickets_extraction()
-                            } else {
-                                random_launch.refunds_vault.put(
-                                    self.base_coin_vault.take_advanced(
-                                        (random_launch.sold_tickets - random_launch.winning_tickets) * random_launch.ticket_price * ((100 - self.buy_pool_fee_percentage) / 100),
-                                        WithdrawStrategy::Rounded(RoundingMode::AwayFromZero),
-                                    )
-                                );
-
-                                self.terminate_random_launch()
-                            }
-                        },
-                        _ => Runtime::panic(MODE_NOT_ALLOWED.to_string()),
-                    }
-                },
-                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
-            }
-        }
-
         fn terminate_random_launch(&mut self) -> (
             Option<Bucket>,
             Option<PoolMode>,
@@ -1332,671 +2006,6 @@ mod pool {
                     (None, None, None, None)
                 },
                 _ => Runtime::panic(SHOULD_NOT_HAPPEN.to_string()),
-            }
-        }
-
-        pub fn unlock(
-            &mut self,
-            amount: Option<Decimal>,
-        ) -> Bucket {
-            assert!(
-                self.mode == PoolMode::Normal,
-                "Not allowed in this mode",
-            );
-
-            match self.launch {
-                LaunchType::Fair(ref mut fair_launch) => {
-                    let now = min(Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch, fair_launch.unlocking_time);
-                    let unlockable_amount =
-                        fair_launch.initial_locked_amount *
-                        (now - fair_launch.end_launch_time) / (fair_launch.unlocking_time - fair_launch.end_launch_time) -
-                        fair_launch.unlocked_amount;
-                    let amount_to_unlock = min(
-                        fair_launch.locked_vault.amount(),
-                        match amount {
-                            None => unlockable_amount,
-                            Some(amount) => min(unlockable_amount, amount),
-                        }
-                    );
-
-                    fair_launch.unlocked_amount += amount_to_unlock;
-
-                    fair_launch.locked_vault.take(amount_to_unlock)
-                },
-                LaunchType::Random(ref mut random_launch) => {
-                    let now = min(Clock::current_time_rounded_to_seconds().seconds_since_unix_epoch, random_launch.unlocking_time);
-                    let unlockable_amount =
-                        random_launch.coins_per_winning_ticket *
-                        (now - random_launch.end_launch_time) / (random_launch.unlocking_time - random_launch.end_launch_time) -
-                        random_launch.unlocked_amount;
-                    let amount_to_unlock = min(
-                        random_launch.locked_vault.amount(),
-                        match amount {
-                            None => unlockable_amount,
-                            Some(amount) => min(unlockable_amount, amount),
-                        }
-                    );
-
-                    random_launch.unlocked_amount += amount_to_unlock;
-
-                    random_launch.locked_vault.take(amount_to_unlock)
-                },
-                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
-            }
-        }
-
-        pub fn new(
-            owner_badge_address: ResourceAddress,
-            proxy_badge_address: ResourceAddress,
-            hook_badge_address: ResourceAddress,
-            base_coin_address: ResourceAddress,
-            coin_address: ResourceAddress,
-            coin_name: String,
-            coin_icon_url: UncheckedUrl,
-            buy_pool_fee_percentage: Decimal,
-            sell_pool_fee_percentage: Decimal,
-            flash_loan_pool_fee: Decimal,
-            coin_creator_badge_rule: AccessRuleNode,
-        ) -> (
-            Global<Pool>,
-            ResourceAddress,
-        ) {
-            let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
-
-            let lp_resource_manager = Pool::lp_resource_manager(
-                coin_name,
-                coin_icon_url,
-                coin_creator_badge_rule,
-                owner_badge_address,
-                component_address,
-            );
-
-            let pool = Self {
-                base_coin_vault: Vault::new(base_coin_address),
-                coin_vault: LoanSafeVault::new(coin_address),
-                mode: PoolMode::Uninitialised,
-                last_price: Decimal::ONE,
-                buy_pool_fee_percentage: buy_pool_fee_percentage,
-                sell_pool_fee_percentage: sell_pool_fee_percentage,
-                flash_loan_pool_fee: flash_loan_pool_fee,
-                launch: LaunchType::AlreadyExistingCoin,
-                extracted_tickets: KeyValueStore::new_with_registered_type(),
-                total_lp: Decimal::ZERO,
-                total_users_lp: Decimal::ZERO,
-                lp_resource_manager: lp_resource_manager,
-                last_lp_id: 0,
-                base_coins_to_lp_providers: Decimal::ZERO,
-            }
-            .instantiate()
-            .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
-            .roles(roles!(
-                proxy => rule!(require(proxy_badge_address));
-                hook => rule!(require(hook_badge_address));
-            ))
-            .with_address(address_reservation)
-            .globalize();
-
-            (pool, lp_resource_manager.address())
-        }
-
-        pub fn new_quick_launch(
-            owner_badge_address: ResourceAddress,
-            proxy_badge_address: ResourceAddress,
-            hook_badge_address: ResourceAddress,
-            base_coin_bucket: Bucket,
-            coin_symbol: String,
-            coin_name: String,
-            coin_icon_url: String,
-            coin_description: String,
-            coin_info_url: String,
-            coin_social_url: Vec<String>,
-            coin_supply: Decimal,
-            coin_price: Decimal,
-            buy_pool_fee_percentage: Decimal,
-            sell_pool_fee_percentage: Decimal,
-            flash_loan_pool_fee: Decimal,
-            coin_creator_badge_rule: AccessRuleNode,
-        ) -> (
-            Global<Pool>,
-            Bucket,
-            HookArgument,
-            AnyPoolEvent,
-            ResourceAddress,
-        ) {
-            let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
-
-            let mut coin_bucket = Pool::start_resource_manager_creation(
-                coin_symbol,
-                coin_name.clone(),
-                coin_icon_url.clone(),
-                coin_description,
-                coin_info_url,
-                coin_social_url,
-                coin_creator_badge_rule.clone()
-            )
-            .burn_roles(burn_roles!(
-                burner => AccessRule::Protected(
-                    AccessRuleNode::AnyOf(
-                        vec![
-                            coin_creator_badge_rule.clone(),
-                            AccessRuleNode::ProofRule(
-                                ProofRule::Require(
-                                    global_caller(component_address)
-                                )
-                            )
-                        ]
-                    )
-                );
-                burner_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
-            ))
-            .mint_roles(mint_roles!(
-                minter => rule!(deny_all);
-                minter_updater => rule!(deny_all);
-            ))
-            .mint_initial_supply(coin_supply);
-
-            let coin_address = coin_bucket.resource_address();
-
-            let creator_amount = base_coin_bucket.amount() / coin_price;
-            assert!(
-                coin_supply >= dec!(2) * creator_amount,
-                "Supply is too low",
-            );
-            let creator_coin_bucket = coin_bucket.take(creator_amount);
-
-            let ignored_coins = coin_bucket.amount() - base_coin_bucket.amount() / coin_price;
-
-            let total_lp = coin_bucket.amount() - ignored_coins;
-
-            let lp_resource_manager = Pool::lp_resource_manager(
-                coin_name,
-                UncheckedUrl::of(coin_icon_url),
-                coin_creator_badge_rule,
-                owner_badge_address,
-                component_address,
-            );
-
-            let pool = Self {
-                base_coin_vault: Vault::with_bucket(base_coin_bucket),
-                coin_vault: LoanSafeVault::with_bucket(coin_bucket.into()),
-                mode: PoolMode::Normal,
-                last_price: coin_price,
-                buy_pool_fee_percentage: buy_pool_fee_percentage,
-                sell_pool_fee_percentage: sell_pool_fee_percentage,
-                flash_loan_pool_fee: flash_loan_pool_fee,
-                launch: LaunchType::Quick(
-                    QuickLaunchDetails {
-                        ignored_coins: ignored_coins,
-                    }
-                ),
-                extracted_tickets: KeyValueStore::new_with_registered_type(),
-                total_lp: total_lp,
-                total_users_lp: Decimal::ZERO,
-                lp_resource_manager: lp_resource_manager,
-                last_lp_id: 0,
-                base_coins_to_lp_providers: Decimal::ZERO,
-            }
-            .instantiate()
-            .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
-            .roles(roles!(
-                proxy => rule!(require(proxy_badge_address));
-                hook => rule!(require(hook_badge_address));
-            ))
-            .with_address(address_reservation)
-            .globalize();
-
-            (
-                pool,
-                creator_coin_bucket.into(),
-                HookArgument {
-                    component: Runtime::global_address().into(),
-                    coin_address: coin_address,
-                    operation: HookableOperation::PostQuickLaunch,
-                    amount: Some(coin_supply),
-                    mode: PoolMode::Normal,
-                    price: Some(coin_price),
-                    ids: vec![],
-                },
-                AnyPoolEvent::QuickLaunchEvent(
-                    QuickLaunchEvent {
-                        resource_address: coin_address,
-                        price: coin_price,
-                        coins_in_pool: coin_supply - creator_amount,
-                        creator_allocation: creator_amount,
-                        buy_pool_fee_percentage: buy_pool_fee_percentage,
-                        sell_pool_fee_percentage: sell_pool_fee_percentage,
-                        flash_loan_pool_fee: flash_loan_pool_fee,
-                    }
-                ),
-                lp_resource_manager.address(),
-            )
-        }
-
-        pub fn new_random_launch(
-            owner_badge_address: ResourceAddress,
-            proxy_badge_address: ResourceAddress,
-            hook_badge_address: ResourceAddress,
-            coin_symbol: String,
-            coin_name: String,
-            coin_icon_url: String,
-            coin_description: String,
-            coin_info_url: String,
-            coin_social_url: Vec<String>,
-            ticket_price: Decimal,
-            winning_tickets: u32,
-            coins_per_winning_ticket: Decimal,
-            buy_pool_fee_percentage: Decimal,
-            sell_pool_fee_percentage: Decimal,
-            flash_loan_pool_fee: Decimal,
-            coin_creator_badge_rule: AccessRuleNode,
-            base_coin_address: ResourceAddress,
-        ) -> (
-            Global<Pool>,
-            ResourceAddress,
-            ResourceAddress,
-        ) {
-            let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
-
-            let ticket_resource_manager = ResourceBuilder::new_integer_non_fungible_with_registered_type::<TicketData>(
-                OwnerRole::Fixed(AccessRule::Protected(coin_creator_badge_rule.clone()))
-            )
-            .mint_roles(mint_roles!(
-                minter => rule!(require(global_caller(component_address)));
-                minter_updater => rule!(require(global_caller(component_address)));
-            ))
-            .burn_roles(burn_roles!(
-                burner => rule!(require(global_caller(component_address)));
-                burner_updater => rule!(deny_all);
-            ))
-            .deposit_roles(deposit_roles!(
-                depositor => rule!(allow_all);
-                depositor_updater => rule!(deny_all);
-            ))
-            .withdraw_roles(withdraw_roles!(
-                withdrawer => rule!(allow_all);
-                withdrawer_updater => rule!(deny_all);
-            ))
-            .recall_roles(recall_roles!(
-                recaller => rule!(deny_all);
-                recaller_updater => rule!(deny_all);
-            ))
-            .freeze_roles(freeze_roles!(
-                freezer => rule!(deny_all);
-                freezer_updater => rule!(deny_all);
-            ))
-            .metadata(metadata!(
-                roles {
-                    metadata_setter => AccessRule::Protected(coin_creator_badge_rule.clone());
-                    metadata_setter_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
-                    metadata_locker => AccessRule::Protected(coin_creator_badge_rule.clone());
-                    metadata_locker_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
-                },
-                init {
-                    "name" => format!("Ticket for the launch of {}", coin_name), updatable;
-                    "icon_url" => MetadataValue::Url(UncheckedUrl::of(coin_icon_url.clone())), updatable;
-                    "description" => coin_description.clone(), updatable;
-                }
-            ))
-            .create_with_no_initial_supply();
-
-            let random_badge_resource_manager = ResourceBuilder::new_fungible(OwnerRole::Fixed(rule!(require(owner_badge_address))))
-            .mint_roles(mint_roles!(
-                minter => rule!(require(global_caller(component_address)));
-                minter_updater => rule!(deny_all);
-            ))
-            .burn_roles(burn_roles!(
-                burner => rule!(require(global_caller(component_address)));
-                burner_updater => rule!(deny_all);
-            ))
-            .metadata(metadata!(
-                roles {
-                    metadata_setter => rule!(require(owner_badge_address));
-                    metadata_setter_updater => rule!(require(owner_badge_address));
-                    metadata_locker => rule!(require(owner_badge_address));
-                    metadata_locker_updater => rule!(require(owner_badge_address));
-                },
-                init {
-                    "name" => format!("Random badge"), updatable;
-                }
-            ))
-            .create_with_no_initial_supply();
-
-            let resource_manager = Pool::start_resource_manager_creation(
-                coin_symbol,
-                coin_name.clone(),
-                coin_icon_url.clone(),
-                coin_description,
-                coin_info_url,
-                coin_social_url,
-                coin_creator_badge_rule.clone(),
-            )
-            .burn_roles(burn_roles!(
-                burner => AccessRule::Protected(
-                    AccessRuleNode::AnyOf(
-                        vec![
-                            coin_creator_badge_rule.clone(),
-                            AccessRuleNode::ProofRule(
-                                ProofRule::Require(
-                                    global_caller(component_address)
-                                )
-                            )
-                        ]
-                    )
-                );
-                burner_updater => AccessRule::Protected(coin_creator_badge_rule.clone());
-            ))
-            .mint_roles(mint_roles!(
-                minter => rule!(require(global_caller(component_address)));
-                minter_updater => rule!(require(global_caller(component_address)));
-            ))
-            .create_with_no_initial_supply();
-
-            let lp_resource_manager = Pool::lp_resource_manager(
-                coin_name,
-                UncheckedUrl::of(coin_icon_url),
-                coin_creator_badge_rule,
-                owner_badge_address,
-                component_address,
-            );
-
-            let pool = Pool {
-                base_coin_vault: Vault::new(base_coin_address),
-                coin_vault: LoanSafeVault::new(resource_manager.address()),
-                mode: PoolMode::WaitingForLaunch,
-                last_price: ticket_price / coins_per_winning_ticket,
-                buy_pool_fee_percentage: buy_pool_fee_percentage,
-                sell_pool_fee_percentage: sell_pool_fee_percentage,
-                flash_loan_pool_fee: flash_loan_pool_fee,
-                launch: LaunchType::Random(
-                    RandomLaunchDetails {
-                        end_launch_time: 0,
-                        winners_vault: Vault::new(resource_manager.address()),
-                        locked_vault: Vault::new(resource_manager.address()),
-                        unlocking_time: 0,
-                        ticket_price: ticket_price,
-                        winning_tickets: winning_tickets,
-                        coins_per_winning_ticket: coins_per_winning_ticket,
-                        sold_tickets: 0,
-                        resource_manager: resource_manager,
-                        ticket_resource_manager: ticket_resource_manager,
-                        unlocked_amount: Decimal::ZERO,
-                        extract_winners: true,
-                        number_of_extracted_tickets: 0,
-                        refunds_vault: Vault::new(base_coin_address),
-                        key_random: 0,
-                        random_badge_resource_manager: random_badge_resource_manager,
-                    }
-                ),
-                extracted_tickets: KeyValueStore::new_with_registered_type(),
-                total_lp: Decimal::ZERO,
-                total_users_lp: Decimal::ZERO,
-                lp_resource_manager: lp_resource_manager,
-                last_lp_id: 1,
-                base_coins_to_lp_providers: Decimal::ZERO,
-            }
-            .instantiate()
-            .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
-            .roles(roles!(
-                proxy => rule!(require(proxy_badge_address));
-                hook => rule!(require(hook_badge_address));
-            ))
-            .with_address(address_reservation)
-            .globalize();
-
-            (pool, resource_manager.address(), lp_resource_manager.address())
-        }
-
-        pub fn set_liquidation_mode(&mut self) -> (
-            PoolMode,
-            AnyPoolEvent,
-        ) {
-            assert!(
-                self.mode == PoolMode::Normal ||
-                self.mode == PoolMode::Launching ||
-                self.mode == PoolMode::TerminatingLaunch,
-                "Not allowed in this mode",
-            );
-
-            self.mode = PoolMode::Liquidation;
-
-            let coin_resource_manager = ResourceManager::from_address(
-                self.coin_vault.resource_address()
-            );
-            let coin_supply = coin_resource_manager.total_supply().unwrap();
-
-            // This is the number of coins needed to repay LP providers.
-            // The factor 2 exist because we have to repay both coins and base coins provided.
-            // total_users_lp / total_lp represents the share of the coin in the pool that belogs to
-            // LP providers,
-            let coin_equivalent_lp: PreciseDecimal = 2 * PreciseDecimal::from(self.coins_in_pool()) * self.total_users_lp / self.total_lp;
-
-            let coin_circulating_supply: PreciseDecimal = match &self.launch {
-                LaunchType::Random(random_launch) =>
-                    coin_supply +
-                    coin_equivalent_lp -
-                    random_launch.locked_vault.amount() -
-                    self.coin_vault.amount(),
-                LaunchType::Fair(fair_launch) =>
-                    coin_supply +
-                    coin_equivalent_lp -
-                    fair_launch.locked_vault.amount() -
-                    self.coin_vault.amount(),
-                _ =>
-                    coin_supply +
-                    coin_equivalent_lp -
-                    self.coin_vault.amount(),
-            };
-
-            // We have to repay the coin circulating supply with the base coins in the pool
-            self.last_price = (self.base_coin_vault.amount() / coin_circulating_supply)
-                .checked_truncate(RoundingMode::ToZero).unwrap();
-
-            self.base_coins_to_lp_providers = (coin_equivalent_lp * self.base_coin_vault.amount() / coin_circulating_supply)
-                .checked_truncate(RoundingMode::ToZero).unwrap();
-
-            (
-                PoolMode::Liquidation,
-                AnyPoolEvent::LiquidationEvent(
-                    LiquidationEvent {
-                        resource_address: self.coin_vault.resource_address(),
-                        price: self.last_price,
-                    }
-                )
-            )
-        }
-
-        pub fn get_flash_loan(
-            &mut self,
-            amount: Decimal,
-        ) -> Bucket {
-            self.coin_vault.get_loan(amount)
-        }
-
-        pub fn return_flash_loan(
-            &mut self,
-            base_coin_bucket: Bucket,
-            coin_bucket: Bucket,
-        ) -> (
-            HookArgument,
-            AnyPoolEvent,
-        ) {
-            assert!(
-                self.mode == PoolMode::Normal,
-                "Not allowed in this mode",
-            );
-            assert!(
-                base_coin_bucket.amount() >= self.flash_loan_pool_fee,
-                "Insufficient fee paid to the pool",
-            );
-
-            let coin_bucket_amount = coin_bucket.amount();
-            let base_coin_bucket_amount = base_coin_bucket.amount();
-
-            self.base_coin_vault.put(base_coin_bucket);
-            self.coin_vault.return_loan(coin_bucket);
-
-            self.update_ignored_coins();
-
-            (
-                HookArgument { 
-                    component: Runtime::global_address().into(),
-                    coin_address: self.coin_vault.resource_address(),
-                    operation: HookableOperation::PostReturnFlashLoan,
-                    amount: Some(coin_bucket_amount),
-                    mode: PoolMode::Normal,
-                    price: Some(self.last_price),
-                    ids: vec![],
-                },
-                AnyPoolEvent::FlashLoanEvent(
-                    FlashLoanEvent {
-                        resource_address: self.coin_vault.resource_address(),
-                        amount: coin_bucket_amount,
-                        fee_paid_to_the_pool: base_coin_bucket_amount,
-                        integrator_id: 0,
-                    }
-                )
-            )
-        }
-
-        pub fn update_pool_fees(
-            &mut self,
-            buy_pool_fee_percentage: Decimal,
-            sell_pool_fee_percentage: Decimal,
-            flash_loan_pool_fee: Decimal,
-        ) -> AnyPoolEvent {
-            assert!(
-                self.mode == PoolMode::WaitingForLaunch ||
-                self.mode == PoolMode::TerminatingLaunch ||
-                self.mode == PoolMode::Normal,
-                "Not allowed in this mode",
-            );
-
-            assert!(
-                buy_pool_fee_percentage <= self.buy_pool_fee_percentage &&
-                sell_pool_fee_percentage <= self.sell_pool_fee_percentage,
-                "You can't increase pool percentage fees",
-            );
-
-            assert!(
-                buy_pool_fee_percentage < self.buy_pool_fee_percentage ||
-                sell_pool_fee_percentage < self.sell_pool_fee_percentage ||
-                flash_loan_pool_fee != self.flash_loan_pool_fee,
-                "No changes made",
-            );
-
-            self.buy_pool_fee_percentage = buy_pool_fee_percentage;
-            self.sell_pool_fee_percentage = sell_pool_fee_percentage;
-            self.flash_loan_pool_fee = flash_loan_pool_fee;
-
-            AnyPoolEvent::FeeUpdateEvent(
-                FeeUpdateEvent {
-                    resource_address: self.coin_vault.resource_address(),
-                    buy_pool_fee_percentage: buy_pool_fee_percentage,
-                    sell_pool_fee_percentage: sell_pool_fee_percentage,
-                    flash_loan_pool_fee: flash_loan_pool_fee,
-                }
-            )
-        }
-
-        pub fn burn(
-            &mut self,
-            mut amount: Decimal,
-        ) -> AnyPoolEvent {
-            assert!(
-                self.mode == PoolMode::Normal,
-                "Not allowed in this mode",
-            );
-
-            amount = match self.launch {
-                LaunchType::Quick(ref mut quick_launch) => {
-                    let amount = min(
-                        amount,
-                        quick_launch.ignored_coins,
-                    );
-                    quick_launch.ignored_coins -= amount;
-
-                    amount
-                },
-                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
-            };
-
-            assert!(
-                amount > Decimal::ZERO,
-                "No coins to burn",
-            );
-
-            self.coin_vault.take(amount).burn();
-
-            AnyPoolEvent::BurnEvent(
-                BurnEvent {
-                    resource_address: self.coin_vault.resource_address(),
-                    amount: amount,
-                }
-            )
-        }
-
-        pub fn random_callback(
-            &mut self,
-            _key: u32,
-            badge: FungibleBucket,
-            random_seed: Vec<u8>
-        ) {
-            match self.launch {
-                LaunchType::Random(ref mut random_launch) => {
-                    assert!(
-                        badge.resource_address() == random_launch.random_badge_resource_manager.address() &&
-                        badge.amount() == Decimal::ONE,
-                        "Wrong badge",
-                    );
-
-                    badge.burn();
-
-                    let tickets_to_extract = min(
-                        MAX_TICKETS_PER_OPERATION,
-                        match random_launch.extract_winners {
-                            true => random_launch.winning_tickets,
-                            false => random_launch.sold_tickets - random_launch.winning_tickets,
-                        } - random_launch.number_of_extracted_tickets,
-                    );
-
-                    // Fail quietly if there's nothing left to do
-                    if self.mode != PoolMode::TerminatingLaunch ||
-                        tickets_to_extract == 0 {
-                        return;
-                    }
-
-                    let mut random: Random = Random::new(&random_seed);
-                    for _i in 0..tickets_to_extract {
-                        let mut ticket_id = random.in_range::<u64>(0, random_launch.sold_tickets.into());
-                        while self.extracted_tickets.get(&ticket_id).is_some() {
-                            ticket_id = random.in_range::<u64>(0, random_launch.sold_tickets.into());
-                        }
-                        self.extracted_tickets.insert(ticket_id, random_launch.extract_winners);
-                    }
-
-                    random_launch.number_of_extracted_tickets += tickets_to_extract;
-
-                },
-                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
-            }
-        }
-
-        pub fn random_on_error(
-            &self,
-            _key: u32,
-            badge: FungibleBucket
-        ) {
-            match &self.launch {
-                LaunchType::Random(random_launch) => {
-                    assert!(
-                        badge.resource_address() == random_launch.random_badge_resource_manager.address() &&
-                        badge.amount() == Decimal::ONE,
-                        "Wrong badge",
-                    );
-
-                    badge.burn();
-                },
-                _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
             }
         }
 

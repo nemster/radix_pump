@@ -48,7 +48,7 @@ struct HookDisabledEvent {
 
 #[derive(ScryptoSbor)]
 struct PoolStruct {
-    component_address: Global<Pool>,
+    component_address: RadixPumpPoolInterfaceScryptoStub,
     enabled_hooks: HooksPerOperation,
     creator_id: u64,
 }
@@ -386,9 +386,7 @@ mod radix_pump {
                 last_transient_nft_id: 0,
                 forbidden_symbols: <KeyValueStore<String, bool> as RadixPumpKeyValueStore>::new_with_registered_type(),
                 forbidden_names: <KeyValueStore<String, bool> as RadixPumpKeyValueStore>::new_with_registered_type(),
-                // TODO: why this doesn't work?
-                // pools: <KeyValueStore<ResourceAddress, PoolStruct> as RadixPumpKeyValueStore>::new_with_registered_type(),
-                pools: KeyValueStore::new(),
+                pools: <KeyValueStore<ResourceAddress, PoolStruct> as RadixPumpKeyValueStore>::new_with_registered_type(),
                 creation_fee_percentage: creation_fee_percentage,
                 buy_sell_fee_percentage: buy_sell_fee_percentage,
                 flash_loan_fee: flash_loan_fee,
@@ -536,7 +534,7 @@ mod radix_pump {
             self.pools.insert(
                 coin_resource_address,
                 PoolStruct {
-                    component_address: pool,
+                    component_address: pool.into(),
                     enabled_hooks: HooksPerOperation::new(),
                     creator_id: self.next_creator_badge_id,
                 }
@@ -592,7 +590,7 @@ mod radix_pump {
             self.pools.insert(
                 coin_resource_address,
                 PoolStruct {
-                    component_address: pool,
+                    component_address: pool.into(),
                     enabled_hooks: HooksPerOperation::new(),
                     creator_id: self.next_creator_badge_id,
                 }
@@ -670,7 +668,7 @@ mod radix_pump {
             self.pools.insert(
                 coin_address,
                 PoolStruct {
-                    component_address: pool,
+                    component_address: pool.into(),
                     enabled_hooks: HooksPerOperation::new(),
                     creator_id: self.next_creator_badge_id,
                 }
@@ -790,15 +788,18 @@ mod radix_pump {
             &mut self,
             coin_address: ResourceAddress,
         ) {
-            let pool = self.pools.get(&coin_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&coin_address).expect("Coin not found");
             let (mode, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.set_liquidation_mode()
             );
 
+            let creator_id = pool.creator_id;
+            drop(pool);
+
             self.emit_pool_event(event, 0);
 
-            self.update_mode_in_creator_nft(pool.creator_id, mode);
+            self.update_mode_in_creator_nft(creator_id, mode);
         }
 
         pub fn creator_set_liquidation_mode(
@@ -807,11 +808,12 @@ mod radix_pump {
         ) {
             let (creator_id, creator_data) = self.get_creator_data(creator_proof);
 
-            let pool = self.pools.get(&creator_data.coin_resource_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&creator_data.coin_resource_address).expect("Coin not found");
             let (mode, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.set_liquidation_mode()
             );
+            drop(pool);
 
             self.emit_pool_event(event, 0);
 
@@ -823,11 +825,12 @@ mod radix_pump {
             coin_address: ResourceAddress,
             amount: Decimal
         ) -> (Bucket, Bucket) {
-            let pool = self.pools.get_mut(&coin_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&coin_address).expect("Coin not found");
             let coin_bucket = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.get_flash_loan(amount)
             );
+            drop(pool);
 
             self.last_transient_nft_id += 1;
 
@@ -880,7 +883,7 @@ mod radix_pump {
                 )
             );
 
-            let pool = self.pools.get(&coin_bucket.resource_address()).unwrap();
+            let mut pool = self.pools.get_mut(&coin_bucket.resource_address()).unwrap();
 
             let (hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
@@ -890,10 +893,11 @@ mod radix_pump {
                 )
             );
 
-            self.emit_pool_event(event, integrator_id);
-
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
+
+            self.emit_pool_event(event, integrator_id);
+
             self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -916,7 +920,7 @@ mod radix_pump {
 
             let (_, creator_data) = self.get_creator_data(creator_proof);
 
-            let pool = self.pools.get(&creator_data.coin_resource_address).unwrap();
+            let mut pool = self.pools.get_mut(&creator_data.coin_resource_address).unwrap();
 
             let event = self.proxy_badge_vault.authorize_with_amount(
                 1,
@@ -926,6 +930,7 @@ mod radix_pump {
                     flash_loan_pool_fee,
                 )
             );
+            drop(pool);
 
             self.emit_pool_event(event, 0);
         }
@@ -1005,19 +1010,20 @@ mod radix_pump {
 
             let (creator_id, creator_data) = self.get_creator_data(creator_proof);
             let coin_address = creator_data.coin_resource_address;
-            let pool = self.pools.get(&coin_address).unwrap();
+            let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
             let (mode, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.launch(end_launch_time, unlocking_time)
             );
 
+            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
+            drop(pool);
+
             self.emit_pool_event(event, 0);
 
             self.update_mode_in_creator_nft(creator_id, mode);
 
-            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
-            drop(pool);
             self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -1175,20 +1181,12 @@ mod radix_pump {
             let (creator_id, creator_data) = self.get_creator_data(creator_proof);
             let coin_address = creator_data.coin_resource_address;
 
-            let pool = self.pools.get(&coin_address).unwrap();
+            let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
             let (mut bucket, mode, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.terminate_launch()
             );
-
-            if event.is_some() {
-                self.emit_pool_event(event.unwrap(), 0);
-            }
-
-            if mode.is_some() {
-                self.update_mode_in_creator_nft(creator_id, mode.unwrap());
-            }
 
             let buckets = match hook_argument {
                 None => {
@@ -1206,6 +1204,14 @@ mod radix_pump {
                     )
                 },
             };
+
+            if event.is_some() {
+                self.emit_pool_event(event.unwrap(), 0);
+            }
+
+            if mode.is_some() {
+                self.update_mode_in_creator_nft(creator_id, mode.unwrap());
+            }
 
             match bucket {
                 None => {},
@@ -1270,7 +1276,7 @@ mod radix_pump {
             sell: bool,
         ) -> (Bucket, Vec<Bucket>) {
             let coin_address = self.get_creator_data(creator_proof).1.coin_resource_address;
-            let pool = self.pools.get(&coin_address).unwrap();
+            let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
             let coin_bucket = self.proxy_badge_vault.authorize_with_amount(
                 1,
@@ -1286,10 +1292,11 @@ mod radix_pump {
                             || pool.component_address.sell(coin_bucket)
                         );
 
-                    self.emit_pool_event(event, 0);
-
                     let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
                     drop(pool);
+
+                    self.emit_pool_event(event, 0);
+
                     let buckets = self.execute_hooks(
                         &pool_enabled_hooks,
                         &hook_argument,
@@ -1496,12 +1503,13 @@ mod radix_pump {
             amount: Decimal,
         ) {
             let coin_address = self.get_creator_data(creator_proof).1.coin_resource_address;
-            let pool = self.pools.get(&coin_address).unwrap();
+            let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
             let event = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.burn(amount)
             );
+            drop(pool);
 
             self.emit_pool_event(event, 0);
         }
@@ -1521,7 +1529,7 @@ mod radix_pump {
                 "Can't buy zero tickets",
             );
 
-            let pool = self.pools.get(&coin_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&coin_address).expect("Coin not found");
 
             let (ticket_bucket, hook_argument, event) =
                 self.proxy_badge_vault.authorize_with_amount(
@@ -1532,10 +1540,11 @@ mod radix_pump {
                     )
                 );
 
-            self.emit_pool_event(event, 0);
-
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
+
+            self.emit_pool_event(event, 0);
+
             let buckets = self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -1555,7 +1564,7 @@ mod radix_pump {
         ) {
             let ticket_id = &ticket_bucket.as_non_fungible().non_fungible_local_ids()[0];
             let ticket_data = ResourceManager::from_address(ticket_bucket.resource_address()).get_non_fungible_data::<TicketData>(ticket_id);
-            let pool = self.pools.get(&ticket_data.coin_resource_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&ticket_data.coin_resource_address).expect("Coin not found");
 
             let (base_coin_bucket, coin_bucket, hook_argument_lose, hook_argument_win) = self.proxy_badge_vault.authorize_with_amount(
                 1,
@@ -1606,7 +1615,7 @@ mod radix_pump {
             Vec<Bucket>,
         ) {
             let coin_address = coin_bucket.resource_address();
-            let pool = self.pools.get(&coin_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&coin_address).expect("Coin not found");
 
             let (lp_bucket, remainings_bucket, hook_argument, event, mode) =
                 self.proxy_badge_vault.authorize_with_amount(
@@ -1617,14 +1626,16 @@ mod radix_pump {
                     )
                 );
 
+            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
+            let creator_id = pool.creator_id;
+            drop(pool);
+
             self.emit_pool_event(event, 0);
 
             if mode.is_some() {
-                self.update_mode_in_creator_nft(pool.creator_id, mode.unwrap());
+                self.update_mode_in_creator_nft(creator_id, mode.unwrap());
             }
 
-            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
-            drop(pool);
             let buckets = self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -1643,17 +1654,18 @@ mod radix_pump {
         ) {
             let lp_id = &lp_bucket.as_non_fungible().non_fungible_local_ids()[0];
             let lp_data = ResourceManager::from_address(lp_bucket.resource_address()).get_non_fungible_data::<LPData>(lp_id);
-            let pool = self.pools.get(&lp_data.coin_resource_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&lp_data.coin_resource_address).expect("Coin not found");
 
             let (base_coin_bucket, coin_bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.remove_liquidity(lp_bucket)
             );
 
-            self.emit_pool_event(event, 0);
-
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
+
+            self.emit_pool_event(event, 0);
+
             let buckets = self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -1686,17 +1698,18 @@ mod radix_pump {
             if coin1_address == self.base_coin_address {
                 base_coin_bucket = coin1_bucket;
             } else {
-                let pool = self.pools.get(&coin1_address).expect("Coin1 not found");
+                let mut pool = self.pools.get_mut(&coin1_address).expect("Coin1 not found");
                 let (bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                     1,
                     || pool.component_address.sell(coin1_bucket)
                 );
                 base_coin_bucket = bucket;
 
-                self.emit_pool_event(event, integrator_id);
-
                 let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
                 drop(pool);
+
+                self.emit_pool_event(event, integrator_id);
+
                 buckets1 = self.execute_hooks(
                     &pool_enabled_hooks,
                     &hook_argument,
@@ -1717,17 +1730,18 @@ mod radix_pump {
             if coin2_address == self.base_coin_address {
                 coin2_bucket = base_coin_bucket;
             } else {
-                let pool = self.pools.get(&coin2_address).expect("Coin2 not found");
+                let mut pool = self.pools.get_mut(&coin2_address).expect("Coin2 not found");
                 let (bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                     1,
                     || pool.component_address.buy(base_coin_bucket)
                 );
                 coin2_bucket = bucket;
 
-                self.emit_pool_event(event, integrator_id);
-
                 let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
                 drop(pool);
+
+                self.emit_pool_event(event, integrator_id);
+
                 buckets2 = self.execute_hooks(
                     &pool_enabled_hooks,
                     &hook_argument,
@@ -1795,7 +1809,7 @@ mod radix_pump {
             self.pools.insert(
                 coin_address,
                 PoolStruct {
-                    component_address: pool,
+                    component_address: pool.into(),
                     enabled_hooks: HooksPerOperation::new(),
                     creator_id: self.next_creator_badge_id,
                 }

@@ -301,7 +301,7 @@ define_interface! {
 
         fn get_pool_info(&self) -> PoolInfo;
 
-// THE FOLLOWING METHODS CAN ONLY BE CALLED BY ROUND 0 AND 1 HOOKS AND BY THE PROXY COMPONENT
+// THE FOLLOWING METHODS CAN ONLY BE CALLED BY ROUND 0 AND 1 HOOKS AND BY THE RadixPump COMPONENT
 
         fn buy(
             &mut self,
@@ -363,5 +363,59 @@ define_interface! {
             AnyPoolEvent,
         );
 
+// THE FOLLOWING METHODS CAN ONLY BE CALLED BY THE RadixPump COMPONENT
+
+        fn launch(
+            &mut self, 
+            end_launch_time: i64,
+            unlocking_time: i64,
+        ) -> (
+            PoolMode,
+            HookArgument,
+            AnyPoolEvent,
+        );
+
+        fn terminate_launch(&mut self) -> (
+            Option<Bucket>,
+            Option<PoolMode>,
+            Option<HookArgument>,
+            Option<AnyPoolEvent>,
+        );
+
+        fn unlock(
+            &mut self,
+            amount: Option<Decimal>,
+        ) -> Bucket;
+
+        fn set_liquidation_mode(&mut self) -> (
+            PoolMode,
+            AnyPoolEvent,
+        );
+
+        fn get_flash_loan(
+            &mut self,
+            amount: Decimal,
+        ) -> Bucket;
+
+        fn return_flash_loan(
+            &mut self,
+            base_coin_bucket: Bucket,
+            coin_bucket: Bucket,
+        ) -> (
+            HookArgument,
+            AnyPoolEvent,
+        );
+
+        fn update_pool_fees(
+            &mut self,
+            buy_pool_fee_percentage: Decimal,
+            sell_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee: Decimal,
+        ) -> AnyPoolEvent;
+
+        fn burn(
+            &mut self,
+            amount: Decimal,
+        ) -> AnyPoolEvent;
     }
 }

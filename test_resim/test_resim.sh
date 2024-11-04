@@ -150,7 +150,8 @@ export creator_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 
 export flash_loan_nft=$(grep 'Resource:' $OUTPUTFILE | head -n 2 | tail -n 1 | cut -d ' ' -f 3)
 export hooks_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 3 | tail -n 1 | cut -d ' ' -f 3)
 export ro_hooks_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 4 | tail -n 1 | cut -d ' ' -f 3)
-echo -e "RadixPump component: ${radix_pump_component}\nCreator badge: ${creator_badge}\nFlash loan transient NFT: ${flash_loan_nft}\nHooks authentication badge: ${hooks_badge}\nRead only hooks authentication badge: ${ro_hooks_badge}"
+export integrator_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 6 | tail -n 1 | cut -d ' ' -f 3)
+echo -e "RadixPump component: ${radix_pump_component}\nCreator badge: ${creator_badge}\nFlash loan transient NFT: ${flash_loan_nft}\nHooks authentication badge: ${hooks_badge}\nRead only hooks authentication badge: ${ro_hooks_badge}\nIntegrator badge: ${integrator_badge}"
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -222,6 +223,7 @@ export quick_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d '
 export lp_quick=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
 export quick_launched_coin_received=$(grep -A 1 "ResAddr: ${quick_launched_coin}" $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 5)
+export collected_fees=$(echo "${base_coin_amount} * ${creation_fee_percentage} / 100" | bc)
 echo Quick launched ${quick_launched_coin}, received $(increase_in_wallet ${quick_launched_coin})
 echo Creator badge id: ${creator_badge_id}
 echo LP token: ${lp_quick}
@@ -285,12 +287,29 @@ export payment=1000
 export integrator_id=0
 echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${quick_launched_coin} ${integrator_id}
 resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${quick_launched_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export collected_fees=$(echo "${collected_fees} + $payment * ${buy_sell_fee_percentage} / 100" | bc)
 echo Bought $(increase_in_wallet ${quick_launched_coin}) ${quick_launched_coin} for $payment ${base_coin}
 echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${quick_launched_coin}
+
+echo
+update_wallet_amounts
+echo resim run owner_get_fees.rtm
+resim run owner_get_fees.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo "The component owner withdrawed $(increase_in_wallet ${base_coin}) ${base_coin} in fees (should be about ${collected_fees} - transaction cost)"
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+integrator_name="test"
+echo resim run new_integrator.rtm
+resim run new_integrator.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export integrator_id="$(grep -A 1 "ResAddr: ${integrator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)"
+export integrator_badge_id="#${integrator_id}#"
+echo Integrator badge ${integrator_badge_id} minted
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 update_wallet_amounts
@@ -706,6 +725,13 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 get_pool_info ${quick_launched_coin}
+
+echo
+update_wallet_amounts
+echo resim run integrator_get_fees.rtm
+resim run integrator_get_fees.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Integrator ${integrator_id} withdrawed $(increase_in_wallet ${base_coin}) ${base_coin}
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export symbol=MET

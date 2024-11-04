@@ -1188,22 +1188,13 @@ mod radix_pump {
                 || pool.component_address.terminate_launch()
             );
 
-            let buckets = match hook_argument {
-                None => {
-                    drop(pool);
-                    None
-                },
-                Some(hook_argument) => {
-                    let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
-                    drop(pool);
-                    Some(
-                        self.execute_hooks(
-                            &pool_enabled_hooks,
-                            &hook_argument,
-                        )
-                    )
-                },
+            let pool_enabled_hooks = match hook_argument {
+                None => None,
+                Some(ref hook_argument) => 
+                    Some(pool.enabled_hooks.get_all_hooks(hook_argument.operation)),
             };
+
+            drop(pool);
 
             if event.is_some() {
                 self.emit_pool_event(event.unwrap(), 0);
@@ -1212,6 +1203,18 @@ mod radix_pump {
             if mode.is_some() {
                 self.update_mode_in_creator_nft(creator_id, mode.unwrap());
             }
+
+            let buckets = match hook_argument {
+                None => None,
+                Some(ref hook_argument) => {
+                    Some(
+                        self.execute_hooks(
+                            &pool_enabled_hooks.unwrap(),
+                            &hook_argument,
+                        )
+                    )
+                },
+            };
 
             match bucket {
                 None => {},

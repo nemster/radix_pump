@@ -174,15 +174,49 @@ export hooks_package=$(grep 'Success! New Package:' $OUTPUTFILE | cut -d ' ' -f 
 echo Hooks package: ${hooks_package}
 
 echo
-echo resim call-function ${hooks_package} TestHook new ${owner_badge} ${ro_hooks_badge}
-resim call-function ${hooks_package} TestHook new ${owner_badge} ${ro_hooks_badge} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-export test_hook_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
-export test_hook_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
-echo -e "TestHook component: ${test_hook_component}\nTestHook coin: ${test_hook_coin}"
+echo resim call-function ${hooks_package} TestHook0 new ${owner_badge} ${hooks_badge} ${base_coin}:100
+resim call-function ${hooks_package} TestHook0 new ${owner_badge} ${hooks_badge} ${base_coin}:100 >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export test_hook0_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
+echo -e "TestHook0 component: ${test_hook0_component}"
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
-export hook_name=TestHook
+export hook_name=TestHook0
+export test_hook_component=${test_hook0_component}
+export operations='"PostBuy"'
+echo resim run register_hook.rtm
+resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Registered hook ${hook_name} for operations ${operations}
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+echo resim call-function ${hooks_package} TestHook1 new ${owner_badge} ${hooks_badge}
+resim call-function ${hooks_package} TestHook1 new ${owner_badge} ${hooks_badge} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export test_hook1_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
+export test_hook1_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
+echo -e "TestHook1 component: ${test_hook1_component}\nTestHook2 coin: ${test_hook1_coin}"
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+export hook_name=TestHook1
+export test_hook_component=${test_hook1_component}
+export operations='"PostBuy"'
+echo resim run register_hook.rtm
+resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Registered hook ${hook_name} for operations ${operations}
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+echo resim call-function ${hooks_package} TestHook2 new ${owner_badge} ${ro_hooks_badge}
+resim call-function ${hooks_package} TestHook2 new ${owner_badge} ${ro_hooks_badge} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export test_hook2_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
+export test_hook2_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
+echo -e "TestHook2 component: ${test_hook2_component}\nTestHook2 coin: ${test_hook2_coin}"
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+export hook_name=TestHook2
+export test_hook_component=${test_hook2_component}
 export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch", "PostTerminateRandomLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan", "PostBuyTicket", "PostRedeemWinningTicket", "PostRedeemLousingTicket", "PostAddLiquidity", "PostRemoveLiquidity"'
 echo resim run register_hook.rtm
 resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
@@ -227,7 +261,7 @@ export collected_fees=$(echo "${base_coin_amount} * ${creation_fee_percentage} /
 echo Quick launched ${quick_launched_coin}, received $(increase_in_wallet ${quick_launched_coin})
 echo Creator badge id: ${creator_badge_id}
 echo LP token: ${lp_quick}
-echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -289,7 +323,7 @@ echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${quic
 resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${quick_launched_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export collected_fees=$(echo "${collected_fees} + $payment * ${buy_sell_fee_percentage} / 100" | bc)
 echo Bought $(increase_in_wallet ${quick_launched_coin}) ${quick_launched_coin} for $payment ${base_coin}
-echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
+echo $(increase_in_wallet ${test_hook2_coin}) TestHook2 coin received
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -317,7 +351,7 @@ export payment=10
 echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} ${integrator_id}
 resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin}
-echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
+echo $(increase_in_wallet ${test_hook2_coin}) TestHook2 coin received
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -356,7 +390,7 @@ export fair_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' 
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
 echo Fair launched ${fair_launched_coin}, received $(increase_in_wallet ${fair_launched_coin})
 echo Creator badge id: ${creator_badge_id}
-echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -395,7 +429,7 @@ export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration
 echo resim run launch.rtm
 resim run launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Fair sale launched for ${fair_launched_coin}, received $(increase_in_wallet ${fair_launched_coin})
-echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -407,7 +441,7 @@ export payment=1000
 echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin} ${integrator_id}
 resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${fair_launched_coin}) ${fair_launched_coin} for $payment ${base_coin}
-echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -416,7 +450,7 @@ export payment=1000
 echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin} ${integrator_id}
 resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${fair_launched_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${fair_launched_coin}) ${fair_launched_coin} for $payment ${base_coin}
-echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -445,7 +479,7 @@ update_wallet_amounts
 echo resim run terminate_launch.rtm
 resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Fair launch terminated for ${fair_launched_coin}, received $(increase_in_wallet ${fair_launched_coin})
-echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -457,7 +491,7 @@ export payment=1
 echo resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin} ${integrator_id}
 resim call-method ${radix_pump_component} swap ${fair_launched_coin}:$payment ${base_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Sold $payment ${fair_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin}
-echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -562,7 +596,7 @@ export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration
 echo resim run launch.rtm
 resim run launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Random sale launched for ${random_launched_coin}, received $(increase_in_wallet ${random_launched_coin})
-echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -582,7 +616,7 @@ export payment=$(echo "${ticket_price} * ${bought_tickets1}" | bc)
 echo resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets1} ${base_coin}:$payment
 resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets1} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${random_ticket}) tickets for $payment $base_coin
-echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -592,7 +626,7 @@ export payment=$(echo "${ticket_price} * ${bought_tickets2}" | bc)
 echo resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets2} ${base_coin}:$payment
 resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} ${bought_tickets2} ${base_coin}:$payment >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Bought $(increase_in_wallet ${random_ticket}) tickets for $payment $base_coin
-echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -625,7 +659,7 @@ echo resim run terminate_launch.rtm
 resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Random launch termination completed for ${random_launched_coin}
 echo $(increase_in_wallet ${base_coin}) ${base_coin} received
-echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -647,7 +681,7 @@ do
   echo Ticket ${ticket_id} redeemed
   echo $(increase_in_wallet ${random_launched_coin}) ${random_launched_coin} received
   echo $(increase_in_wallet ${base_coin}) ${base_coin} received
-  echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+  echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
   grep 'Transaction Cost: ' $OUTPUTFILE
 done
 
@@ -690,7 +724,7 @@ export sell_amount=2
 echo resim call-method ${radix_pump_component} swap ${random_launched_coin}:${sell_amount} ${quick_launched_coin} ${integrator_id}
 resim call-method ${radix_pump_component} swap ${random_launched_coin}:${sell_amount} ${quick_launched_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Swapped ${sell_amount} ${random_launched_coin} for $(increase_in_wallet ${quick_launched_coin}) ${quick_launched_coin}
-echo Test hook coin received: $(increase_in_wallet ${test_hook_coin})
+echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -711,7 +745,7 @@ export payment=1
 echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} ${integrator_id}
 resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin}
-echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
+echo $(increase_in_wallet ${test_hook2_coin}) TestHook2 coin received
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -720,7 +754,7 @@ export payment=1
 echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} ${integrator_id}
 resim call-method ${radix_pump_component} swap ${quick_launched_coin}:$payment ${base_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo "Sold $payment ${quick_launched_coin} for $(increase_in_wallet ${base_coin}) ${base_coin} (price should not change)"
-echo $(increase_in_wallet ${test_hook_coin}) test hook coin received
+echo $(increase_in_wallet ${test_hook2_coin}) TestHook2 coin received
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -769,3 +803,40 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 get_pool_info $met
 
+echo
+export hook_name=TestHook0
+export globally_enabled_operations='"PostBuy"'
+echo resim run owner_enable_hook.rtm
+resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+export hook_name=TestHook1
+export globally_enabled_operations='"PostBuy"'
+echo resim run owner_enable_hook.rtm
+resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+export hook_name=TestHook2
+export globally_enabled_operations='"PostBuy"'
+echo resim run owner_enable_hook.rtm
+resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+update_wallet_amounts
+export payment=1
+echo resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${random_launched_coin} ${integrator_id}
+resim call-method ${radix_pump_component} swap ${base_coin}:$payment ${random_launched_coin} ${integrator_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo "Received $(increase_in_wallet ${random_launched_coin}) ${random_launched_coin} for $payment (+1 from TestHook0) ${base_coin}"
+echo This should call once TestHook0 and TestHook1 and twice TestHook2
+echo $(increase_in_wallet ${test_hook1_coin}) TestHook1 coin received
+echo $(increase_in_wallet ${test_hook2_coin}) TestHook2 coin received
+grep 'Transaction Cost: ' $OUTPUTFILE

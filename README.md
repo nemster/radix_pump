@@ -108,11 +108,11 @@ Both the component owner and the integrators can withdraw the fees by using the 
 
 ### Instantiate (Stokenet)
 
-Use this functions to create a RadixPump and a TestHook component in Stokenet
+Use this functions to create a RadixPump and the test hook components in Stokenet
 
 ```
 CALL_FUNCTION
-    Address("package_tdx_2_1p4wc400jfqe22p00nd73uq85zkdnvzhhuhjjg97n3exlg75ks9h9j4")
+    Address("")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -124,9 +124,36 @@ CALL_FUNCTION
     Address("<DAPP_DEFINITION>")
 ;
 
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "withdraw"
+    Address("<BASE_COIN_ADDRESS>")
+    Decimal("<BASE_COIN_AMOUNT>")
+;   
+TAKE_ALL_FROM_WORKTOP
+    Address("<BASE_COIN_ADDRESS>")
+    Bucket("base_coin_bucket")
+;
 CALL_FUNCTION
-    Address("package_tdx_2_1p4qu2jqthaa5d64tu7ed0al0x65l7fjl5tqzq996pm8f5eclr6y6z7")
-    "TestHook"
+    Address("")
+    "TestHook0"
+    "new"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Address("<HOOKS_BADGE>")
+    Bucket("base_coin_bucket")
+;
+
+CALL_FUNCTION
+    Address("")
+    "TestHook1"
+    "new"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Address("<HOOKS_BADGE>")
+;
+
+CALL_FUNCTION
+    Address("")
+    "TestHook2"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
     Address("<HOOKS_BADGE>")
@@ -141,6 +168,7 @@ CALL_FUNCTION
 `<FLASH_LOAN_FEE>` is the amount of base coins paid by flash borrowers to the component owner.  
 `<DAPP_DEFINITION>` is the address of the dApp definition account; this will be set as metadata on all of the components and some resources.  
 `<HOOKS_BADGE>` is the resource address of the badge created by RadixPump to authenticate towards the hooks; you can get it from `get_pool_info`.
+`<BASE_COIN_AMOUNT>` is the amount of base coins to deposit in the TestHook0 component.  
 
 ### forbid_symbols
 

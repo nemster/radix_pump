@@ -39,6 +39,7 @@ struct RandomLaunchDetails {
     refunds_vault: Vault,
     key_random: u32,
     random_badge_resource_manager: ResourceManager,
+    buy_fee_during_launch: Decimal,
 }
 
 #[derive(ScryptoSbor, PartialEq)]
@@ -507,8 +508,7 @@ mod pool {
                                         } else {
                                             base_coin_bucket.put(
                                                 random_launch.refunds_vault.take_advanced(
-                                                    // TODO: this is not correct if fee has changed
-                                                    random_launch.ticket_price * (100 - self.buy_pool_fee_percentage) / 100,
+                                                    random_launch.ticket_price * (100 - random_launch.buy_fee_during_launch) / 100,
                                                     WithdrawStrategy::Rounded(RoundingMode::ToZero),
                                                 )
                                             );
@@ -941,6 +941,8 @@ mod pool {
                             );
                             random_launch.end_launch_time = now;
 
+                            random_launch.buy_fee_during_launch = self.buy_pool_fee_percentage;
+
                             random_launch.winning_tickets = min(random_launch.winning_tickets, random_launch.sold_tickets);
 
                             if random_launch.winning_tickets == random_launch.sold_tickets {
@@ -960,7 +962,7 @@ mod pool {
                             } else {
                                 random_launch.refunds_vault.put(
                                     self.base_coin_vault.take_advanced(
-                                        (random_launch.sold_tickets - random_launch.winning_tickets) * random_launch.ticket_price * ((100 - self.buy_pool_fee_percentage) / 100),
+                                        (random_launch.sold_tickets - random_launch.winning_tickets) * random_launch.ticket_price * ((100 - random_launch.buy_fee_during_launch) / 100),
                                         WithdrawStrategy::Rounded(RoundingMode::AwayFromZero),
                                     )
                                 );
@@ -1649,6 +1651,7 @@ mod pool {
                         refunds_vault: Vault::new(base_coin_address),
                         key_random: 0,
                         random_badge_resource_manager: random_badge_resource_manager,
+                        buy_fee_during_launch: buy_pool_fee_percentage,
                     }
                 ),
                 extracted_tickets: KeyValueStore::new_with_registered_type(),
@@ -1919,7 +1922,7 @@ mod pool {
                     let supply = random_launch.resource_manager.total_supply();
 
                     let base_coin_bucket = self.base_coin_vault.take_advanced(
-                        random_launch.winning_tickets * random_launch.ticket_price * ((100 - self.buy_pool_fee_percentage) / 100),
+                        random_launch.winning_tickets * random_launch.ticket_price * ((100 - random_launch.buy_fee_during_launch) / 100),
                         WithdrawStrategy::Rounded(RoundingMode::ToZero),
                     );
                     let base_coin_bucket_amount = base_coin_bucket.amount();

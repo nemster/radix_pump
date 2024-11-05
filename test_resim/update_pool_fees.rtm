@@ -1,0 +1,22 @@
+CALL_METHOD
+    Address("${account}")
+    "lock_fee"
+    Decimal("1")
+;
+CALL_METHOD
+    Address("${account}")
+    "create_proof_of_non_fungibles"
+    Address("${creator_badge}")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("${creator_badge_id}"))
+;
+POP_FROM_AUTH_ZONE
+    Proof("creator_proof")
+;
+CALL_METHOD
+    Address("${radix_pump_component}")
+    "update_pool_fees"
+    Proof("creator_proof")
+    Decimal("${buy_pool_fee_percentage}")
+    Decimal("${sell_pool_fee_percentage}")
+    Decimal("${flash_loan_pool_fee}")
+;

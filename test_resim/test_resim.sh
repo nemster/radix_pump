@@ -610,6 +610,14 @@ resim call-method ${radix_pump_component} buy_ticket ${random_launched_coin} $am
 echo Failed attempt to buy one ticket without paying ticket_price + total_buy_fee
 
 echo
+export buy_pool_fee_percentage=0.1
+export sell_pool_fee_percentage=0.1
+export flash_loan_pool_fee=2
+echo resim run update_pool_fees.rtm
+resim run update_pool_fees.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Failed attempt to update fees during launch phase, this is not allowed
+
+echo
 update_wallet_amounts
 export bought_tickets1=20
 export payment=$(echo "${ticket_price} * ${bought_tickets1}" | bc)
@@ -660,6 +668,35 @@ resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Random launch termination completed for ${random_launched_coin}
 echo $(increase_in_wallet ${base_coin}) ${base_coin} received
 echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+echo resim call-method ${radix_pump_component} update_fees 0.2 0.2 2 5 --proofs ${owner_badge}:${owner_badge_id}
+resim call-method ${radix_pump_component} update_fees 0.2 0.2 2 5 --proofs ${owner_badge}:${owner_badge_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Updated platform fees 
+grep 'Transaction Cost: ' $OUTPUTFILE
+
+echo
+get_pool_info ${random_launched_coin}
+
+echo
+export buy_pool_fee_percentage=0.1
+export sell_pool_fee_percentage=0.2
+export flash_loan_pool_fee=3
+echo resim run update_pool_fees.rtm
+resim run update_pool_fees.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo Transaction failed because the creator tried to increase sell_pool_fee_percentage
+
+echo
+export buy_pool_fee_percentage=0.1
+export sell_pool_fee_percentage=0.1
+export flash_loan_pool_fee=3
+echo resim run update_pool_fees.rtm
+resim run update_pool_fees.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Updated ${random_launched_coin} pool fees
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -840,3 +877,4 @@ echo This should call once TestHook0 and TestHook1 and twice TestHook2
 echo $(increase_in_wallet ${test_hook1_coin}) TestHook1 coin received
 echo $(increase_in_wallet ${test_hook2_coin}) TestHook2 coin received
 grep 'Transaction Cost: ' $OUTPUTFILE
+

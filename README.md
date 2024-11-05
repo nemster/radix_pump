@@ -121,6 +121,7 @@ CALL_FUNCTION
     Decimal("<CREATION_FEE_PERCENTAGE>")
     Decimal("<BUY_SELL_FEE_PERCENTAGE>")
     Decimal("<FLASH_LOAN_FEE>")
+    Address("<DAPP_DEFINITION>")
 ;
 
 CALL_FUNCTION
@@ -138,6 +139,7 @@ CALL_FUNCTION
 `<CREATION_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by the token creators to the component owner.  
 `<BUY_SELL_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the component owner.  
 `<FLASH_LOAN_FEE>` is the amount of base coins paid by flash borrowers to the component owner.  
+`<DAPP_DEFINITION>` is the address of the dApp definition account; this will be set as metadata on all of the components and some resources.  
 `<HOOKS_BADGE>` is the resource address of the badge created by RadixPump to authenticate towards the hooks; you can get it from `get_pool_info`.
 
 ### forbid_symbols
@@ -1184,6 +1186,26 @@ CALL_METHOD
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.
 `<NAME>` is the name assigned to the integrator. It has no real use: it's just a reminder for the owner of the badges he created.  
+
+### update_dapp_definition
+
+The componet owner can call this method to set the dApp definition address on all future components and resources; existing components and resources are not effectet.  
+
+``` 
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "update_dapp_definition"
+    Address("<DAPP_DEFINITION>")
+;
+```
+
+`<DAPP_DEFINITION>` is the address of the new dApp definition account; this will be set as metadata on all of the components and some resources.  
 
 ## Special thanks to:
 

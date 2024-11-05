@@ -1239,6 +1239,7 @@ mod pool {
             flash_loan_pool_fee: Decimal,
             coin_creator_badge_rule: AccessRuleNode,
             base_coin_address: ResourceAddress,
+            dapp_definition: ComponentAddress,
         ) -> (
             ComponentAddress,
             ResourceAddress,
@@ -1266,11 +1267,12 @@ mod pool {
             .create_with_no_initial_supply();
 
             let lp_resource_manager = Pool::lp_resource_manager(
-                coin_name,
+                coin_name.clone(),
                 UncheckedUrl::of(coin_icon_url),
                 coin_creator_badge_rule,
                 owner_badge_address,
                 component_address,
+                dapp_definition,
             );
 
             Self {
@@ -1306,6 +1308,12 @@ mod pool {
                 hook => rule!(require(hook_badge_address));
             ))
             .with_address(address_reservation)
+            .metadata(metadata! {
+                init {
+                    "name" => format!("{} pool", coin_name), updatable;
+                    "dapp_definition" => dapp_definition, updatable;
+                }
+            })
             .globalize();
 
             (component_address, resource_manager.address(), lp_resource_manager.address())
@@ -1323,6 +1331,7 @@ mod pool {
             sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee: Decimal,
             coin_creator_badge_rule: AccessRuleNode,
+            dapp_definition: ComponentAddress,
         ) -> (
             ComponentAddress,
             ResourceAddress,
@@ -1330,11 +1339,12 @@ mod pool {
             let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
 
             let lp_resource_manager = Pool::lp_resource_manager(
-                coin_name,
+                coin_name.clone(),
                 coin_icon_url,
                 coin_creator_badge_rule,
                 owner_badge_address,
                 component_address,
+                dapp_definition,
             );
 
             Self {
@@ -1360,6 +1370,12 @@ mod pool {
                 hook => rule!(require(hook_badge_address));
             ))
             .with_address(address_reservation)
+            .metadata(metadata! {
+                init {
+                    "name" => format!("{} pool", coin_name), updatable;
+                    "dapp_definition" => dapp_definition, updatable;
+                }
+            })
             .globalize();
 
             (component_address, lp_resource_manager.address())
@@ -1382,6 +1398,7 @@ mod pool {
             sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee: Decimal,
             coin_creator_badge_rule: AccessRuleNode,
+            dapp_definition: ComponentAddress,
         ) -> (
             ComponentAddress,
             Bucket,
@@ -1435,11 +1452,12 @@ mod pool {
             let total_lp = coin_bucket.amount() - ignored_coins;
 
             let lp_resource_manager = Pool::lp_resource_manager(
-                coin_name,
+                coin_name.clone(),
                 UncheckedUrl::of(coin_icon_url),
                 coin_creator_badge_rule,
                 owner_badge_address,
                 component_address,
+                dapp_definition,
             );
 
             Self {
@@ -1469,6 +1487,12 @@ mod pool {
                 hook => rule!(require(hook_badge_address));
             ))
             .with_address(address_reservation)
+            .metadata(metadata! {
+                init {
+                    "name" => format!("{} pool", coin_name), updatable;
+                    "dapp_definition" => dapp_definition, updatable;
+                }
+            })
             .globalize();
 
             (
@@ -1516,6 +1540,7 @@ mod pool {
             flash_loan_pool_fee: Decimal,
             coin_creator_badge_rule: AccessRuleNode,
             base_coin_address: ResourceAddress,
+            dapp_definition: ComponentAddress,
         ) -> (
             ComponentAddress,
             ResourceAddress,
@@ -1561,6 +1586,7 @@ mod pool {
                     "name" => format!("Ticket for the launch of {}", coin_name), updatable;
                     "icon_url" => MetadataValue::Url(UncheckedUrl::of(coin_icon_url.clone())), updatable;
                     "description" => coin_description.clone(), updatable;
+                    "dapp_definition" => dapp_definition, updatable;
                 }
             ))
             .create_with_no_initial_supply();
@@ -1583,6 +1609,7 @@ mod pool {
                 },
                 init {
                     "name" => format!("Random badge"), updatable;
+                    "dapp_definition" => dapp_definition, updatable;
                 }
             ))
             .create_with_no_initial_supply();
@@ -1618,11 +1645,12 @@ mod pool {
             .create_with_no_initial_supply();
 
             let lp_resource_manager = Pool::lp_resource_manager(
-                coin_name,
+                coin_name.clone(),
                 UncheckedUrl::of(coin_icon_url),
                 coin_creator_badge_rule,
                 owner_badge_address,
                 component_address,
+                dapp_definition,
             );
 
             Self {
@@ -1668,6 +1696,12 @@ mod pool {
                 hook => rule!(require(hook_badge_address));
             ))
             .with_address(address_reservation)
+            .metadata(metadata! {
+                init {
+                    "name" => format!("{} pool", coin_name), updatable;
+                    "dapp_definition" => dapp_definition, updatable;
+                }
+            })
             .globalize();
 
             (component_address, resource_manager.address(), lp_resource_manager.address())
@@ -1853,6 +1887,7 @@ mod pool {
             coin_creator_badge_rule: AccessRuleNode,
             owner_badge_address: ResourceAddress,
             component_address: ComponentAddress,
+            dapp_definition: ComponentAddress,
         ) -> ResourceManager {
             ResourceBuilder::new_integer_non_fungible_with_registered_type::<LPData>(
                 OwnerRole::Updatable(AccessRule::Protected(coin_creator_badge_rule.clone()))
@@ -1891,6 +1926,7 @@ mod pool {
                 init {
                     "name" => format!("LP {}", coin_name), locked;
                     "icon_url" => MetadataValue::Url(coin_icon_url), updatable;
+                    "dapp_definition" => dapp_definition, updatable;
                 }
             ))
             .create_with_no_initial_supply()

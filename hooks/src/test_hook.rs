@@ -11,8 +11,13 @@ struct TestHookEvent {
     price: Option<Decimal>,
 }
 
+#[derive(ScryptoSbor, ScryptoEvent)]
+struct EmptyVaultEvent {
+    argument: HookArgument,
+}
+
 #[blueprint_with_traits]
-#[events(TestHookEvent)]
+#[events(EmptyVaultEvent)]
 mod test_hook0 {
     struct TestHook0 {
         hook_badge_address: ResourceAddress,
@@ -32,6 +37,13 @@ mod test_hook0 {
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
             .globalize()
+        }
+
+        pub fn refill_vault(
+            &mut self,
+            base_coin_bucket: Bucket,
+        ) {
+            self.base_coin_vault.put(base_coin_bucket);
         }
     }
 
@@ -67,6 +79,13 @@ mod test_hook0 {
                     vec![new_hook_argument],
                 )
             } else {
+                // Avoid panic in hooks. If something goes wrong just emit an event
+                Runtime::emit_event(
+                    EmptyVaultEvent {
+                        argument: argument,
+                    }
+                );
+
                 (
                     hook_badge_bucket, // The hook_badge_bucket must always be returned!
                     None,

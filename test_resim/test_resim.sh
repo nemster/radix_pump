@@ -674,8 +674,13 @@ echo
 get_pool_info ${random_launched_coin}
 
 echo
-echo resim call-method ${radix_pump_component} update_fees 0.2 0.2 2 5 --proofs ${owner_badge}:${owner_badge_id}
-resim call-method ${radix_pump_component} update_fees 0.2 0.2 2 5 --proofs ${owner_badge}:${owner_badge_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export creation_fee_percentage=0.2
+export buy_sell_fee_percentage=0.2
+export flash_loan_fee=2
+export max_buy_sell_pool_fee_percentage=5
+export minimum_deposit=10000
+echo resim call-method ${radix_pump_component} update_fees ${creation_fee_percentage} ${buy_sell_fee_percentage} ${flash_loan_fee} ${max_buy_sell_pool_fee_percentage} ${minimum_deposit} --proofs ${owner_badge}:${owner_badge_id}
+resim call-method ${radix_pump_component} update_fees ${creation_fee_percentage} ${buy_sell_fee_percentage} ${flash_loan_fee} ${max_buy_sell_pool_fee_percentage} ${minimum_deposit} --proofs ${owner_badge}:${owner_badge_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Updated platform fees 
 grep 'Transaction Cost: ' $OUTPUTFILE
 

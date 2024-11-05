@@ -428,6 +428,7 @@ CALL_METHOD
     Decimal("<BUY_SELL_FEE_PERCENTAGE>")
     Decimal("<FLASH_LOAN_FEE>")
     Decimal("<MAX_BUY_SELL_POOL_FEE_PERCENTAGE>")
+    Decimal("<MINIMUM_DEPOSIT>")
 ;
 ```
 
@@ -438,6 +439,7 @@ CALL_METHOD
 `<BUY_SELL_FEE_PERCENTAGE>` is the new percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers.  
 `<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
 `<MAX_BUY_SELL_POOL_FEE_PERCENTAGE>` is the upper limit to the `buy_sell_pool_fee_percentage` a coin creator can set (by default 10).  
+`<MINIMUM_DEPOSIT>` is the minimum amount of base coins that a new coin creator must deposit when doing a QuickLaunch.  
 
 ### owner_set_liquidation_mode
 

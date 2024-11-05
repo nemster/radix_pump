@@ -760,6 +760,7 @@ mod radix_pump {
             buy_sell_fee_percentage: Decimal,
             flash_loan_fee: Decimal,
             max_buy_sell_pool_fee_percentage: Decimal,
+            minimum_deposit: Decimal,
         ) {
             assert!(
                 creation_fee_percentage >= Decimal::ZERO && creation_fee_percentage < dec!(100),
@@ -777,11 +778,16 @@ mod radix_pump {
                 max_buy_sell_pool_fee_percentage >= Decimal::ZERO && max_buy_sell_pool_fee_percentage <= dec!(100),
                 "Max buy sell pool fee percentage can go from 0 (included) to 100 (included)",
             );
+            assert!(
+                minimum_deposit > Decimal::ZERO,
+                "minimum_deposit can't be zero ora less",
+            );
 
             self.creation_fee_percentage = creation_fee_percentage;
             self.buy_sell_fee_percentage = buy_sell_fee_percentage;
             self.flash_loan_fee = flash_loan_fee;
             self.max_buy_sell_pool_fee_percentage = max_buy_sell_pool_fee_percentage;
+            self.minimum_deposit = minimum_deposit;
         }
 
         pub fn owner_set_liquidation_mode(

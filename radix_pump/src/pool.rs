@@ -1524,7 +1524,7 @@ mod pool {
             let (address_reservation, component_address) = Runtime::allocate_component_address(Pool::blueprint_id());
 
             let ticket_resource_manager = ResourceBuilder::new_integer_non_fungible_with_registered_type::<TicketData>(
-                OwnerRole::Fixed(AccessRule::Protected(coin_creator_badge_rule.clone()))
+                OwnerRole::Updatable(AccessRule::Protected(coin_creator_badge_rule.clone()))
             )
             .mint_roles(mint_roles!(
                 minter => rule!(require(global_caller(component_address)));
@@ -1565,7 +1565,7 @@ mod pool {
             ))
             .create_with_no_initial_supply();
 
-            let random_badge_resource_manager = ResourceBuilder::new_fungible(OwnerRole::Fixed(rule!(require(owner_badge_address))))
+            let random_badge_resource_manager = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
             .mint_roles(mint_roles!(
                 minter => rule!(require(global_caller(component_address)));
                 minter_updater => rule!(deny_all);
@@ -1752,7 +1752,7 @@ mod pool {
             coin_social_url: Vec<String>,
             coin_creator_badge_rule: AccessRuleNode,
         ) -> InProgressResourceBuilder<FungibleResourceType> {
-            let resource_manager = ResourceBuilder::new_fungible(OwnerRole::Fixed(AccessRule::Protected(coin_creator_badge_rule.clone())))
+            let resource_manager = ResourceBuilder::new_fungible(OwnerRole::Updatable(AccessRule::Protected(coin_creator_badge_rule.clone())))
             .deposit_roles(deposit_roles!(
                 depositor => rule!(allow_all);
                 depositor_updater => rule!(deny_all);
@@ -1855,7 +1855,7 @@ mod pool {
             component_address: ComponentAddress,
         ) -> ResourceManager {
             ResourceBuilder::new_integer_non_fungible_with_registered_type::<LPData>(
-                OwnerRole::Fixed(AccessRule::Protected(coin_creator_badge_rule.clone()))
+                OwnerRole::Updatable(AccessRule::Protected(coin_creator_badge_rule.clone()))
             )
             .deposit_roles(deposit_roles!(
                 depositor => rule!(allow_all);

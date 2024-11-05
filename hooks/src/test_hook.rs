@@ -30,7 +30,7 @@ mod test_hook0 {
                 base_coin_vault: Vault::with_bucket(base_coin_bucket),
             }
             .instantiate()
-            .prepare_to_globalize(OwnerRole::Fixed(rule!(require(owner_badge_address))))
+            .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
             .globalize()
         }
     }
@@ -105,7 +105,7 @@ mod test_hook1 {
                 resource_manager: resource_manager,
             }
             .instantiate()
-            .prepare_to_globalize(OwnerRole::Fixed(rule!(require(owner_badge_address))))
+            .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
             .globalize()
         }
     }
@@ -176,7 +176,7 @@ mod test_hook2 {
                 resource_manager: resource_manager,
             }
             .instantiate()
-            .prepare_to_globalize(OwnerRole::Fixed(rule!(require(owner_badge_address))))
+            .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
             .globalize()
         }
     }

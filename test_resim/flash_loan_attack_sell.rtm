@@ -25,6 +25,7 @@ CALL_METHOD
     "swap"
     Bucket("coin_bucket") 
     Address("${base_coin}")
+    ${integrator_id}u64
 ;
 TAKE_ALL_FROM_WORKTOP
     Address("${flash_loan_nft}")
@@ -46,6 +47,7 @@ CALL_METHOD
     Bucket("transient_nft_bucket")
     Bucket("base_coin_bucket")
     Bucket("coin_bucket2")
+    ${integrator_id}u64
 ;
 TAKE_ALL_FROM_WORKTOP
     Address("${base_coin}") 
@@ -56,6 +58,7 @@ CALL_METHOD
     "swap"
     Bucket("base_coin_bucket2")
     Address("${coin}")
+    ${integrator_id}u64
 ;
 CALL_METHOD
     Address("${account}")

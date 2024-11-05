@@ -4,6 +4,9 @@ use crate::common::*;
 use crate::pool::pool::*;
 use crate::hook_helpers::*;
 
+// Metadata for this component
+static DAPP_NAME: &str = "RadixPump";
+
 // Metadata for the coin creator badge
 static CREATOR_BADGE_NAME: &str = "Coin creator badge";
 
@@ -13,11 +16,29 @@ static TRANSIENT_NFT_NAME: &str = "Flash loan transient NFT";
 // Minimum buy fee for Fair and Random launch
 static MIN_LAUNCH_BUY_FEE: Decimal = dec!("0.1");
 
+// Metadata for the integrator badge
+static INTEGRATOR_BADGE_NAME: &str = "Integrator badge";
+
+// Some common error messsages
+static COIN_NOT_FOUND: &str = "Coin not found";
+static UNKNOWN_HOOK: &str = "Unknown hook";
+static UNEXPECTED_METADATA_TYPE: &str = "Unexpected metadata type";
+static WRONG_BADGE: &str = "Wrong badge";
+static SHOULD_NOT_HAPPEN: &str = "Should not happen";
+
 // Flash loan transient NFT data
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
 struct FlashLoanData {
     coin_resource_address: ResourceAddress,
     coin_amount: Decimal,
+}
+
+#[derive(Debug, ScryptoSbor, NonFungibleData)]
+struct IntegratorData {
+    name: String,
+    creation_date: Instant,
+    #[mutable]
+    active: bool,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
@@ -38,7 +59,7 @@ struct HookDisabledEvent {
 
 #[derive(ScryptoSbor)]
 struct PoolStruct {
-    component_address: Global<Pool>,
+    component_address: RadixPumpPoolInterfaceScryptoStub,
     enabled_hooks: HooksPerOperation,
     creator_id: u64,
 }
@@ -72,6 +93,9 @@ struct PoolStruct {
     HookInfo,
     HookableOperation,
     Vec<String>,
+    IntegratorData,
+    u64,
+    Vault,
 )]
 mod radix_pump {
 
@@ -82,7 +106,7 @@ mod radix_pump {
             new_fair_launch => PUBLIC;
             new_quick_launch => PUBLIC;
             new_random_launch => PUBLIC;
-            get_fees => restrict_to: [OWNER];
+            get_fees => PUBLIC;
             update_fees => restrict_to: [OWNER];
             owner_set_liquidation_mode => restrict_to: [OWNER];
             creator_set_liquidation_mode => PUBLIC;
@@ -107,6 +131,8 @@ mod radix_pump {
             remove_liquidity => PUBLIC;
             swap => PUBLIC;
             new_pool => restrict_to: [OWNER];
+            new_integrator => restrict_to: [OWNER];
+            update_dapp_definition => restrict_to: [OWNER];
         }
     }
 
@@ -142,6 +168,8 @@ mod radix_pump {
         remove_liquidity => Free;
         swap => Usd(dec!("0.005"));
         new_pool => Free;
+        new_integrator => Free;
+        update_dapp_definition => Free;
     }
 
     struct RadixPump {
@@ -158,7 +186,6 @@ mod radix_pump {
         creation_fee_percentage: Decimal,
         buy_sell_fee_percentage: Decimal,
         flash_loan_fee: Decimal,
-        fee_vault: Vault,
         max_buy_sell_pool_fee_percentage: Decimal,
         min_launch_duration: i64,
         min_lock_duration: i64,
@@ -168,6 +195,10 @@ mod radix_pump {
         registered_hooks: HookByName,
         registered_hooks_operations: HooksPerOperation,
         globally_enabled_hooks: HooksPerOperation,
+        integrator_badge_resource_manager: ResourceManager,
+        fee_vaults: KeyValueStore<u64, Vault>,
+        next_integrator_badge_id: u64,
+        dapp_definition: ComponentAddress,
     }
 
     impl RadixPump {
@@ -180,6 +211,7 @@ mod radix_pump {
             creation_fee_percentage: Decimal,
             buy_sell_fee_percentage: Decimal,
             flash_loan_fee: Decimal,
+            dapp_definition: ComponentAddress,
         ) -> Global<RadixPump> {
 
             assert!(
@@ -215,6 +247,7 @@ mod radix_pump {
                 },
                 init {
                     "name" => CREATOR_BADGE_NAME, updatable;
+                    "dapp_definition" => dapp_definition, updatable;
                 }
             ))
             .mint_roles(mint_roles!(
@@ -244,6 +277,7 @@ mod radix_pump {
                 },
                 init {
                     "name" => TRANSIENT_NFT_NAME, updatable;
+                    "dapp_definition" => dapp_definition, updatable;
                 }
             ))
             .mint_roles(mint_roles!(
@@ -275,6 +309,7 @@ mod radix_pump {
                 },
                 init {
                     "name" => "Hook badge", updatable;
+                    "dapp_definition" => dapp_definition, updatable;
                 }
             ))
             .mint_roles(mint_roles!(
@@ -298,6 +333,7 @@ mod radix_pump {
                 },
                 init {
                     "name" => "RO hook badge", updatable;
+                    "dapp_definition" => dapp_definition, updatable;
                 }
             ))
             .mint_roles(mint_roles!(
@@ -321,6 +357,7 @@ mod radix_pump {
                 },
                 init {
                     "name" => "Proxy badge", updatable;
+                    "dapp_definition" => dapp_definition, updatable;
                 }
             ))
             .mint_roles(mint_roles!(
@@ -328,6 +365,36 @@ mod radix_pump {
                 minter_updater => rule!(require(owner_badge_address));
             ))
             .mint_initial_supply(dec![1]);
+
+            // Create a ResourceManager for minting integrator badges
+            let integrator_badge_resource_manager = <scrypto::prelude::ResourceBuilder as RadixPumpResourceBuilder>::new_integer_non_fungible_with_registered_type::<IntegratorData>(
+                OwnerRole::Updatable(rule!(require(owner_badge_address)))
+            )
+            .metadata(metadata!(
+                roles {
+                    metadata_setter => rule!(require(owner_badge_address));
+                    metadata_setter_updater => rule!(require(owner_badge_address));
+                    metadata_locker => rule!(require(owner_badge_address));
+                    metadata_locker_updater => rule!(require(owner_badge_address));
+                },
+                init {
+                    "name" => INTEGRATOR_BADGE_NAME, updatable;
+                    "dapp_definition" => dapp_definition, updatable;
+                }
+            ))
+            .mint_roles(mint_roles!(
+                minter => rule!(require(global_caller(component_address)));
+                minter_updater => rule!(require(owner_badge_address));
+            ))
+            .non_fungible_data_update_roles(non_fungible_data_update_roles!(
+                non_fungible_data_updater => rule!(require(owner_badge_address));
+                non_fungible_data_updater_updater => rule!(require(owner_badge_address));
+            ))
+            .burn_roles(burn_roles!(
+                burner => rule!(deny_all);
+                burner_updater => rule!(require(owner_badge_address));
+            ))
+            .create_with_no_initial_supply();
 
             // Instantiate the component
             Self {
@@ -340,13 +407,10 @@ mod radix_pump {
                 last_transient_nft_id: 0,
                 forbidden_symbols: <KeyValueStore<String, bool> as RadixPumpKeyValueStore>::new_with_registered_type(),
                 forbidden_names: <KeyValueStore<String, bool> as RadixPumpKeyValueStore>::new_with_registered_type(),
-                // TODO: why this doesn't work?
-                // pools: <KeyValueStore<ResourceAddress, PoolStruct> as RadixPumpKeyValueStore>::new_with_registered_type(),
-                pools: KeyValueStore::new(),
+                pools: <KeyValueStore<ResourceAddress, PoolStruct> as RadixPumpKeyValueStore>::new_with_registered_type(),
                 creation_fee_percentage: creation_fee_percentage,
                 buy_sell_fee_percentage: buy_sell_fee_percentage,
                 flash_loan_fee: flash_loan_fee,
-                fee_vault: Vault::new(base_coin_address),
                 max_buy_sell_pool_fee_percentage: dec!(10),
                 min_launch_duration: 604800, // One week
                 min_lock_duration: 7776000, // Three months
@@ -356,10 +420,20 @@ mod radix_pump {
                 registered_hooks: <KeyValueStore<String, HookInfo> as RadixPumpKeyValueStore>::new_with_registered_type(),
                 registered_hooks_operations: HooksPerOperation::new(),
                 globally_enabled_hooks: HooksPerOperation::new(),
+                integrator_badge_resource_manager: integrator_badge_resource_manager,
+                fee_vaults: <KeyValueStore<u64, Vault> as RadixPumpKeyValueStore>::new_with_registered_type(),
+                next_integrator_badge_id: 1,
+                dapp_definition: dapp_definition,
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
             .with_address(address_reservation)
+            .metadata(metadata! {
+                init {
+                    "name" => DAPP_NAME, updatable;
+                    "dapp_definition" => dapp_definition, updatable;
+                }
+            })
             .globalize()
         }
 
@@ -484,11 +558,12 @@ mod radix_pump {
                 flash_loan_pool_fee,
                 self.next_creator_badge_rule(),
                 self.base_coin_address,
+                self.dapp_definition,
             );
             self.pools.insert(
                 coin_resource_address,
                 PoolStruct {
-                    component_address: pool,
+                    component_address: pool.into(),
                     enabled_hooks: HooksPerOperation::new(),
                     creator_id: self.next_creator_badge_id,
                 }
@@ -540,11 +615,12 @@ mod radix_pump {
                 flash_loan_pool_fee,
                 self.next_creator_badge_rule(),
                 self.base_coin_address,
+                self.dapp_definition,
             );
             self.pools.insert(
                 coin_resource_address,
                 PoolStruct {
-                    component_address: pool,
+                    component_address: pool.into(),
                     enabled_hooks: HooksPerOperation::new(),
                     creator_id: self.next_creator_badge_id,
                 }
@@ -584,7 +660,8 @@ mod radix_pump {
                 "Insufficient base coin deposit",
             );
 
-            self.fee_vault.put(
+            self.deposit_fee(
+                0,
                 base_coin_bucket.take_advanced(
                     self.creation_fee_percentage * base_coin_bucket.amount() / 100,
                     WithdrawStrategy::Rounded(RoundingMode::ToZero),
@@ -613,15 +690,16 @@ mod radix_pump {
                 sell_pool_fee_percentage,
                 flash_loan_pool_fee,
                 self.next_creator_badge_rule(),
+                self.dapp_definition,
             );
 
-            self.emit_pool_event(event);
+            self.emit_pool_event(event, 0);
 
             let coin_address = creator_coin_bucket.resource_address();
             self.pools.insert(
                 coin_address,
                 PoolStruct {
-                    component_address: pool,
+                    component_address: pool.into(),
                     enabled_hooks: HooksPerOperation::new(),
                     creator_id: self.next_creator_badge_id,
                 }
@@ -646,30 +724,65 @@ mod radix_pump {
 
         fn emit_pool_event(
             &self,
-            event: AnyPoolEvent,
+            mut event: AnyPoolEvent,
+            integrator_id: u64,
         ) {
             match event {
-                AnyPoolEvent::FairLaunchStartEvent(event) => Runtime::emit_event(event),
-                AnyPoolEvent::FairLaunchEndEvent(event) => Runtime::emit_event(event),
-                AnyPoolEvent::QuickLaunchEvent(event) => Runtime::emit_event(event),
-                AnyPoolEvent::RandomLaunchStartEvent(event) => Runtime::emit_event(event),
-                AnyPoolEvent::RandomLaunchEndEvent(event) => Runtime::emit_event(event),
-                AnyPoolEvent::BuyEvent(event) => Runtime::emit_event(event),
-                AnyPoolEvent::SellEvent(event) => Runtime::emit_event(event),
-                AnyPoolEvent::LiquidationEvent(event) => Runtime::emit_event(event),
-                AnyPoolEvent::FlashLoanEvent(event) => Runtime::emit_event(event),
-                AnyPoolEvent::BuyTicketEvent(event) => Runtime::emit_event(event),
-                AnyPoolEvent::FeeUpdateEvent(event) => Runtime::emit_event(event),
-                AnyPoolEvent::BurnEvent(event) => Runtime::emit_event(event),
-                AnyPoolEvent::AddLiquidityEvent(event) => Runtime::emit_event(event),
-                AnyPoolEvent::RemoveLiquidityEvent(event) => Runtime::emit_event(event),
+                AnyPoolEvent::FairLaunchStartEvent(ref event) => Runtime::emit_event(*event),
+                AnyPoolEvent::FairLaunchEndEvent(ref event) => Runtime::emit_event(*event),
+                AnyPoolEvent::QuickLaunchEvent(ref event) => Runtime::emit_event(*event),
+                AnyPoolEvent::RandomLaunchStartEvent(ref event) => Runtime::emit_event(*event),
+                AnyPoolEvent::RandomLaunchEndEvent(ref event) => Runtime::emit_event(*event),
+                AnyPoolEvent::BuyEvent(ref mut event) => {
+                    event.integrator_id = integrator_id;
+                    Runtime::emit_event(*event);
+                },
+                AnyPoolEvent::SellEvent(ref mut event) => {
+                    event.integrator_id = integrator_id;
+                    Runtime::emit_event(*event);
+                },
+                AnyPoolEvent::LiquidationEvent(ref event) => Runtime::emit_event(*event),
+                AnyPoolEvent::FlashLoanEvent(ref mut event) => {
+                    event.integrator_id = integrator_id;
+                    Runtime::emit_event(*event);
+                }
+                AnyPoolEvent::BuyTicketEvent(ref event) => Runtime::emit_event(*event),
+                AnyPoolEvent::FeeUpdateEvent(ref event) => Runtime::emit_event(*event),
+                AnyPoolEvent::BurnEvent(ref event) => Runtime::emit_event(*event),
+                AnyPoolEvent::AddLiquidityEvent(ref event) => Runtime::emit_event(*event),
+                AnyPoolEvent::RemoveLiquidityEvent(ref event) => Runtime::emit_event(*event),
             }
         }
 
         pub fn get_fees(
             &mut self,
+            proof: Proof,
         ) -> Bucket {
-            self.fee_vault.take_all()
+            let integrator_id: u64;
+
+            if proof.resource_address() == self.owner_badge_address {
+                // Is this needed?
+                proof.check_with_message(
+                    self.owner_badge_address,
+                    WRONG_BADGE,
+                );
+
+                integrator_id = 0;
+            } else if proof.resource_address() == self.integrator_badge_resource_manager.address() {
+                let checked_proof = proof.check_with_message(
+                    self.integrator_badge_resource_manager.address(),
+                    WRONG_BADGE,
+                );
+
+                integrator_id = match checked_proof.as_non_fungible().non_fungible_local_id() {
+                    NonFungibleLocalId::Integer(id) => id.value(),
+                    _ => Runtime::panic(SHOULD_NOT_HAPPEN.to_string()),
+                };
+            } else {
+                Runtime::panic(WRONG_BADGE.to_string());
+            }
+
+            self.fee_vaults.get_mut(&integrator_id).expect("No fees yet").take_all()
         }
 
         pub fn update_fees(
@@ -678,6 +791,7 @@ mod radix_pump {
             buy_sell_fee_percentage: Decimal,
             flash_loan_fee: Decimal,
             max_buy_sell_pool_fee_percentage: Decimal,
+            minimum_deposit: Decimal,
         ) {
             assert!(
                 creation_fee_percentage >= Decimal::ZERO && creation_fee_percentage < dec!(100),
@@ -695,26 +809,34 @@ mod radix_pump {
                 max_buy_sell_pool_fee_percentage >= Decimal::ZERO && max_buy_sell_pool_fee_percentage <= dec!(100),
                 "Max buy sell pool fee percentage can go from 0 (included) to 100 (included)",
             );
+            assert!(
+                minimum_deposit > Decimal::ZERO,
+                "Minimum_deposit can't be zero or less",
+            );
 
             self.creation_fee_percentage = creation_fee_percentage;
             self.buy_sell_fee_percentage = buy_sell_fee_percentage;
             self.flash_loan_fee = flash_loan_fee;
             self.max_buy_sell_pool_fee_percentage = max_buy_sell_pool_fee_percentage;
+            self.minimum_deposit = minimum_deposit;
         }
 
         pub fn owner_set_liquidation_mode(
             &mut self,
             coin_address: ResourceAddress,
         ) {
-            let pool = self.pools.get(&coin_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&coin_address).expect(COIN_NOT_FOUND);
             let (mode, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.set_liquidation_mode()
             );
 
-            self.emit_pool_event(event);
+            let creator_id = pool.creator_id;
+            drop(pool);
 
-            self.update_mode_in_creator_nft(pool.creator_id, mode);
+            self.emit_pool_event(event, 0);
+
+            self.update_mode_in_creator_nft(creator_id, mode);
         }
 
         pub fn creator_set_liquidation_mode(
@@ -723,13 +845,14 @@ mod radix_pump {
         ) {
             let (creator_id, creator_data) = self.get_creator_data(creator_proof);
 
-            let pool = self.pools.get(&creator_data.coin_resource_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&creator_data.coin_resource_address).expect(COIN_NOT_FOUND);
             let (mode, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.set_liquidation_mode()
             );
+            drop(pool);
 
-            self.emit_pool_event(event);
+            self.emit_pool_event(event, 0);
 
             self.update_mode_in_creator_nft(creator_id, mode);
         }
@@ -739,11 +862,12 @@ mod radix_pump {
             coin_address: ResourceAddress,
             amount: Decimal
         ) -> (Bucket, Bucket) {
-            let pool = self.pools.get_mut(&coin_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&coin_address).expect(COIN_NOT_FOUND);
             let coin_bucket = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.get_flash_loan(amount)
             );
+            drop(pool);
 
             self.last_transient_nft_id += 1;
 
@@ -763,6 +887,7 @@ mod radix_pump {
             transient_nft_bucket: Bucket,
             mut base_coin_bucket: Bucket,
             coin_bucket: Bucket,
+            mut integrator_id: u64,
         ) -> Vec<Bucket> {
             assert!(
                 transient_nft_bucket.resource_address() == self.flash_loan_nft_resource_manager.address(),
@@ -772,6 +897,8 @@ mod radix_pump {
                 base_coin_bucket.resource_address() == self.base_coin_address,
                 "Wrong base coin",
             );
+
+            integrator_id = self.check_integrator_id(integrator_id);
 
             let flash_loan_data = transient_nft_bucket.as_non_fungible().non_fungible::<FlashLoanData>().data();
             assert!(
@@ -785,11 +912,15 @@ mod radix_pump {
 
             transient_nft_bucket.burn();
 
-            let pool = self.pools.get(&coin_bucket.resource_address()).unwrap();
-
-            self.fee_vault.put(
-                base_coin_bucket.take(self.flash_loan_fee)
+            self.deposit_fee(
+                integrator_id,
+                base_coin_bucket.take_advanced(
+                    self.creation_fee_percentage * base_coin_bucket.amount() / 100,
+                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                )
             );
+
+            let mut pool = self.pools.get_mut(&coin_bucket.resource_address()).unwrap();
 
             let (hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
@@ -799,10 +930,11 @@ mod radix_pump {
                 )
             );
 
-            self.emit_pool_event(event);
-
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
+
+            self.emit_pool_event(event, integrator_id);
+
             self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -825,7 +957,7 @@ mod radix_pump {
 
             let (_, creator_data) = self.get_creator_data(creator_proof);
 
-            let pool = self.pools.get(&creator_data.coin_resource_address).unwrap();
+            let mut pool = self.pools.get_mut(&creator_data.coin_resource_address).unwrap();
 
             let event = self.proxy_badge_vault.authorize_with_amount(
                 1,
@@ -835,15 +967,16 @@ mod radix_pump {
                     flash_loan_pool_fee,
                 )
             );
+            drop(pool);
 
-            self.emit_pool_event(event);
+            self.emit_pool_event(event, 0);
         }
 
         pub fn get_pool_info(
             &self,
             coin_address: ResourceAddress,
         ) -> PoolInfo {
-            let pool = self.pools.get(&coin_address).expect("Coin not found");
+            let pool = self.pools.get(&coin_address).expect(COIN_NOT_FOUND);
             let mut pool_info = pool.component_address.get_pool_info();
 
             pool_info.total_buy_fee_percentage = dec!(1000000) / ((100 - pool_info.total_buy_fee_percentage) * (100 - self.buy_sell_fee_percentage)) - dec!(100);
@@ -865,14 +998,14 @@ mod radix_pump {
         ) {
             let non_fungible = creator_proof.check_with_message(
                 self.creator_badge_resource_manager.address(),
-                "Wrong badge",
+                WRONG_BADGE,
             )
             .as_non_fungible()
             .non_fungible::<CreatorData>();
 
             let local_id = match &non_fungible.local_id() {
                 NonFungibleLocalId::Integer(local_id) => local_id.value(),
-                _ => Runtime::panic("WTF".to_string()),
+                _ => Runtime::panic(SHOULD_NOT_HAPPEN.to_string()),
             };
 
             (local_id, non_fungible.data())
@@ -914,19 +1047,20 @@ mod radix_pump {
 
             let (creator_id, creator_data) = self.get_creator_data(creator_proof);
             let coin_address = creator_data.coin_resource_address;
-            let pool = self.pools.get(&coin_address).unwrap();
+            let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
             let (mode, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.launch(end_launch_time, unlocking_time)
             );
 
-            self.emit_pool_event(event);
+            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
+            drop(pool);
+
+            self.emit_pool_event(event, 0);
 
             self.update_mode_in_creator_nft(creator_id, mode);
 
-            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
-            drop(pool);
             self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -980,7 +1114,7 @@ mod radix_pump {
 
                     // An hook can generate any number of Pool events by calling Pool methods
                     for event in events.iter() {
-                        self.emit_pool_event(event.clone());
+                        self.emit_pool_event(event.clone(), 0);
                     }
 
                     // An hook can return a Bucket for the user
@@ -1050,7 +1184,7 @@ mod radix_pump {
 
                                 // An hook can generate any number of Pool events by calling Pool methods
                                 for event in events.iter() {
-                                    self.emit_pool_event(event.clone());
+                                    self.emit_pool_event(event.clone(), 0);
                                 }
 
                                 // An hook can return a Bucket for the user
@@ -1084,44 +1218,53 @@ mod radix_pump {
             let (creator_id, creator_data) = self.get_creator_data(creator_proof);
             let coin_address = creator_data.coin_resource_address;
 
-            let pool = self.pools.get(&coin_address).unwrap();
+            let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
             let (mut bucket, mode, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.terminate_launch()
             );
 
+            let pool_enabled_hooks = match hook_argument {
+                None => None,
+                Some(ref hook_argument) => 
+                    Some(pool.enabled_hooks.get_all_hooks(hook_argument.operation)),
+            };
+
+            drop(pool);
+
             if event.is_some() {
-                self.emit_pool_event(event.unwrap());
+                self.emit_pool_event(event.unwrap(), 0);
             }
 
             if mode.is_some() {
                 self.update_mode_in_creator_nft(creator_id, mode.unwrap());
             }
 
-            match bucket {
-                None => {},
-                Some(ref mut bucket) => self.fee_vault.put(
-                    bucket.take_advanced(
-                        self.creation_fee_percentage * bucket.amount() / 100,
-                        WithdrawStrategy::Rounded(RoundingMode::ToZero),
-                    )
-                ),
-            }
-
             let buckets = match hook_argument {
                 None => None,
-                Some(hook_argument) => {
-                    let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
-                    drop(pool);
+                Some(ref hook_argument) => {
                     Some(
                         self.execute_hooks(
-                            &pool_enabled_hooks,
+                            &pool_enabled_hooks.unwrap(),
                             &hook_argument,
                         )
                     )
                 },
             };
+
+            match bucket {
+                None => {},
+                Some(ref mut bucket) => {
+                    self.deposit_fee(
+                        0,
+                        bucket.take_advanced(
+                            self.creation_fee_percentage * bucket.amount() / 100,
+                            WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                        )
+                    );
+                }
+            }
 
             (bucket, buckets)
         }
@@ -1173,7 +1316,7 @@ mod radix_pump {
             sell: bool,
         ) -> (Bucket, Vec<Bucket>) {
             let coin_address = self.get_creator_data(creator_proof).1.coin_resource_address;
-            let pool = self.pools.get(&coin_address).unwrap();
+            let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
             let coin_bucket = self.proxy_badge_vault.authorize_with_amount(
                 1,
@@ -1189,21 +1332,23 @@ mod radix_pump {
                             || pool.component_address.sell(coin_bucket)
                         );
 
-                    self.fee_vault.put(
+                    let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
+                    drop(pool);
+
+                    self.emit_pool_event(event, 0);
+
+                    let buckets = self.execute_hooks(
+                        &pool_enabled_hooks,
+                        &hook_argument,
+                    );
+
+                    self.deposit_fee(
+                        0,
                         base_coin_bucket.take_advanced(
                             base_coin_bucket.amount() * self.buy_sell_fee_percentage / dec!(100),
                             WithdrawStrategy::Rounded(RoundingMode::ToZero),
                         )
                      );
-
-                    self.emit_pool_event(event);
-
-                    let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
-                    drop(pool);
-                    let buckets = self.execute_hooks(
-                        &pool_enabled_hooks,
-                        &hook_argument,
-                    );
 
                     (base_coin_bucket, buckets)
                 },
@@ -1273,7 +1418,7 @@ mod radix_pump {
             name: String,
             operations: Vec<String>,
         ) {
-            let hook_info = self.registered_hooks.get(&name).expect("Unknown hook");
+            let hook_info = self.registered_hooks.get(&name).expect(UNKNOWN_HOOK);
 
             for operation in operations.iter() {
                 assert!(
@@ -1309,7 +1454,7 @@ mod radix_pump {
             name: String,
             operations: Vec<String>,
         ) {
-            let hook_info = self.registered_hooks.get(&name).expect("Unknown hook");
+            let hook_info = self.registered_hooks.get(&name).expect(UNKNOWN_HOOK);
 
             self.globally_enabled_hooks.remove_hook(
                 &name,
@@ -1333,7 +1478,7 @@ mod radix_pump {
             name: String,
             operations: Vec<String>,
         ) {
-            let hook_info = self.registered_hooks.get(&name).expect("Unknown hook");
+            let hook_info = self.registered_hooks.get(&name).expect(UNKNOWN_HOOK);
 
             for operation in operations.iter() {
                 assert!(
@@ -1372,7 +1517,7 @@ mod radix_pump {
             name: String,
             operations: Vec<String>,
         ) {
-            let hook_info = self.registered_hooks.get(&name).expect("Unknown hook");
+            let hook_info = self.registered_hooks.get(&name).expect(UNKNOWN_HOOK);
 
             let coin_address = self.get_creator_data(creator_proof).1.coin_resource_address;
 
@@ -1398,14 +1543,15 @@ mod radix_pump {
             amount: Decimal,
         ) {
             let coin_address = self.get_creator_data(creator_proof).1.coin_resource_address;
-            let pool = self.pools.get(&coin_address).unwrap();
+            let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
             let event = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.burn(amount)
             );
+            drop(pool);
 
-            self.emit_pool_event(event);
+            self.emit_pool_event(event, 0);
         }
 
         pub fn buy_ticket(
@@ -1423,7 +1569,7 @@ mod radix_pump {
                 "Can't buy zero tickets",
             );
 
-            let pool = self.pools.get(&coin_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&coin_address).expect(COIN_NOT_FOUND);
 
             let (ticket_bucket, hook_argument, event) =
                 self.proxy_badge_vault.authorize_with_amount(
@@ -1434,10 +1580,11 @@ mod radix_pump {
                     )
                 );
 
-            self.emit_pool_event(event);
-
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
+
+            self.emit_pool_event(event, 0);
+
             let buckets = self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -1457,7 +1604,7 @@ mod radix_pump {
         ) {
             let ticket_id = &ticket_bucket.as_non_fungible().non_fungible_local_ids()[0];
             let ticket_data = ResourceManager::from_address(ticket_bucket.resource_address()).get_non_fungible_data::<TicketData>(ticket_id);
-            let pool = self.pools.get(&ticket_data.coin_resource_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&ticket_data.coin_resource_address).expect(COIN_NOT_FOUND);
 
             let (base_coin_bucket, coin_bucket, hook_argument_lose, hook_argument_win) = self.proxy_badge_vault.authorize_with_amount(
                 1,
@@ -1508,7 +1655,7 @@ mod radix_pump {
             Vec<Bucket>,
         ) {
             let coin_address = coin_bucket.resource_address();
-            let pool = self.pools.get(&coin_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&coin_address).expect(COIN_NOT_FOUND);
 
             let (lp_bucket, remainings_bucket, hook_argument, event, mode) =
                 self.proxy_badge_vault.authorize_with_amount(
@@ -1519,14 +1666,16 @@ mod radix_pump {
                     )
                 );
 
-            self.emit_pool_event(event);
+            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
+            let creator_id = pool.creator_id;
+            drop(pool);
+
+            self.emit_pool_event(event, 0);
 
             if mode.is_some() {
-                self.update_mode_in_creator_nft(pool.creator_id, mode.unwrap());
+                self.update_mode_in_creator_nft(creator_id, mode.unwrap());
             }
 
-            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
-            drop(pool);
             let buckets = self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -1545,17 +1694,18 @@ mod radix_pump {
         ) {
             let lp_id = &lp_bucket.as_non_fungible().non_fungible_local_ids()[0];
             let lp_data = ResourceManager::from_address(lp_bucket.resource_address()).get_non_fungible_data::<LPData>(lp_id);
-            let pool = self.pools.get(&lp_data.coin_resource_address).expect("Coin not found");
+            let mut pool = self.pools.get_mut(&lp_data.coin_resource_address).expect(COIN_NOT_FOUND);
 
             let (base_coin_bucket, coin_bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.remove_liquidity(lp_bucket)
             );
 
-            self.emit_pool_event(event);
-
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
+
+            self.emit_pool_event(event, 0);
+
             let buckets = self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -1568,6 +1718,7 @@ mod radix_pump {
             &mut self,
             coin1_bucket: Bucket,
             coin2_address: ResourceAddress,
+            mut integrator_id: u64,
         ) -> (Bucket, Vec<Bucket>, Vec<Bucket>) {
             assert!(
                 coin1_bucket.amount() > Decimal::ZERO,
@@ -1579,30 +1730,34 @@ mod radix_pump {
                 "Can't swap a coin with itself",
             );
 
+            integrator_id = self.check_integrator_id(integrator_id);
+
             let mut base_coin_bucket: Bucket;
             let mut buckets1: Vec<Bucket> = vec![];
 
             if coin1_address == self.base_coin_address {
                 base_coin_bucket = coin1_bucket;
             } else {
-                let pool = self.pools.get(&coin1_address).expect("Coin1 not found");
+                let mut pool = self.pools.get_mut(&coin1_address).expect("Coin1 not found");
                 let (bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                     1,
                     || pool.component_address.sell(coin1_bucket)
                 );
                 base_coin_bucket = bucket;
 
-                self.emit_pool_event(event);
-
                 let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
                 drop(pool);
+
+                self.emit_pool_event(event, integrator_id);
+
                 buckets1 = self.execute_hooks(
                     &pool_enabled_hooks,
                     &hook_argument,
                 );
             }
  
-            self.fee_vault.put(
+            self.deposit_fee(
+                integrator_id,
                 base_coin_bucket.take_advanced(
                     base_coin_bucket.amount() * self.buy_sell_fee_percentage / dec!(100),
                     WithdrawStrategy::Rounded(RoundingMode::ToZero),
@@ -1615,17 +1770,18 @@ mod radix_pump {
             if coin2_address == self.base_coin_address {
                 coin2_bucket = base_coin_bucket;
             } else {
-                let pool = self.pools.get(&coin2_address).expect("Coin2 not found");
+                let mut pool = self.pools.get_mut(&coin2_address).expect("Coin2 not found");
                 let (bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                     1,
                     || pool.component_address.buy(base_coin_bucket)
                 );
                 coin2_bucket = bucket;
 
-                self.emit_pool_event(event);
-
                 let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
                 drop(pool);
+
+                self.emit_pool_event(event, integrator_id);
+
                 buckets2 = self.execute_hooks(
                     &pool_enabled_hooks,
                     &hook_argument,
@@ -1657,13 +1813,13 @@ mod radix_pump {
             // Get metadata for the existing coin
             let resource_manager = ResourceManager::from_address(coin_address);
             let coin_symbol: String = resource_manager.get_metadata("symbol")
-                .expect("Unexpected metadata type")
+                .expect(UNEXPECTED_METADATA_TYPE)
                 .expect("Coins without symbol are not allowed");
             let coin_name: String = resource_manager.get_metadata("name")
-                .expect("Unexpected metadata type")
+                .expect(UNEXPECTED_METADATA_TYPE)
                 .expect("Coins without name are not allowed");
             let coin_icon_url: UncheckedUrl = resource_manager.get_metadata("icon_url")
-                .expect("Unexpected metadata type")
+                .expect(UNEXPECTED_METADATA_TYPE)
                 .expect("Coins without icon are not allowed");
 
             // Do not check if name or symbol are forbidden so we can add well known coins.
@@ -1689,11 +1845,12 @@ mod radix_pump {
                 sell_pool_fee_percentage,
                 flash_loan_pool_fee,
                 self.next_creator_badge_rule(),
+                self.dapp_definition,
             );
             self.pools.insert(
                 coin_address,
                 PoolStruct {
-                    component_address: pool,
+                    component_address: pool.into(),
                     enabled_hooks: HooksPerOperation::new(),
                     creator_id: self.next_creator_badge_id,
                 }
@@ -1719,6 +1876,67 @@ mod radix_pump {
                 "pool_mode",
                 mode,
             );
+        }
+
+        fn check_integrator_id(
+            &mut self,
+            mut integrator_id: u64,
+        ) -> u64 {
+            if integrator_id > 0 {
+                let id = NonFungibleLocalId::integer(integrator_id);
+
+                if !self.integrator_badge_resource_manager.non_fungible_exists(&id) {
+                    integrator_id = 0;
+                }
+
+                if integrator_id > 0 {
+                    let integrator_data =
+                        self.integrator_badge_resource_manager.get_non_fungible_data::<IntegratorData>(&id);
+ 
+                    if !integrator_data.active {
+                        integrator_id = 0;
+                    }
+                }
+            }
+
+            integrator_id
+        }
+
+        fn deposit_fee(
+            &mut self,
+            integrator_id: u64,
+            fee_bucket: Bucket,
+        ) {
+            if self.fee_vaults.get(&integrator_id).is_none() {
+                self.fee_vaults.insert(integrator_id, Vault::new(self.base_coin_address));
+            }
+
+            self.fee_vaults.get_mut(&integrator_id).unwrap().put(fee_bucket);
+        }
+
+        pub fn new_integrator(
+            &mut self,
+            name: String,
+        ) -> Bucket {
+            let integrator_badge = self.integrator_badge_resource_manager.mint_non_fungible(
+                &NonFungibleLocalId::integer(self.next_integrator_badge_id.into()),
+                IntegratorData {
+                    name: name,
+                    creation_date: Clock::current_time_rounded_to_seconds(),
+                    active: true,
+                }
+            );
+
+            self.next_integrator_badge_id += 1;
+
+            integrator_badge
+        }
+
+        pub fn update_dapp_definition(
+            &mut self,
+            dapp_definition: ComponentAddress,
+        ) {
+            self.dapp_definition = dapp_definition;
         }
     }
 }

@@ -1,6 +1,5 @@
 use scrypto::prelude::*;
 use scrypto_interface::*;
-use crate::pool::pool::*;
 
 #[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
 pub enum PoolMode {
@@ -14,7 +13,7 @@ pub enum PoolMode {
 
 #[derive(ScryptoSbor)]
 pub struct PoolInfo {
-    pub component: Global<Pool>,
+    pub component: RadixPumpPoolInterfaceScryptoStub,
     pub base_coin_amount: Decimal,
     pub coin_amount: Decimal,
     pub last_price: Decimal,
@@ -65,7 +64,7 @@ pub enum HookableOperation {
     PostRemoveLiquidity,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct FairLaunchStartEvent {
     pub resource_address: ResourceAddress,
     pub price: Decimal,
@@ -77,7 +76,7 @@ pub struct FairLaunchStartEvent {
     pub flash_loan_pool_fee: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct FairLaunchEndEvent {
     pub resource_address: ResourceAddress,
     pub creator_proceeds: Decimal,
@@ -86,7 +85,7 @@ pub struct FairLaunchEndEvent {
     pub coins_in_pool: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct QuickLaunchEvent {
     pub resource_address: ResourceAddress,
     pub price: Decimal,
@@ -97,7 +96,7 @@ pub struct QuickLaunchEvent {
     pub flash_loan_pool_fee: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct RandomLaunchStartEvent {
     pub resource_address: ResourceAddress,
     pub ticket_price: Decimal,
@@ -110,7 +109,7 @@ pub struct RandomLaunchStartEvent {
     pub flash_loan_pool_fee: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct RandomLaunchEndEvent {
     pub resource_address: ResourceAddress,
     pub creator_proceeds: Decimal,
@@ -119,7 +118,7 @@ pub struct RandomLaunchEndEvent {
     pub coins_in_pool: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct BuyEvent {
     pub resource_address: ResourceAddress,
     pub mode: PoolMode,
@@ -127,9 +126,10 @@ pub struct BuyEvent {
     pub price: Decimal,
     pub coins_in_pool: Decimal,
     pub fee_paid_to_the_pool: Decimal,
+    pub integrator_id: u64,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct SellEvent {
     pub resource_address: ResourceAddress,
     pub mode: PoolMode,
@@ -137,22 +137,24 @@ pub struct SellEvent {
     pub price: Decimal,
     pub coins_in_pool: Decimal,
     pub fee_paid_to_the_pool: Decimal,
+    pub integrator_id: u64,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct LiquidationEvent {
     pub resource_address: ResourceAddress,
     pub price: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct FlashLoanEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
     pub fee_paid_to_the_pool: Decimal,
+    pub integrator_id: u64,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct BuyTicketEvent {
     pub resource_address: ResourceAddress,
     pub amount: u32,
@@ -162,7 +164,7 @@ pub struct BuyTicketEvent {
     pub fee_paid_to_the_pool: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct FeeUpdateEvent {
     pub resource_address: ResourceAddress,
     pub buy_pool_fee_percentage: Decimal,
@@ -170,25 +172,25 @@ pub struct FeeUpdateEvent {
     pub flash_loan_pool_fee: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct BurnEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct AddLiquidityEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
 }
 
-#[derive(ScryptoSbor, ScryptoEvent, Clone)]
+#[derive(ScryptoSbor, ScryptoEvent, Clone, Copy)]
 pub struct RemoveLiquidityEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
 }
 
-#[derive(ScryptoSbor, Clone)]
+#[derive(ScryptoSbor, Clone, Copy)]
 pub enum AnyPoolEvent {
     FairLaunchStartEvent(FairLaunchStartEvent),
     FairLaunchEndEvent(FairLaunchEndEvent),
@@ -223,7 +225,7 @@ pub struct LPData {
 
 #[derive(ScryptoSbor, Clone)]
 pub struct HookArgument {
-//TODO: why this doesn't work?    pub component: Global<Pool>,
+    pub component: RadixPumpPoolInterfaceScryptoStub,
     pub coin_address: ResourceAddress,
     pub operation: HookableOperation,
     pub amount: Option<Decimal>,
@@ -289,5 +291,131 @@ define_interface! {
             // For round 0 hooks this must be false.
             bool,
         );
+    }
+}
+
+define_interface! {
+    RadixPumpPool impl [ScryptoStub, Trait, ScryptoTestStub] {
+
+// THE FOLLOWING METHOD REQUIRES NO AUTHENTICATION, IT CAN BE CALLED BY ANYONE
+
+        fn get_pool_info(&self) -> PoolInfo;
+
+// THE FOLLOWING METHODS CAN ONLY BE CALLED BY ROUND 0 AND 1 HOOKS AND BY THE RadixPump COMPONENT
+
+        fn buy(
+            &mut self,
+            base_coin_bucket: Bucket,
+        ) -> (
+            Bucket,
+            HookArgument,
+            AnyPoolEvent,
+        );
+
+        fn sell(
+            &mut self,
+            coin_bucket: Bucket,
+        ) -> (
+            Bucket,
+            HookArgument,
+            AnyPoolEvent,
+        );
+
+        fn buy_ticket(
+            &mut self,
+            amount: u32,
+            base_coin_bucket: Bucket,
+        ) -> (
+            Bucket,
+            HookArgument,
+            AnyPoolEvent,
+        );
+
+        fn redeem_ticket(
+            &mut self,
+            ticket_bucket: Bucket,
+        ) -> (
+            Bucket, // base coin bucket
+            Option<Bucket>, // coin bucket
+            Option<HookArgument>,
+            Option<HookArgument>,
+        );
+
+        fn add_liquidity(
+            &mut self,
+            base_coin_bucket: Bucket,
+            coin_bucket: Bucket,
+        ) -> (  
+            Bucket,
+            Option<Bucket>,
+            HookArgument, 
+            AnyPoolEvent,
+            Option<PoolMode>,
+        );
+
+        fn remove_liquidity(
+            &mut self,
+            lp_bucket: Bucket,
+        ) -> (  
+            Bucket, 
+            Option<Bucket>,
+            HookArgument,
+            AnyPoolEvent,
+        );
+
+// THE FOLLOWING METHODS CAN ONLY BE CALLED BY THE RadixPump COMPONENT
+
+        fn launch(
+            &mut self, 
+            end_launch_time: i64,
+            unlocking_time: i64,
+        ) -> (
+            PoolMode,
+            HookArgument,
+            AnyPoolEvent,
+        );
+
+        fn terminate_launch(&mut self) -> (
+            Option<Bucket>,
+            Option<PoolMode>,
+            Option<HookArgument>,
+            Option<AnyPoolEvent>,
+        );
+
+        fn unlock(
+            &mut self,
+            amount: Option<Decimal>,
+        ) -> Bucket;
+
+        fn set_liquidation_mode(&mut self) -> (
+            PoolMode,
+            AnyPoolEvent,
+        );
+
+        fn get_flash_loan(
+            &mut self,
+            amount: Decimal,
+        ) -> Bucket;
+
+        fn return_flash_loan(
+            &mut self,
+            base_coin_bucket: Bucket,
+            coin_bucket: Bucket,
+        ) -> (
+            HookArgument,
+            AnyPoolEvent,
+        );
+
+        fn update_pool_fees(
+            &mut self,
+            buy_pool_fee_percentage: Decimal,
+            sell_pool_fee_percentage: Decimal,
+            flash_loan_pool_fee: Decimal,
+        ) -> AnyPoolEvent;
+
+        fn burn(
+            &mut self,
+            amount: Decimal,
+        ) -> AnyPoolEvent;
     }
 }

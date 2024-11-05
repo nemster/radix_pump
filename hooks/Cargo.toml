@@ -8,6 +8,7 @@ scrypto = { workspace = true }
 radix-common = { workspace = true }
 radix-engine-interface = { workspace = true }
 scrypto-interface = { path = "../scrypto-interface" }
+cc = { workspace = true }
 
 [features]
 default = []

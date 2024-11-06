@@ -1764,39 +1764,63 @@ mod radix_pump {
             )
         }
 
+        // A coin creator can use this method to get (part of) his coin allocation
         pub fn unlock(
             &mut self,
+
+            // Coin creator badge proof
             creator_proof: Proof,
+
+            // Amount required or None (all of the available amount)
             amount: Option<Decimal>,
+
+            // Whether to sell or not the coins received
             sell: bool,
-        ) -> (Bucket, Vec<Bucket>) {
+        ) -> (
+            Bucket, // Coins (if sell is false) or base coins (if sell is true)
+            Vec<Bucket>, // Eventual additional buckets created by the hooks
+        ) {
+            // Get the coin address from the creator badge proof
             let coin_address = self.get_creator_data(creator_proof).1.coin_resource_address;
+
+            // Find the pool of the coin
             let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
+            // Use the proxy badge to call the unlock method of the pool
             let coin_bucket = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.unlock(amount)
             );
 
             match sell {
+                // If sell is false just return the received coins and call no hooks
                 false => (coin_bucket, vec![]),
+
+                // If sell is true
                 true => {
+                    // Use the proxy badge to call the sell method of the pool
                     let (mut base_coin_bucket, hook_argument, event) =
                         self.proxy_badge_vault.authorize_with_amount(
                             1,
                             || pool.component_address.sell(coin_bucket)
                         );
 
+                    // Get the hook list for the PostSell operation on the pool
                     let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
+
+                    // Drop the pool variable to prevent problems with borrow
                     drop(pool);
 
+                    // Emit the SellEvent
                     self.emit_pool_event(event, 0);
 
+                    // Esecute hooks for the PostSell operation
                     let buckets = self.execute_hooks(
                         &pool_enabled_hooks,
                         &hook_argument,
                     );
 
+                    // Take the fees owed to the component owner for the sell operation
                     self.deposit_fee(
                         0,
                         base_coin_bucket.take_advanced(
@@ -1810,12 +1834,25 @@ mod radix_pump {
             }
         }
 
+        // The component owner can use this method to allow the use of a hook component in response 
+        // to one or more operation.
+        // This method doesn't enable the hook: the owner_enable_hook or creator_enable_hook
+        // methods must be called after the hook has been registered to actually enable it
         pub fn register_hook(
             &mut self,
+
+            // Name that will identify the hook component from now on
             name: String,
+
+            // List of the operations this hook can be attached to.
+            // The string operations are converted into HookableOperation
             operations: Vec<String>,
+
+            // Address of the hook component
             component_address: HookInterfaceScryptoStub,
         ) {
+            // Call the hook to know in which round it wants to be executed and if other hooks
+            // trigger his call
             let (round, allow_recursion) = component_address.get_hook_info();
             assert!(
                 round < 3,
@@ -1826,12 +1863,14 @@ mod radix_pump {
                 "Round 0 hooks can't be called recursively",
             );
 
+            // Register the hook as available for the specified operations
             self.registered_hooks_operations.add_hook(
                 &name,
                 &operations,
                 round
             );
 
+            // Add the hook information in the registered_hooks KVS
             self.registered_hooks.insert(
                 name,
                 HookInfo {
@@ -1842,22 +1881,38 @@ mod radix_pump {
             );
         }
 
+        // The component owner can use this method to make an hook non available for the specified
+        // operations or for all of the operations
         pub fn unregister_hook(
             &mut self,
+
+            // Name of a previously registered hook
             name: String,
+
+            // List of the operations to disable the hook for or all None (means all of the
+            // operations)
+            // The string operations are converted into HookableOperation
             operations: Option<Vec<String>>,
         ) {
+            // Search the hook by name in the registered_hooks KVS
             let hook_info = self.registered_hooks.get(&name);
+
             match hook_info {
+                // If not found there's nothing to do
                 None => {},
 
+                // If found
                 Some(hook_info) => {
                     match operations {
+                        // In case no operation is specified completely remove the hook from the
+                        // registered hooks KVS
                         None => {
                             self.registered_hooks.remove(&name);
                         },
 
                         Some(operations) =>
+                            // If one or more operations are specified, unregister the hook only
+                            // for these operations
                             self.registered_hooks_operations.remove_hook(
                                 &name,
                                 &operations,
@@ -1868,13 +1923,22 @@ mod radix_pump {
             }
         }
 
+        // The component owner can use this method to globally enable an hook for all coins
         pub fn owner_enable_hook(
             &mut self,
+
+            // Name of a registered hook
             name: String,
+
+            // Operations to enable the hook for
+            // The string operations are converted into HookableOperation
             operations: Vec<String>,
         ) {
+            // Search the hook by name
             let hook_info = self.registered_hooks.get(&name).expect(UNKNOWN_HOOK);
 
+            // For each operation to enable the hook for, make sure that the hook is registered for
+            // that operation; panic if it isn't
             for operation in operations.iter() {
                 assert!(
                     self.registered_hooks_operations.hook_exists(
@@ -1888,15 +1952,17 @@ mod radix_pump {
                 );
             }
 
+            // Enable the hook for all of the specified operations
             self.globally_enabled_hooks.add_hook(
                 &name,
                 &operations,
                 hook_info.round,
             );
 
+            // Emit the HookEnabledEvent event
             Runtime::emit_event(
                 HookEnabledEvent {
-                    resource_address: None,
+                    resource_address: None, // No coin specified = globally enabled
                     hook_name: name,
                     hook_address: hook_info.component_address,
                     operations: operations,
@@ -1904,22 +1970,31 @@ mod radix_pump {
             );
         }
 
+        // The component owner can use this method to disable an hook that has been previosly globally enabled
+        // This method doesn't disable hooks enable on a specific pool
         pub fn owner_disable_hook(
             &mut self,
+
+            // Name of the hook
             name: String,
+
+            // Operations to disable the hook for
             operations: Vec<String>,
         ) {
+            // Search the hook by name
             let hook_info = self.registered_hooks.get(&name).expect(UNKNOWN_HOOK);
 
+            // Disable the hook for the specified operations
             self.globally_enabled_hooks.remove_hook(
                 &name,
                 &operations,
                 hook_info.round,
             );
 
+            // Emit the HookDisabledEvent event
             Runtime::emit_event(
                 HookDisabledEvent {
-                    resource_address: None,
+                    resource_address: None, // No coin specified = globally disabled
                     hook_name: name,
                     hook_address: hook_info.component_address,
                     operations: operations,
@@ -1927,14 +2002,25 @@ mod radix_pump {
             );
         }
 
+        // A coin creator can use this method to enable an hook for spcific operations on his pool
         pub fn creator_enable_hook(
             &mut self,
+
+            // Coin creator badge proof
             creator_proof: Proof,
+
+            // Name of a registered hook
             name: String,
+
+            // List of operations to enable the hook for
+            // The string operations are converted into HookableOperation
             operations: Vec<String>,
         ) {
+            // Search the hook by name
             let hook_info = self.registered_hooks.get(&name).expect(UNKNOWN_HOOK);
 
+            // For each operation to enable the hook for, make sure that the hook is registered for
+            // that operation; panic if it isn't
             for operation in operations.iter() {
                 assert!(
                     self.registered_hooks_operations.hook_exists(
@@ -1948,14 +2034,15 @@ mod radix_pump {
                 );
             }
 
+            // Find the pool of the creator and enable the hook for the specifiled operations
             let coin_address = self.get_creator_data(creator_proof).1.coin_resource_address;
-
             self.pools.get_mut(&coin_address).unwrap().enabled_hooks.add_hook(
                 &name,
                 &operations,
                 hook_info.round,
             );
             
+            // Emit a HookEnabledEvent event
             Runtime::emit_event(
                 HookEnabledEvent {
                     resource_address: Some(coin_address),
@@ -1966,22 +2053,31 @@ mod radix_pump {
             );
         }
 
+        // A coin creator can use this method to disable an hook he previously enabled on his pool
         pub fn creator_disable_hook(
             &mut self,
+
+            // Coin creator badge proof
             creator_proof: Proof,
+
+            // Name of the registered hook
             name: String,
+
+            // Operations to disable the hook for
             operations: Vec<String>,
         ) {
+            // Search the hook by name
             let hook_info = self.registered_hooks.get(&name).expect(UNKNOWN_HOOK);
 
+            // Find the pool of the creator and disable the hook for the specified operations
             let coin_address = self.get_creator_data(creator_proof).1.coin_resource_address;
-
             self.pools.get_mut(&coin_address).unwrap().enabled_hooks.remove_hook(
                 &name,
                 &operations,
                 hook_info.round,
             );
 
+            // Emit the HookDisabledEvent event
             Runtime::emit_event(
                 HookDisabledEvent {
                     resource_address: Some(coin_address),
@@ -1992,29 +2088,56 @@ mod radix_pump {
             );
         }
 
+        // A pool handling a quick launched coin can have an excess of coins in it; those are
+        // called ignored_coins
+        // The creator of the quick launched coin can use this method to burn (part of) the
+        // ignored_coins in the pool
         pub fn burn(
             &mut self,
+
+            // Coin creator badge proof
             creator_proof: Proof,
+
+            // Maximum amount of coins to burn
             amount: Decimal,
         ) {
+            // Find the pool using the info in the proof
             let coin_address = self.get_creator_data(creator_proof).1.coin_resource_address;
             let mut pool = self.pools.get_mut(&coin_address).unwrap();
 
+            // Use the proxy badge to call the burn method of the pool component
             let event = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.burn(amount)
             );
+
+            // Drop the pool variable to avoid problems with multiple borrows
             drop(pool);
 
+            // Emit the BurnEvent returned by the pool
             self.emit_pool_event(event, 0);
         }
 
+        // During the launch phase of a random launched coin, users can call this method to buy
+        // tickets to take part in the extraction
+        // Tickets are non fungibles: an integer amount of tickets must be bought
         pub fn buy_ticket(
             &mut self,
+
+            // Address of the coin whose launch ticket the user wants to buy
             coin_address: ResourceAddress,
+
+            // Number of tickets the user wants to buy
             amount: u32,
+
+            // Base coins to buy the tickets
             base_coin_bucket: Bucket,
-        ) -> (Bucket, Vec<Bucket>) {
+
+        ) -> (
+            Bucket, // Tickets
+            Vec<Bucket>, // Eventual additional buckets returned by the hooks
+        ) {
+            // Check input parameters
             assert!(
                 base_coin_bucket.resource_address() == self.base_coin_address,
                 "Wrong base coin",
@@ -2024,8 +2147,10 @@ mod radix_pump {
                 "Can't buy zero tickets",
             );
 
+            // Find the pool
             let mut pool = self.pools.get_mut(&coin_address).expect(COIN_NOT_FOUND);
 
+            // Use the proxy badge to call the buy_ticket method of the pool component
             let (ticket_bucket, hook_argument, event) =
                 self.proxy_badge_vault.authorize_with_amount(
                     1,
@@ -2035,11 +2160,16 @@ mod radix_pump {
                     )
                 );
 
+            // Get the list of hooks enabled on the pool for the PostBuyTicket operation
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
+
+            // Drop the pool to avoid conflicting borrows
             drop(pool);
 
+            // Emit the BuyTicketEvent event
             self.emit_pool_event(event, 0);
 
+            // Execute the hooks
             let buckets = self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -2048,35 +2178,51 @@ mod radix_pump {
             (ticket_bucket, buckets)
         }
 
+        // When the launch of a random launched coin ends, a user can use this method to get his
+        // coins (for winning tickets) or get a partial refund (for losing tickets)
+        // The method can handle a bucket of multiple tickets
+        // Redeemed tickets are burned
         pub fn redeem_ticket(
             &mut self,
+
+            // The tickets to redeem
             ticket_bucket: Bucket,
         ) -> (
-            Bucket,
-            Option<Bucket>,
-            Option<Vec<Bucket>>,
-            Option<Vec<Bucket>>,
+            Bucket, // Base coins (losing tickets)
+            Option<Bucket>, // Random launched coins (winning tickets)
+            Option<Vec<Bucket>>, // Eventual buckets returned by the hooks for losers
+            Option<Vec<Bucket>>, // Eventual buckets returned by the hooks for winners
         ) {
+            // Use the ticket NonFungibleData to find the pool
             let ticket_id = &ticket_bucket.as_non_fungible().non_fungible_local_ids()[0];
             let ticket_data = ResourceManager::from_address(ticket_bucket.resource_address()).get_non_fungible_data::<TicketData>(ticket_id);
             let mut pool = self.pools.get_mut(&ticket_data.coin_resource_address).expect(COIN_NOT_FOUND);
 
+            // Use the proxy badge to call the redeem_ticket method of the pool
             let (base_coin_bucket, coin_bucket, hook_argument_lose, hook_argument_win) = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.redeem_ticket(ticket_bucket)
             );
 
+            // If there were losing tickets, get the hook list for the PostRedeemLosingTicket
+            // operation
             let pool_enabled_hooks_lose = match hook_argument_lose {
                 None => None,
                 Some(ref hook_argument) => Some(pool.enabled_hooks.get_all_hooks(hook_argument.operation)),
             };
+
+            // If there were winning tickets, get the hook list for the PostRedeemWinningTicket
+            // operation
             let pool_enabled_hooks_win = match hook_argument_win {
                 None => None,
                 Some(ref hook_argument) => Some(pool.enabled_hooks.get_all_hooks(hook_argument.operation)),
             };
 
+            // Drop the pool variable to avoid conflicting borrows
             drop(pool);
 
+            // If there were losing tickets, invoke the enabled hooks for the PostRedeemLosingTicket
+            // operation
             let lose_buckets = match hook_argument_lose {
                 None => None,
                 Some(hook_argument) => Some(
@@ -2087,6 +2233,8 @@ mod radix_pump {
                 ),
             };
 
+            // If there were winning tickets, invoke the enabled hooks for the PostRedeemLosingTicket
+            // operation
             let win_buckets = match hook_argument_win {
                 None => None,
                 Some(hook_argument) => Some(
@@ -2097,21 +2245,31 @@ mod radix_pump {
                 ),
             };
 
+            // Return all of the buckets to the user
             (base_coin_bucket, coin_bucket, lose_buckets, win_buckets)
         }
 
+        // Users can add liquidity to a pool by using this method
+        // The liquidity must include both base coins and coins in the same ratio as the ones
+        // already in the pool. An excess of base coins is accepted
         pub fn add_liquidity(
             &mut self,
+
+            // Base coins to add to the pool
             base_coin_bucket: Bucket,
+
+            // Coins to add to the pool
             coin_bucket: Bucket,
         ) -> (
-            Bucket,
-            Option<Bucket>,
-            Vec<Bucket>,
+            Bucket, // Non fungibles representing the added liquidity
+            Option<Bucket>, // Eventual excess coins to return
+            Vec<Bucket>, // Eventual additional buckets returned by the hooks
         ) {
+            // Find the pool
             let coin_address = coin_bucket.resource_address();
             let mut pool = self.pools.get_mut(&coin_address).expect(COIN_NOT_FOUND);
 
+            // Use the proxy badge to call the add liquidity method of the pool
             let (lp_bucket, remainings_bucket, hook_argument, event, mode) =
                 self.proxy_badge_vault.authorize_with_amount(
                     1,
@@ -2121,16 +2279,21 @@ mod radix_pump {
                     )
                 );
 
+            // Get all of the info about the pool before dropping the pool variable
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             let creator_id = pool.creator_id;
             drop(pool);
 
+            // Emit the AddLiquidityEvent created by the pool
             self.emit_pool_event(event, 0);
 
+            // It is possible that the pool was empty (Uninitialised mode); in this case adding
+            // liquidity changes its state to Normal mode so the info in the creator NFT must be updated
             if mode.is_some() {
                 self.update_mode_in_creator_nft(creator_id, mode.unwrap());
             }
 
+            // Execute hooks for the PostAddLiquidity operation
             let buckets = self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -2139,28 +2302,39 @@ mod radix_pump {
             (lp_bucket, remainings_bucket, buckets)
         }
 
+        // Use this method to get back the liquidity previously added to the pool
+        // If the pool is in liquidation mode, only base coins will be returned, all of the coins
+        // are kept by the pool
         pub fn remove_liquidity(
             &mut self,
+
+            // LP tokens representing the added liquidity
             lp_bucket: Bucket,
         ) -> (
-            Bucket,
-            Option<Bucket>,
-            Vec<Bucket>,
+            Bucket, // Base coins
+            Option<Bucket>, // Coins (if the pool is not in liquidation mode)
+            Vec<Bucket>, // Eventual buckets returned by the hooks
         ) {
+            // Use the LP token NonFungibleData to find the pool
             let lp_id = &lp_bucket.as_non_fungible().non_fungible_local_ids()[0];
             let lp_data = ResourceManager::from_address(lp_bucket.resource_address()).get_non_fungible_data::<LPData>(lp_id);
             let mut pool = self.pools.get_mut(&lp_data.coin_resource_address).expect(COIN_NOT_FOUND);
 
+            // Use the proxy badge to invoke the remove_liquidity method of the pool
             let (base_coin_bucket, coin_bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
                 || pool.component_address.remove_liquidity(lp_bucket)
             );
 
+            // Get the list of hooks for the PostRemoveLiquidity operation enabled on the pool and
+            // drop the pool variable
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
 
+            // Emit the RemoveLiquidityEvent created by the pool
             self.emit_pool_event(event, 0);
 
+            // Execute all enabled hooks
             let buckets = self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -2169,12 +2343,28 @@ mod radix_pump {
             (base_coin_bucket, coin_bucket, buckets)
         }
 
+        // A user can invoke this method to:
+        // - buy coins using base coins
+        // - sell coins for base coins
+        // - swap a coin for another coin in a different pool
         pub fn swap(
             &mut self,
+
+            // Coins the user wants to sell
             coin1_bucket: Bucket,
+
+            // Address of the coins the user wants to receive
             coin2_address: ResourceAddress,
+
+            // Id of the integrator whose interface allowed this operation
             mut integrator_id: u64,
-        ) -> (Bucket, Vec<Bucket>, Vec<Bucket>) {
+
+        ) -> (
+            Bucket, // Coin2
+            Vec<Bucket>, // Eventual buckets returned by hooks invoked for the PostSell operation
+            Vec<Bucket> // Eventual buckets returned by hooks invoked for the PostBuy operation
+        ) {
+            // Verify that the swap makes sense
             assert!(
                 coin1_bucket.amount() > Decimal::ZERO,
                 "Coin1 bucket should not be empty",
@@ -2185,32 +2375,45 @@ mod radix_pump {
                 "Can't swap a coin with itself",
             );
 
+            // Verify that the integrator is valid and existing, or replace it with 0 (the component
+            // owner)
             integrator_id = self.check_integrator_id(integrator_id);
 
             let mut base_coin_bucket: Bucket;
             let mut buckets1: Vec<Bucket> = vec![];
 
             if coin1_address == self.base_coin_address {
+
+                // If coin1 is the base coin there's no sell operation
                 base_coin_bucket = coin1_bucket;
             } else {
+
+                // If coin1 has to be sold, find its pool
                 let mut pool = self.pools.get_mut(&coin1_address).expect("Coin1 not found");
+
+                // Use the proxy badge to call the sell method of the pool of coin1
                 let (bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                     1,
                     || pool.component_address.sell(coin1_bucket)
                 );
                 base_coin_bucket = bucket;
 
+                // Find the hooks for the PostSell operation and drop the pool variable
                 let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
                 drop(pool);
 
+                // Emit the SellEvent for coin1
                 self.emit_pool_event(event, integrator_id);
 
+                // Execute hooks for the PostSell operation
                 buckets1 = self.execute_hooks(
                     &pool_enabled_hooks,
                     &hook_argument,
                 );
             }
  
+            // Whatever coin1 was, now we have a bucket of base coins, use this to pay the fees to
+            // the integrator or the component owner
             self.deposit_fee(
                 integrator_id,
                 base_coin_bucket.take_advanced(
@@ -2223,20 +2426,29 @@ mod radix_pump {
             let mut buckets2: Vec<Bucket> = vec![];
 
             if coin2_address == self.base_coin_address {
+
+                // If coin2 is the base coin there's no buy operation
                 coin2_bucket = base_coin_bucket;
             } else {
+
+                // If coin2 has to be bought, find its pool
                 let mut pool = self.pools.get_mut(&coin2_address).expect("Coin2 not found");
+
+                // Use the proxy badge to call the buy method of the pool of coin2
                 let (bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                     1,
                     || pool.component_address.buy(base_coin_bucket)
                 );
                 coin2_bucket = bucket;
 
+                // Find the hooks for the PostBuy operation and drop the pool variable
                 let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
                 drop(pool);
 
+                // Emit the BuyEvent for coin2
                 self.emit_pool_event(event, integrator_id);
 
+                // Execute hooks for the PostBuy operation
                 buckets2 = self.execute_hooks(
                     &pool_enabled_hooks,
                     &hook_argument,
@@ -2246,18 +2458,29 @@ mod radix_pump {
             (coin2_bucket, buckets1, buckets2)
         }
 
+        // The component owner can call this method to create a pool for an already existing coin
+        // The created pool will be empty (Uninitialised mode), it will need someone to
+        // add_liquidity for it to be usable
         pub fn new_pool(
             &mut self,
+
+            // Address of the coin whose pool has to be created
             coin_address: ResourceAddress,
+
+            // Fees of the new pool
             buy_pool_fee_percentage: Decimal,
             sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee: Decimal,
-        ) -> Bucket {
+
+        ) -> Bucket // Creator badge for the pool
+        {
+            // Make sure there isn't already a pool for this coin
             assert!(
                 self.pools.get(&coin_address).is_none(),
                 "There's already a pool for this coin",
             );
 
+            // Make sure the fees are acceptable
             self.check_fees(
                 buy_pool_fee_percentage,
                 sell_pool_fee_percentage,
@@ -2288,6 +2511,7 @@ mod radix_pump {
                 true,
             );
 
+            // Create the new pool
             let (pool, lp_resource_address) = Pool::new(
                 self.owner_badge_address,
                 self.proxy_badge_vault.resource_address(),
@@ -2302,6 +2526,8 @@ mod radix_pump {
                 self.next_creator_badge_rule(),
                 self.dapp_definition,
             );
+
+            // Add the new pool to the pools KVS
             self.pools.insert(
                 coin_address,
                 PoolStruct {
@@ -2311,6 +2537,7 @@ mod radix_pump {
                 }
             );
 
+            // Mint a creator badge and return it to the user
             self.mint_creator_badge(
                 coin_address,
                 coin_name,
@@ -2321,11 +2548,20 @@ mod radix_pump {
             )
         }
 
+        // The creator badge containd useful informations about the coin and the pool; most of these
+        // informations are fixed, only pool_mode is mutable
+        // This private method is used to update pool_mode in the NFT every time che pool changes
+        // its state
         fn update_mode_in_creator_nft(
             &self,
+
+            // Numeric id of the creator badge NFT
             creator_id: u64,
+
+            // New pool mode to set
             mode: PoolMode,
         ) {
+            // Get the NonFungibleLocalId for creator_id
             let id = NonFungibleLocalId::integer(creator_id.into());
 
             // If the coin creator badge has not been burned
@@ -2340,21 +2576,33 @@ mod radix_pump {
             }
         }
 
+        // This private method is used to check that an integrator_id corresponds to an integrator
+        // badge that has not been disabled
+        // If the chack fails, 0 is returned (it represents the componet owner himself)
         fn check_integrator_id(
             &mut self,
+
+            // The integrator_id to check
             mut integrator_id: u64,
-        ) -> u64 {
+
+        ) -> u64 // The verified integrator_id
+        {
+            // If it's already 0, no check is needed
             if integrator_id > 0 {
                 let id = NonFungibleLocalId::integer(integrator_id);
 
+                // Check that the integrator badge exists
                 if !self.integrator_badge_resource_manager.non_fungible_exists(&id) {
                     integrator_id = 0;
                 }
 
                 if integrator_id > 0 {
+
+                    // Get the NonFungibleData of the integrator badge
                     let integrator_data =
                         self.integrator_badge_resource_manager.get_non_fungible_data::<IntegratorData>(&id);
  
+                    // Check that it is active
                     if !integrator_data.active {
                         integrator_id = 0;
                     }
@@ -2364,22 +2612,37 @@ mod radix_pump {
             integrator_id
         }
 
+        // This private method is used to deposit fees owed to the component owner or to an
+        // integrator
         fn deposit_fee(
             &mut self,
+
+            // Numeric id of the integrator badge (or zero for the component owner)
             integrator_id: u64,
+
+            // Thee fee to deposit
             fee_bucket: Bucket,
         ) {
+            // Create the fee vault if it doesn't exist
             if self.fee_vaults.get(&integrator_id).is_none() {
                 self.fee_vaults.insert(integrator_id, Vault::new(self.base_coin_address));
             }
 
+            // Deposit the fee bucket in the vault
             self.fee_vaults.get_mut(&integrator_id).unwrap().put(fee_bucket);
         }
 
+        // This private method is used to mint a new integrator badge
         pub fn new_integrator(
             &mut self,
+
+            // The name to assign to the integrator; this has no real use, just a reminder for the
+            // component owner
             name: String,
-        ) -> Bucket {
+
+        ) -> Bucket // The minted integrator badge
+        {
+            // Mint the integrator badge
             let integrator_badge = self.integrator_badge_resource_manager.mint_non_fungible(
                 &NonFungibleLocalId::integer(self.next_integrator_badge_id.into()),
                 IntegratorData {
@@ -2389,11 +2652,17 @@ mod radix_pump {
                 }
             );
 
+            // Prepare for the next one
             self.next_integrator_badge_id += 1;
 
             integrator_badge
         }
 
+        // This component sets the same dapp_definition metadata on all of the components and resources
+        // Unfortunately there'a a limit an the number of objects a dApp definiton account can
+        // handle, so this method update the dapp_definition value that will be set on the next created objects
+        // without touching the existing ones
+        // Only the component owner can invoke this method
         pub fn update_dapp_definition(
             &mut self,
             dapp_definition: ComponentAddress,

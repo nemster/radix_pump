@@ -59,7 +59,7 @@ pub enum HookableOperation {
     PostReturnFlashLoan,
     PostBuyTicket,
     PostRedeemWinningTicket,
-    PostRedeemLousingTicket,
+    PostRedeemLosingTicket,
     PostAddLiquidity,
     PostRemoveLiquidity,
 }

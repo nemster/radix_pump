@@ -530,7 +530,7 @@ mod pool {
                                         HookArgument { 
                                             component: Runtime::global_address().into(),
                                             coin_address: self.coin_vault.resource_address(),
-                                            operation: HookableOperation::PostRedeemLousingTicket,
+                                            operation: HookableOperation::PostRedeemLosingTicket,
                                             amount: Some(Decimal::try_from(losers.len()).unwrap()),
                                             mode: PoolMode::Normal,
                                             price: Some(self.last_price),
@@ -579,7 +579,7 @@ mod pool {
                                     HookArgument { 
                                         component: Runtime::global_address().into(),
                                         coin_address: self.coin_vault.resource_address(),
-                                        operation: HookableOperation::PostRedeemLousingTicket,
+                                        operation: HookableOperation::PostRedeemLosingTicket,
                                         amount: Some(number_of_tickets),
                                         mode: PoolMode::Liquidation,
                                         price: Some(self.last_price),

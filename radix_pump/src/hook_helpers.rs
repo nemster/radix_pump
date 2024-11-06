@@ -144,7 +144,7 @@ pub fn string_to_operation(operation: &String) -> HookableOperation {
         "PostReturnFlashLoan" => HookableOperation::PostReturnFlashLoan,
         "PostBuyTicket" => HookableOperation::PostBuyTicket,
         "PostRedeemWinningTicket" => HookableOperation::PostRedeemWinningTicket,
-        "PostRedeemLousingTicket" => HookableOperation::PostRedeemLousingTicket,
+        "PostRedeemLosingTicket" => HookableOperation::PostRedeemLousingTicket,
         "PostAddLiquidity" => HookableOperation::PostAddLiquidity,
         "PostRemoveLiquidity" => HookableOperation::PostRemoveLiquidity,
         _ => Runtime::panic("Operation not found".to_string()),

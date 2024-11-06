@@ -5,11 +5,61 @@ use crate::common::*;
 use crate::loan_safe_vault::*;
 use scrypto_interface::*;
 
+/* Each Pool component manages the launch of a different coin.
+ *
+   Different launch strategies are possible:
+   - QuickLaunch: the coin creator has to provide the base coins to initialize the pool.
+     He can decide the supply of the coin but he receives only a limited allocation depending on the base coin deposit
+     and the launch price.
+   - FairLaunch: during an initial launch phase users buy coins at a fixed price and doing so they initialize the
+     pool.
+     The supply is known when the launch phase ends and no more coins can be minted.
+     The creator can decide his own allocation before launch but his coins are time locked.
+     The creator also receives the launch sale proceeds (fees excluded).
+   - RandomLaunch: during an initial launch phase users buy tickets.
+     At the end of the launch phase there's an extraction of the winnings tickets.
+     Winning tickets will receive a share of coins while losers get a refund.
+     The coin creator receives the equivalent of a winning ticket but his allocation is time locked.
+     The creator also receives the launch sale proceeds (fees excluded).
+   It is also possible to create a pool for an already existing coin, this way there will be no launch phase.
+
+   The Pool state contains a launch filed of type LaunchType.
+   This is an enum that can contain different structs (QuickLaunchDetails, FairLaunchDetails or RandomLaunchDetails) to
+   store information that are needed only for the specfic launch type.
+
+   Most of the Pool methods are accessible only by badge authentication.
+   Users are not supposed to call them directly but only through the RadixPump component or via a hook.
+
+   Depending on the launch type and his history a Pool can be in a number of different modes of operation.
+   - Quick launched coins start directly in the Normal mode
+   - Fair and Random launched coins start in the WaitingForLaunch mode
+   - Pools for externally created coins start in the Uninitialised mode
+   These are all of the possible modes:
+   - WaitingForLaunch: FairLaunch or RandomLaunch not started yet
+   - Launchin: FairLaunch or RandomLaunch started
+   - TerminatingLaunch: RandomLaunch extracting winners
+   - Normal: Normal operation
+   - Liquidation: Liquidation mode
+   - Uninitialised: Pool created for a pre existing coin without adding liquidity
+
+   A pool component can generate a number of events but it will not emit them.
+   The created event stucts are incapsulated into an AnyPoolEvent enum and returned to the caller that will emit them.
+
+   A pool operation ofter returns a HookArgument too.
+   This is a short description of the operation happened, to be used by hooks that will be invoked by the RadixPump
+   component.
+
+   Many operation require the payment of a fee.
+   The fee is always paid in base coins.
+*/
+
+// Additional state for QuickLaunched pools
 #[derive(Debug, ScryptoSbor, PartialEq)]
 struct QuickLaunchDetails {
     ignored_coins: Decimal,
 }
 
+// Additional state for FairLaunched pools
 #[derive(Debug, ScryptoSbor, PartialEq)]
 struct FairLaunchDetails {
     end_launch_time: i64,
@@ -21,6 +71,7 @@ struct FairLaunchDetails {
     resource_manager: ResourceManager,
 }
 
+// Additional state for RandomLaunched pools
 #[derive(ScryptoSbor, PartialEq)]
 struct RandomLaunchDetails {
     end_launch_time: i64,
@@ -42,6 +93,7 @@ struct RandomLaunchDetails {
     buy_fee_during_launch: Decimal,
 }
 
+// Possible variants in the pool state
 #[derive(ScryptoSbor, PartialEq)]
 enum LaunchType {
     Quick(QuickLaunchDetails),
@@ -50,8 +102,11 @@ enum LaunchType {
     AlreadyExistingCoin,
 }
 
+// Limits on the usage of the external random source
 static MAX_TICKETS_PER_OPERATION: u32 = 50;
 static MAX_CALLS_TO_RANDOM: u32 = 10;
+
+// Some common error message
 static MODE_NOT_ALLOWED: &str = "Not allowed in this mode";
 static TYPE_NOT_ALLOWED: &str = "Not allowed for this launch type";
 static SHOULD_NOT_HAPPEN: &str = "Should not happen";
@@ -65,6 +120,7 @@ static SHOULD_NOT_HAPPEN: &str = "Should not happen";
 )]
 mod pool {
 
+    // Package and component address of the RandomComponent by Mleekko used in RandomLaunch
     extern_blueprint!(
         "package_sim1pk3cmat8st4ja2ms8mjqy2e9ptk8y6cx40v4qnfrkgnxcp2krkpr92",
         RandomComponent {
@@ -114,23 +170,44 @@ mod pool {
     }
 
     struct Pool {
+        // Vaults for keeping base coins and coins
         base_coin_vault: Vault,
         coin_vault: LoanSafeVault,
+
+        // Current pool mode
         mode: PoolMode,
+
+        // Price of the last operation
         last_price: Decimal,
+
+        // Pool fees
         buy_pool_fee_percentage: Decimal,
         sell_pool_fee_percentage: Decimal,
         flash_loan_pool_fee: Decimal,
+
+        // Launch type with variants
         launch: LaunchType,
 
         // This is only needed by RandomLaunch but unfortunately I can't put it into RandomLaunchDetails
         // because KeyValueStore doesn't implement PartialEq (this would make match unusable on a
         // LaunchType)
         extracted_tickets: KeyValueStore<u64, bool>,
+
+        // Total LP represents the total liquidity in the pool
         total_lp: Decimal,
+
+        // A pool can contain some liquidity that is not owned by anyone, this is the part of
+        // total_lp added by users
         total_users_lp: Decimal,
+
+        // Resource manager for minting LP tokens
         lp_resource_manager: ResourceManager,
+
+        // Id of the last liquidity token minted
         last_lp_id: u64,
+
+        // This variable is only used in liquidation mode to keep track of the coins belonging to the
+        // liquidity providers
         base_coins_to_lp_providers: Decimal,
     }
 
@@ -138,7 +215,9 @@ mod pool {
 
 // THE FOLLOWING METHOD REQUIRES NO AUTHENTICATION, IT CAN BE CALLED BY ANYONE
 
+        // Return detailed information about the pool status
         fn get_pool_info(&self) -> PoolInfo {
+
             let coin_amount = self.coins_in_pool();
 
             // Not launched pools have zero LP
@@ -192,6 +271,7 @@ mod pool {
                     LaunchType::Random(random_launch) => Some(random_launch.coins_per_winning_ticket),
                     _ => None,
                 },
+
                 // These informations will be added by the proxy
                 flash_loan_nft_resource_address: None,
                 hooks_badge_resource_address: None,
@@ -202,32 +282,37 @@ mod pool {
 
 // THE FOLLOWING METHODS CAN ONLY BE CALLED BY ROUND 0 AND 1 HOOKS AND BY THE RadixPump COMPONENT
 
+        // Cal this method to buy coins with base coins
         fn buy(
             &mut self,
+
+            // Base coins
             base_coin_bucket: Bucket,
         ) -> (
-            Bucket,
-            HookArgument,
-            AnyPoolEvent,
+            Bucket, // Coins
+            HookArgument, // Short description of the operation happened, to be used by hooks
+            AnyPoolEvent, // BuyEvent
         ) {
+            // Compute the fees owed to the pool
             let fee = base_coin_bucket.amount() * self.buy_pool_fee_percentage / dec!(100);
 
             match self.mode {
                 PoolMode::Normal => {
+                    // In Normal mode use the constant product formula to get the number of coins
+                    // bought
                     let constant_product = PreciseDecimal::from(self.base_coin_vault.amount()) * PreciseDecimal::from(self.coins_in_pool());
-
                     let coins_in_pool_new = (
                         constant_product /
                         PreciseDecimal::from(self.base_coin_vault.amount() + base_coin_bucket.amount() - fee)
                     )
                     .checked_truncate(RoundingMode::ToZero)
                     .unwrap();
-
                     let coin_amount_bought = self.coins_in_pool() - coins_in_pool_new;
 
                     self.last_price = base_coin_bucket.amount() / coin_amount_bought;
 
                     self.base_coin_vault.put(base_coin_bucket);
+
 
                     self.update_ignored_coins();
 

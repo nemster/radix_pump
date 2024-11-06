@@ -8,7 +8,7 @@ struct TestHookEvent {
     operation: HookableOperation,
     amount: Option<Decimal>,
     mode: PoolMode,
-    price: Option<Decimal>,
+    price: Decimal,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]

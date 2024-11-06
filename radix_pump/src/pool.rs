@@ -196,6 +196,7 @@ mod pool {
                 flash_loan_nft_resource_address: None,
                 hooks_badge_resource_address: None,
                 read_only_hooks_badge_resource_address: None,
+                creator_badge_resource_address: None,
             }
         }
 
@@ -238,7 +239,7 @@ mod pool {
                             operation: HookableOperation::PostBuy,
                             amount: Some(coin_amount_bought),
                             mode: PoolMode::Normal,
-                            price: Some(self.last_price),
+                            price: self.last_price,
                             ids: vec![],
                         },
                         AnyPoolEvent::BuyEvent(
@@ -278,7 +279,7 @@ mod pool {
                                 operation: HookableOperation::PostBuy,
                                 amount: Some(coin_bucket_amount),
                                 mode: PoolMode::Launching,
-                                price: Some(self.last_price),
+                                price: self.last_price,
                                 ids: vec![],
                             },
                             AnyPoolEvent::BuyEvent(
@@ -343,7 +344,7 @@ mod pool {
                             operation: HookableOperation::PostSell,
                             amount: Some(coin_bucket_amount),
                             mode: PoolMode::Normal,
-                            price: Some(self.last_price),
+                            price: self.last_price,
                             ids: vec![],
                         },
                         AnyPoolEvent::SellEvent(
@@ -375,7 +376,7 @@ mod pool {
                             operation: HookableOperation::PostSell,
                             amount: Some(coin_bucket_amount),
                             mode: PoolMode::Liquidation,
-                            price: Some(self.last_price),
+                            price: self.last_price,
                             ids: vec![],
                         },
                         AnyPoolEvent::SellEvent(
@@ -450,7 +451,7 @@ mod pool {
                             operation: HookableOperation::PostBuyTicket,
                             amount: Some(Decimal::try_from(amount).unwrap()),
                             mode: PoolMode::Launching,
-                            price: Some(self.last_price),
+                            price: self.last_price,
                             ids: ids,
                         },
                         AnyPoolEvent::BuyTicketEvent(
@@ -533,7 +534,7 @@ mod pool {
                                             operation: HookableOperation::PostRedeemLosingTicket,
                                             amount: Some(Decimal::try_from(losers.len()).unwrap()),
                                             mode: PoolMode::Normal,
-                                            price: Some(self.last_price),
+                                            price: self.last_price,
                                             ids: losers,
                                         }
                                     ),
@@ -547,7 +548,7 @@ mod pool {
                                             operation: HookableOperation::PostRedeemWinningTicket,
                                             amount: Some(Decimal::try_from(winners.len()).unwrap()),
                                             mode: PoolMode::Normal,
-                                            price: Some(self.last_price),
+                                            price: self.last_price,
                                             ids: winners,
                                         }
                                     ),
@@ -582,7 +583,7 @@ mod pool {
                                         operation: HookableOperation::PostRedeemLosingTicket,
                                         amount: Some(number_of_tickets),
                                         mode: PoolMode::Liquidation,
-                                        price: Some(self.last_price),
+                                        price: self.last_price,
                                         ids: losers,
                                     } 
                                 ),
@@ -688,7 +689,7 @@ mod pool {
                     operation: HookableOperation::PostAddLiquidity,
                     amount: Some(coin_amount.checked_truncate(RoundingMode::ToZero).unwrap()),
                     mode: PoolMode::Normal,
-                    price: Some(self.last_price),
+                    price: self.last_price,
                     ids: vec![self.last_lp_id],
                 },
                 AnyPoolEvent::AddLiquidityEvent(
@@ -771,7 +772,7 @@ mod pool {
                     operation: HookableOperation::PostRemoveLiquidity,
                     amount: Some(amount),
                     mode: self.mode,
-                    price: Some(self.last_price),
+                    price: self.last_price,
                     ids: ids,
                 },
                 AnyPoolEvent::RemoveLiquidityEvent(
@@ -814,7 +815,7 @@ mod pool {
                             operation: HookableOperation::PostFairLaunch,
                             amount: None,
                             mode: self.mode,
-                            price: Some(self.last_price),
+                            price: self.last_price,
                             ids: vec![],
                         },
                         AnyPoolEvent::FairLaunchStartEvent(
@@ -843,7 +844,7 @@ mod pool {
                             operation: HookableOperation::PostRandomLaunch,
                             amount: None,
                             mode: self.mode,
-                            price: Some(self.last_price),
+                            price: self.last_price,
                             ids: vec![],
                         },
                         AnyPoolEvent::RandomLaunchStartEvent(
@@ -914,7 +915,7 @@ mod pool {
                                 operation: HookableOperation::PostTerminateFairLaunch,
                                 amount: supply,
                                 mode: PoolMode::Normal,
-                                price: Some(self.last_price),
+                                price: self.last_price,
                                 ids: vec![],
                             }
                         ),
@@ -1125,7 +1126,7 @@ mod pool {
                     operation: HookableOperation::PostReturnFlashLoan,
                     amount: Some(coin_bucket_amount),
                     mode: PoolMode::Normal,
-                    price: Some(self.last_price),
+                    price: self.last_price,
                     ids: vec![],
                 },
                 AnyPoolEvent::FlashLoanEvent(
@@ -1504,7 +1505,7 @@ mod pool {
                     operation: HookableOperation::PostQuickLaunch,
                     amount: Some(coin_supply),
                     mode: PoolMode::Normal,
-                    price: Some(coin_price),
+                    price: coin_price,
                     ids: vec![],
                 },
                 AnyPoolEvent::QuickLaunchEvent(
@@ -1977,7 +1978,7 @@ mod pool {
                                 operation: HookableOperation::PostTerminateRandomLaunch,
                                 amount: supply,
                                 mode: PoolMode::Normal,
-                                price: Some(self.last_price),
+                                price: self.last_price,
                                 ids: vec![],
                             }
                         ),

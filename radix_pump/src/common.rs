@@ -255,6 +255,7 @@ pub struct BurnEvent {
 pub struct AddLiquidityEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
+    pub lp_id: u64,
 }
 
 // Event created by a pool remove_liquidity method

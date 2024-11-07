@@ -23,13 +23,6 @@ use scrypto_interface::*;
      The creator also receives the launch sale proceeds (fees excluded).
    It is also possible to create a pool for an already existing coin, this way there will be no launch phase.
 
-   The Pool state contains a launch filed of type LaunchType.
-   This is an enum that can contain different structs (QuickLaunchDetails, FairLaunchDetails or RandomLaunchDetails) to
-   store information that are needed only for the specfic launch type.
-
-   Most of the Pool methods are accessible only by badge authentication.
-   Users are not supposed to call them directly but only through the RadixPump component or via a hook.
-
    Depending on the launch type and his history a Pool can be in a number of different modes of operation.
    - Quick launched coins start directly in the Normal mode
    - Fair and Random launched coins start in the WaitingForLaunch mode
@@ -41,59 +34,119 @@ use scrypto_interface::*;
    - Normal: Normal operation
    - Liquidation: Liquidation mode
    - Uninitialised: Pool created for a pre existing coin without adding liquidity
-
-   A pool component can generate a number of events but it will not emit them.
-   The created event stucts are incapsulated into an AnyPoolEvent enum and returned to the caller that will emit them.
-
-   A pool operation ofter returns a HookArgument too.
-   This is a short description of the operation happened, to be used by hooks that will be invoked by the RadixPump
-   component.
-
-   Many operation require the payment of a fee.
-   The fee is always paid in base coins.
 */
 
 // Additional state for QuickLaunched pools
 #[derive(Debug, ScryptoSbor, PartialEq)]
 struct QuickLaunchDetails {
+
+    // When a coin is quick launched the whole coin supply (except the creator allocation) is in the pool while
+    // the number of base coins deposited by the creator only matches the price his allocation.
+    // So, to keep the desired price, a number of coins in the pool are just ignored when appling
+    // the constant product formula.
+    // The number of ignored coins can decrease over time as users buy the coin or the creator
+    // burns them.
     ignored_coins: Decimal,
 }
 
 // Additional state for FairLaunched pools
 #[derive(Debug, ScryptoSbor, PartialEq)]
 struct FairLaunchDetails {
+
+    // When the launch of this coin terminated (or when is supposed to terminate)
+    // The creator can terminate the launch after this date, not before.
     end_launch_time: i64,
+
+    // Creator allocation percentage (locked at the end of the launch phase)
+    // The supply of the coin is not known until the end of the launch phase so the creator
+    // allocation can only be expressed as a percentage
     creator_locked_percentage: Decimal,
+
+    // Vault containing the creator allocation (time locked)
     locked_vault: Vault,
+
+    // When the creator allocation will be fully unlocked
     unlocking_time: i64,
+
+    // Creator allocation
+    // The supply of the coin is unknown until the end of the launch phase so the creator
+    // allocation is unknown at start
     initial_locked_amount: Decimal,
+
+    // Part of the creator allocation that has been already withdrawn
     unlocked_amount: Decimal,
+
+    // Resource manager to mint the coins when they are bought during the launch phase
     resource_manager: ResourceManager,
 }
 
 // Additional state for RandomLaunched pools
 #[derive(ScryptoSbor, PartialEq)]
 struct RandomLaunchDetails {
+
+    // When the launch of this coin terminated (or when is supposed to terminate)
+    // The creator can terminate the launch after this date, not before.
     end_launch_time: i64,
+
+    // The coins waiting to be withdrawn from the winners are doposited here
     winners_vault: Vault,
+
+    // Vault containing the creator allocation (time locked)
     locked_vault: Vault,
+
+    // When the creator allocation will be fully unlocked
     unlocking_time: i64,
+
+    // Price of a ticket for taking part in the launch phase extraction (includes fee)
     ticket_price: Decimal,
+
+    // The number of winners
     winning_tickets: u32,
+
+    // How many coins a winning ticket will receive
     coins_per_winning_ticket: Decimal,
+
+    // How many tickets have been sold
     sold_tickets: u32,
+
+    // Resource manager to mint the coins when the launch phase ends
     resource_manager: ResourceManager,
+
+    // Resource manager to mint the tickets when they are bought during the launch phase
     ticket_resource_manager: ResourceManager,
+
+    // Part of the creator allocation that has been already withdrawn
     unlocked_amount: Decimal,
+
+    // Whether to extract winners or losers
+    // If the number of winners is less than half of the sold tickets it's cheaper to extract
+    // winners, if it's bigger it's cheaper to extract losers
     extract_winners: bool,
+
+    // If the number of tickets to extract is bigger than MAX_TICKETS_PER_OPERATION the extraction
+    // happens in multiple steps, this is why we need to keep track of the number of tickets extracted
+    // so far
     number_of_extracted_tickets: u32,
+
+    // Losing tickets get a refund of the paid base coins fee excluded.
+    // This is the Vault where these base coins are stored
     refunds_vault: Vault,
+
+    // Each call to the RandomComponent must have a unique id, this is incremented time after time
     key_random: u32,
+
+    // Resource manager to mint badges used for authenticating calls from the RandomComponent
+    // The interaction with the RandomComponent is asynchronous: we send it a badge and expect to
+    // receive it back in a new call containig the random data
     random_badge_resource_manager: ResourceManager,
+
+    // For a correct refund management we need to know the buy fee percentage that was applied
+    // during launch if it has changed later
     buy_fee_during_launch: Decimal,
 }
 
-// Possible variants in the pool state
+// This enum can contain different structs (QuickLaunchDetails, FairLaunchDetails or RandomLaunchDetails) to
+// store information that are needed only for a specfic launch type.
 #[derive(ScryptoSbor, PartialEq)]
 enum LaunchType {
     Quick(QuickLaunchDetails),
@@ -102,7 +155,7 @@ enum LaunchType {
     AlreadyExistingCoin,
 }
 
-// Limits on the usage of the external random source
+// Limits on the usage of the external random data source
 static MAX_TICKETS_PER_OPERATION: u32 = 50;
 static MAX_CALLS_TO_RANDOM: u32 = 10;
 
@@ -120,7 +173,8 @@ static SHOULD_NOT_HAPPEN: &str = "Should not happen";
 )]
 mod pool {
 
-    // Package and component address of the RandomComponent by Mleekko used in RandomLaunch
+    // Package and component address of the RandomComponent used in RandomLaunch as source of
+    // randomness
     extern_blueprint!(
         "package_sim1pk3cmat8st4ja2ms8mjqy2e9ptk8y6cx40v4qnfrkgnxcp2krkpr92",
         RandomComponent {
@@ -282,7 +336,7 @@ mod pool {
 
 // THE FOLLOWING METHODS CAN ONLY BE CALLED BY ROUND 0 AND 1 HOOKS AND BY THE RadixPump COMPONENT
 
-        // Cal this method to buy coins with base coins
+        // Call this method to buy coins with base coins
         fn buy(
             &mut self,
 
@@ -298,6 +352,7 @@ mod pool {
 
             match self.mode {
                 PoolMode::Normal => {
+
                     // In Normal mode use the constant product formula to get the number of coins
                     // bought
                     let constant_product = PreciseDecimal::from(self.base_coin_vault.amount()) * PreciseDecimal::from(self.coins_in_pool());
@@ -313,11 +368,14 @@ mod pool {
 
                     self.base_coin_vault.put(base_coin_bucket);
 
-
+                    // In case of quick launched coins we need to update the number of ignored
+                    // coins at each movement
                     self.update_ignored_coins();
 
                     (
                         self.coin_vault.take(coin_amount_bought),
+
+                        // Create the HookArgument that RadixPump will use to call hooks
                         HookArgument {
                             component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
@@ -327,6 +385,8 @@ mod pool {
                             price: self.last_price,
                             ids: vec![],
                         },
+
+                        // Create the event but let RadixPump emit it
                         AnyPoolEvent::BuyEvent(
                             BuyEvent {
                                 resource_address: self.coin_vault.resource_address(),
@@ -335,29 +395,40 @@ mod pool {
                                 price: self.last_price,
                                 coins_in_pool: self.coin_vault.amount(),
                                 fee_paid_to_the_pool: fee,
-                                integrator_id: 0,
+                                integrator_id: 0, // This will be set by RadixPump
                             }
                         )
                     )
                 },
                 PoolMode::Launching => match self.launch {
                     LaunchType::Fair(ref mut fair_launch) => {
+
+                        // During the launch phase of a fair launched coin, coins are freshly minted
+                        // and the price is constant
                         let mut coin_bucket = fair_launch.resource_manager.mint(
                             base_coin_bucket.amount() / self.last_price
                         );
 
+                        // The part of the minted coins matching the fee price is put back in the
+                        // pool; this way the pool will be correctly initialised at current price
+                        // at the end of the launch phase
                         self.coin_vault.put(
                             coin_bucket.take(
                                 fee / self.last_price
                             )
                         );
 
+                        // Put temporary all of the base coins in the pool vault; at the end of the
+                        // launch phase the base coins (fees excluded) will be given to the coin
+                        // creator
                         self.base_coin_vault.put(base_coin_bucket);
 
                         let coin_bucket_amount = coin_bucket.amount();
 
                         (
                             coin_bucket,
+
+                            // Create the HookArgument that RadixPump will use to call hooks
                             HookArgument {
                                 component: Runtime::global_address().into(),
                                 coin_address: self.coin_vault.resource_address(),
@@ -367,6 +438,8 @@ mod pool {
                                 price: self.last_price,
                                 ids: vec![],
                             },
+
+                            // Create the event but let RadixPump emit it
                             AnyPoolEvent::BuyEvent(
                                 BuyEvent {
                                     resource_address: self.coin_vault.resource_address(),
@@ -375,40 +448,53 @@ mod pool {
                                     price: self.last_price,
                                     coins_in_pool: self.coin_vault.amount(),
                                     fee_paid_to_the_pool: fee,
-                                    integrator_id: 0,
+                                    integrator_id: 0, // This will be set by RadixPump
                                 }
                             )
                         )
                     },
+
+                    // To take part in a random launch you have to buy a ticket, not the coin
+                    // itself
                     LaunchType::Random(_) => Runtime::panic("Use buy_ticket instead".to_string()),
+
+                    // Only RandomLaunch and FairLaunch have a Launching phase
                     _ => Runtime::panic(SHOULD_NOT_HAPPEN.to_string()),
                 },
+
+                // Not allowed in WaitingForLaunch, TerminatingLaunch, Liquidation and Uninitialised
+                // modes
                 _ => Runtime::panic(MODE_NOT_ALLOWED.to_string()),
             }
         }
 
+        // Call this method to sell coins for base coins
         fn sell(
             &mut self,
+
+            // Coins to sell
             coin_bucket: Bucket,
         ) -> (
-            Bucket,
-            HookArgument,
-            AnyPoolEvent,
+            Bucket, // Base coins
+            HookArgument, // Short description of the operation happened, to be used by hooks
+            AnyPoolEvent, // SellEvent
         ) {
             match self.mode {
                 PoolMode::Normal => {
+
+                    // In Normal mode use the constant product formula to get the amount of base
+                    // coins bought
                     let constant_product = PreciseDecimal::from(self.base_coin_vault.amount()) * PreciseDecimal::from(self.coins_in_pool());
-
                     let coin_bucket_amount = coin_bucket.amount();
-
                     let base_coins_in_vault_new = (
                         constant_product / 
                         PreciseDecimal::from(coin_bucket_amount + self.coins_in_pool())
                     )
                     .checked_truncate(RoundingMode::ToZero)
                     .unwrap();
-
                     let bought_base_coins = self.base_coin_vault.amount() - base_coins_in_vault_new;
+
+                    // Take the fee from the base coin bucket
                     let fee_amount = bought_base_coins * self.sell_pool_fee_percentage / dec!(100);
                     let base_coin_bucket = self.base_coin_vault.take_advanced(
                         bought_base_coins - fee_amount,
@@ -419,10 +505,14 @@ mod pool {
 
                     self.coin_vault.put(coin_bucket);
 
+                    // In case of quick launched coins we need to update the number of ignored
+                    // coins at each movement
                     self.update_ignored_coins();
 
                     (
                         base_coin_bucket,
+
+                        // Create the HookArgument that RadixPump will use to call hooks
                         HookArgument {
                             component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
@@ -432,6 +522,8 @@ mod pool {
                             price: self.last_price,
                             ids: vec![],
                         },
+
+                        // Create the event but let RadixPump emit it
                         AnyPoolEvent::SellEvent(
                             SellEvent {
                                 resource_address: self.coin_vault.resource_address(),
@@ -440,7 +532,7 @@ mod pool {
                                 price: self.last_price,
                                 coins_in_pool: self.coin_vault.amount(),
                                 fee_paid_to_the_pool: fee_amount,
-                                integrator_id: 0,
+                                integrator_id: 0, // This will be set by RadixPump
                             }
                         )
                     )
@@ -451,10 +543,13 @@ mod pool {
                     self.coin_vault.put(coin_bucket);
 
                     (
+                        // In Liquidation the price is constant and no fees are paid to the pool
                         self.base_coin_vault.take_advanced(
                             coin_bucket_amount * self.last_price,
                             WithdrawStrategy::Rounded(RoundingMode::ToZero),
                         ),
+
+                        // Create the HookArgument that RadixPump will use to call hooks
                         HookArgument {
                             component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
@@ -464,6 +559,8 @@ mod pool {
                             price: self.last_price,
                             ids: vec![],
                         },
+
+                        // Create the event but let RadixPump emit it
                         AnyPoolEvent::SellEvent(
                             SellEvent {
                                 resource_address: self.coin_vault.resource_address(),
@@ -481,14 +578,19 @@ mod pool {
             }
         }
 
+        // Call this method to buy tickets for a reandom launched coin launch phase
         fn buy_ticket(
             &mut self,
+
+            // Number of tickets to buy
             amount: u32,
+
+            // Base coins to buy the tickets
             base_coin_bucket: Bucket,
         ) -> (
-            Bucket,
-            HookArgument,
-            AnyPoolEvent,
+            Bucket, // Base coins
+            HookArgument, // Short description of the operation happened, to be used by hooks
+            AnyPoolEvent, // BuyTicketEvent
         ) {
             assert!(
                 self.mode == PoolMode::Launching,
@@ -502,14 +604,18 @@ mod pool {
         
             match self.launch {
                 LaunchType::Random(ref mut random_launch) => {
-                    let fee = base_coin_bucket.amount() * self.buy_pool_fee_percentage / 100;
                     assert!(
                         base_coin_bucket.amount() >= Decimal::try_from(amount).unwrap() * random_launch.ticket_price,
                         "Not enough cois to buy that amount of tickets",
                     );
 
+                    let fee = base_coin_bucket.amount() * self.buy_pool_fee_percentage / 100;
+
                     let mut ticket_bucket = Bucket::new(random_launch.ticket_resource_manager.address());
                     let mut ids: Vec<u64> = vec![];
+                    let now = Clock::current_time_rounded_to_seconds();
+
+                    // Mint the tickets one by one and put them in ticket_bucket
                     for i in 0..amount {
                         let ticket_number = random_launch.sold_tickets + i;
                         ids.push(ticket_number.into());
@@ -519,7 +625,7 @@ mod pool {
                                 &NonFungibleLocalId::integer(ticket_number.into()),
                                 TicketData {
                                     coin_resource_address: self.coin_vault.resource_address(),
-                                    buy_date: Clock::current_time_rounded_to_seconds(),
+                                    buy_date: now,
                                 },
                             )
                         );
@@ -530,6 +636,8 @@ mod pool {
 
                     (
                         ticket_bucket,
+
+                        // Create the HookArgument that RadixPump will use to call hooks
                         HookArgument { 
                             component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
@@ -539,6 +647,8 @@ mod pool {
                             price: self.last_price,
                             ids: ids,
                         },
+
+                        // Create the event but let RadixPump emit it
                         AnyPoolEvent::BuyTicketEvent(
                             BuyTicketEvent {
                                 resource_address: self.coin_vault.resource_address(),
@@ -551,18 +661,24 @@ mod pool {
                         )
                     )
                 },
+
+                // Only random launches sell tickets
                 _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
             }
         }
 
+        // Users who bought ticket for a random launched coin can call this method to get their
+        // coins (if winners) or a refund (if losers)
         fn redeem_ticket(
             &mut self,
+
+            // Tickets to redeem. It is possible to redeem any number of tickets
             ticket_bucket: Bucket,
         ) -> (
-            Bucket, // base coin bucket
+            Bucket, // base coin bucket (can be empty)
             Option<Bucket>, // coin bucket
-            Option<HookArgument>,
-            Option<HookArgument>,
+            Option<HookArgument>, // Winning tickets and losing ones can trigger different hooks
+            Option<HookArgument>, // with different arguments
         ) {
             assert!(
                 self.mode == PoolMode::Normal || self.mode == PoolMode::Liquidation,
@@ -581,23 +697,22 @@ mod pool {
                             let mut base_coin_bucket = Bucket::new(self.base_coin_vault.resource_address());
                             let mut coin_bucket = Bucket::new(self.coin_vault.resource_address());
 
+                            // Create two vectors for losing and winning ticket ids
                             let mut losers: Vec<u64> = vec![];
                             let mut winners: Vec<u64> = vec![];
 
+                            // For each ticket in the bucket
                             for ticket_id in ticket_bucket.as_non_fungible().non_fungible_local_ids().iter() {
                                 match &ticket_id {
                                     NonFungibleLocalId::Integer(ticket_id) => {
+
+                                        // Has the ticket been extracted?
                                         let extracted = self.extracted_tickets.get(&ticket_id.value()).is_some();
+
+                                        // Put the id of the ticket in the winners or in the losers vector
                                         if extracted && random_launch.extract_winners || !extracted && !random_launch.extract_winners {
-                                            coin_bucket.put(random_launch.winners_vault.take(random_launch.coins_per_winning_ticket));
                                             winners.push(ticket_id.value());
                                         } else {
-                                            base_coin_bucket.put(
-                                                random_launch.refunds_vault.take_advanced(
-                                                    random_launch.ticket_price * (100 - random_launch.buy_fee_during_launch) / 100,
-                                                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
-                                                )
-                                            );
                                             losers.push(ticket_id.value());
                                         }
                                     },
@@ -607,12 +722,28 @@ mod pool {
 
                             ticket_bucket.burn();
 
+                            // Put in base_coin_bucket the refund (fees excluded) for the losing tickets
+                            base_coin_bucket.put(
+                                random_launch.refunds_vault.take_advanced(
+                                    random_launch.ticket_price * losers.len() * (100 - random_launch.buy_fee_during_launch) / 100,
+                                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                                )
+                            );
+
+                            // Put in coin_bucket all of the won coins
+                            coin_bucket.put(
+                                random_launch.winners_vault.take(
+                                    random_launch.coins_per_winning_ticket * winners.len()
+                                )
+                            );
+
                             (
                                 base_coin_bucket,
                                 Some(coin_bucket),
                                 match losers.len() {
                                     0 => None,
                                     _ => Some(
+                                        // Create the HookArgument for the losing tickets
                                         HookArgument { 
                                             component: Runtime::global_address().into(),
                                             coin_address: self.coin_vault.resource_address(),
@@ -627,6 +758,7 @@ mod pool {
                                 match winners.len() {
                                     0 => None,
                                     _ => Some(
+                                        // Create the HookArgument for the winning tickets
                                         HookArgument { 
                                             component: Runtime::global_address().into(),
                                             coin_address: self.coin_vault.resource_address(),
@@ -643,9 +775,11 @@ mod pool {
                         PoolMode::Liquidation => {
                             let number_of_tickets = ticket_bucket.amount();
 
-                            // In liquidation mode all tickets are considered losers
+                            // In liquidation mode all tickets are considered losers, there are no
+                            // winners
                             let mut losers: Vec<u64> = vec![];
 
+                            // Fill the list of ticket ids
                             for ticket_id in ticket_bucket.as_non_fungible().non_fungible_local_ids().iter() {
                                 match &ticket_id {
                                     NonFungibleLocalId::Integer(ticket_id) => losers.push(ticket_id.value()),
@@ -656,12 +790,14 @@ mod pool {
                             ticket_bucket.burn();
 
                             (
+                                // Refund the fees too
                                 self.base_coin_vault.take_advanced(
                                     self.last_price * number_of_tickets,
                                     WithdrawStrategy::Rounded(RoundingMode::ToZero),
                                 ),
-                                None,
+                                None, // No coin bucket
                                 Some(
+                                    // Create the HookArgument for the losing tickets
                                     HookArgument { 
                                         component: Runtime::global_address().into(),
                                         coin_address: self.coin_vault.resource_address(),
@@ -675,23 +811,36 @@ mod pool {
                                 None,
                             )
                         },
+
+                        // WaitingForLaunch, Launching, TerminatingLaunch and Uninitialised modes
+                        // not allowed
                         _ => Runtime::panic(MODE_NOT_ALLOWED.to_string()),
                     }
                 },
+
+                // Only random launches sell tickets
                 _ => Runtime::panic(TYPE_NOT_ALLOWED.to_string()),
             }
         }
 
+        // Users can add liquidity to the pool by calling this method.
+        // Both base coins and coins must be provided
         fn add_liquidity(
             &mut self,
+
+            // Base coins
             base_coin_bucket: Bucket,
+
+            // Coins
             mut coin_bucket: Bucket,
         ) -> (
-            Bucket,
-            Option<Bucket>,
-            HookArgument,
-            AnyPoolEvent,
-            Option<PoolMode>,
+            Bucket, // Liquidity token representing the deposited coins
+            Option<Bucket>, // Eventual excess coins are returned (eventual excess base coins are
+                            // not returned!)
+            HookArgument, // Short description of the operation happened, to be used by hooks
+            AnyPoolEvent, // AddLiquidityEvent
+            Option<PoolMode>, // If the mode of the pool has changed, tell it to the RadixPump
+                              // component
         ) {
             assert!(
                 coin_bucket.amount() > Decimal::ZERO && base_coin_bucket.amount() > Decimal::ZERO,
@@ -701,19 +850,23 @@ mod pool {
             let coins_in_vault = PreciseDecimal::from(self.coins_in_pool());
             let base_coin_amount = PreciseDecimal::from(base_coin_bucket.amount());
             let mut coin_amount = PreciseDecimal::from(coin_bucket.amount());
-           
+          
+            // lp here is a measure of the liquidity amount provided
+            // The vaule has no special meaning while lp/total_lp is the share of the liquidity added to the user
             let (lp, return_bucket, mode) = match self.mode {
                 PoolMode::Uninitialised => {
                     // If the pool is empty (AlreadyExistingCoin launch type) initialise the price by using
                     // the coin ratio received.
                     self.last_price = (base_coin_amount / coin_amount).checked_truncate(RoundingMode::ToZero).unwrap();
 
+                    // Now the pool is correctly initialised
                     self.mode = PoolMode::Normal;
 
                     (
+                        // For the first deposit, just consider lp equal to the number of coins
                         coin_amount.checked_truncate(RoundingMode::ToZero).unwrap(),
                         None,
-                        Some(PoolMode::Normal),
+                        Some(PoolMode::Normal), // Tell RadixPump about the new mode
                     )
                 },
                 PoolMode::Normal => {
@@ -733,6 +886,7 @@ mod pool {
                     );
                     coin_amount = PreciseDecimal::from(coin_bucket.amount());
 
+                    // Compute the share of added liquidity
                     let lp = (coin_amount * (PreciseDecimal::from(self.total_lp) / PreciseDecimal::from(coins_in_vault)))
                         .checked_truncate(RoundingMode::ToZero).unwrap();
 
@@ -742,12 +896,16 @@ mod pool {
                         None
                     )
                 },
+
+                // Not allowed in WaitingForLaunch, Launching, TerminatingLaunch and Liquidation
+                // modes
                 _ => Runtime::panic(MODE_NOT_ALLOWED.to_string()),
             };
 
             self.total_lp += lp;
             self.total_users_lp += lp;
 
+            // Mint the LP token
             self.last_lp_id += 1;
             let lp_bucket = self.lp_resource_manager.mint_non_fungible(
                 &NonFungibleLocalId::integer(self.last_lp_id),
@@ -763,11 +921,16 @@ mod pool {
             self.base_coin_vault.put(base_coin_bucket);
             self.coin_vault.put(coin_bucket);
 
+            // In case of quick launched coins we need to update the number of ignored
+            // coins at each movement
             self.update_ignored_coins();
 
             (
-                lp_bucket,
-                return_bucket,
+                lp_bucket, // LP token
+
+                return_bucket, // Eventual excess coins provided
+
+                // Short description of the operation happened, to be used by hooks
                 HookArgument {
                     component: Runtime::global_address().into(),
                     coin_address: self.coin_vault.resource_address(),
@@ -777,24 +940,30 @@ mod pool {
                     price: self.last_price,
                     ids: vec![self.last_lp_id],
                 },
+
+                // Create the event but let RadixPump emit it
                 AnyPoolEvent::AddLiquidityEvent(
                     AddLiquidityEvent {
                         resource_address: self.coin_vault.resource_address(),
                         amount: coin_amount.checked_truncate(RoundingMode::ToZero).unwrap(),
+                        lp_id: self.last_lp_id,
                     }
                 ),
-                mode,
+                mode, // Tell RadixPump about the new mode (if changed)
             )
         }
 
+        // Users can invoke this method to get back the proviously added liquidity
         fn remove_liquidity(
             &mut self,
+
+            // LP tokens. It is possible to provide multiple LP tokens in a single operation
             lp_bucket: Bucket,
         ) -> (
-            Bucket,
-            Option<Bucket>,
-            HookArgument,
-            AnyPoolEvent,
+            Bucket, // Base coins
+            Option<Bucket>, // Coins
+            HookArgument, // Short description of the operation happened, to be used by hooks
+            AnyPoolEvent, // RemoveLiquidityEvent
         ) {
             assert!(
                 lp_bucket.resource_address() == self.lp_resource_manager.address(),

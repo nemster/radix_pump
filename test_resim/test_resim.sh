@@ -217,7 +217,7 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 export hook_name=TestHook2
 export test_hook_component=${test_hook2_component}
-export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch", "PostTerminateRandomLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan", "PostBuyTicket", "PostRedeemWinningTicket", "PostRedeemLousingTicket", "PostAddLiquidity", "PostRemoveLiquidity"'
+export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch", "PostTerminateRandomLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan", "PostBuyTicket", "PostRedeemWinningTicket", "PostRedeemLosingTicket", "PostAddLiquidity", "PostRemoveLiquidity"'
 echo resim run register_hook.rtm
 resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
@@ -708,7 +708,7 @@ echo
 get_pool_info ${random_launched_coin}
 
 echo
-export enabled_operations='"PostRedeemLousingTicket"'
+export enabled_operations='"PostRedeemLosingTicket"'
 echo resim run creator_enable_hook.rtm
 resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${random_launched_coin}

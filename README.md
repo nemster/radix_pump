@@ -112,7 +112,7 @@ Use this functions to create a RadixPump and the test hook components in Stokene
 
 ```
 CALL_FUNCTION
-    Address("")
+    Address("package_tdx_2_1p4c0cj7ygzg3v92jeharl724slnguxa0zzgyatz8vk9th7pmgllkka")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -135,7 +135,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("base_coin_bucket")
 ;
 CALL_FUNCTION
-    Address("")
+    Address("package_tdx_2_1p56yknv5xjh794mjl6qtchg2f2mesq22gdt4f0s5k2nwjshs2may75")
     "TestHook0"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -144,7 +144,7 @@ CALL_FUNCTION
 ;
 
 CALL_FUNCTION
-    Address("")
+    Address("package_tdx_2_1p56yknv5xjh794mjl6qtchg2f2mesq22gdt4f0s5k2nwjshs2may75")
     "TestHook1"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -152,7 +152,7 @@ CALL_FUNCTION
 ;
 
 CALL_FUNCTION
-    Address("")
+    Address("package_tdx_2_1p56yknv5xjh794mjl6qtchg2f2mesq22gdt4f0s5k2nwjshs2may75")
     "TestHook2"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")

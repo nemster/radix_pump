@@ -399,10 +399,12 @@ define_interface! {
 
 // THE FOLLOWING METHOD REQUIRES NO AUTHENTICATION, IT CAN BE CALLED BY ANYONE
 
+        // Return detailed information about the pool status
         fn get_pool_info(&self) -> PoolInfo;
 
 // THE FOLLOWING METHODS CAN ONLY BE CALLED BY ROUND 0 AND 1 HOOKS AND BY THE RadixPump COMPONENT
 
+        // Call this method to buy coins with base coins
         fn buy(
             &mut self,
             base_coin_bucket: Bucket,
@@ -412,6 +414,7 @@ define_interface! {
             AnyPoolEvent,
         );
 
+        // Call this method to sell coins for base coins
         fn sell(
             &mut self,
             coin_bucket: Bucket,
@@ -421,6 +424,7 @@ define_interface! {
             AnyPoolEvent,
         );
 
+        // Call this method to buy tickets for a reandom launched coin launch phase
         fn buy_ticket(
             &mut self,
             amount: u32,
@@ -431,6 +435,8 @@ define_interface! {
             AnyPoolEvent,
         );
 
+        // Users who bought ticket for a random launched coin can call this method to get their
+        // coins (if winners) or a refund (if losers)
         fn redeem_ticket(
             &mut self,
             ticket_bucket: Bucket,
@@ -441,6 +447,8 @@ define_interface! {
             Option<HookArgument>,
         );
 
+        // Users can add liquidity to the pool by calling this method.
+        // Both base coins and coins must be provided
         fn add_liquidity(
             &mut self,
             base_coin_bucket: Bucket,
@@ -453,6 +461,7 @@ define_interface! {
             Option<PoolMode>,
         );
 
+        // Users can invoke this method to get back the proviously added liquidity
         fn remove_liquidity(
             &mut self,
             lp_bucket: Bucket,
@@ -465,6 +474,8 @@ define_interface! {
 
 // THE FOLLOWING METHODS CAN ONLY BE CALLED BY THE RadixPump COMPONENT
 
+        // The creator of a fair or random launched coin can use this method to start the launch
+        // phase
         fn launch(
             &mut self, 
             end_launch_time: i64,
@@ -475,6 +486,14 @@ define_interface! {
             AnyPoolEvent,
         );
 
+        // The creator of a fair or random launched coin can use this method to terminate the launch
+        // phase            
+        // In case of a fair launch the mode goes from Launching to Normal in just one step
+        // In case of a random launch there are 4 possibilities:
+        // - Launching -> Normal (if sold tickets <= winning tickets, everybody won)
+        // - Launching -> TerminatingLaunch (request random data to the RandomComponent)
+        // - TerminatingLaunch -> TerminatingLaunch (request more random data to the RandomComponent)
+        // - TerminatingLaunch -> Normal (tickets extraction completed)
         fn terminate_launch(&mut self) -> (
             Option<Bucket>,
             Option<PoolMode>,
@@ -482,21 +501,30 @@ define_interface! {
             Option<AnyPoolEvent>,
         );
 
+        // The creator of a fair or random launched coin can use this method to get (part of) his
+        // allocation
+        // The creator allocation is time locked and has an unlock schedule linear with time
         fn unlock(
             &mut self,
             amount: Option<Decimal>,
         ) -> Bucket;
 
+        // Call this method to put the pool in Liquidation mode (authentication is in RadixPump
+        // component)
+        // The goal of the liquidation mode is to get all of the coins into the pool and all of the
+        // base coins out of the pool
         fn set_liquidation_mode(&mut self) -> (
             PoolMode,
             AnyPoolEvent,
         );
 
+        // Get a flash loan. It is RadixPump responsibility to ensure the loan will be returned
         fn get_flash_loan(
             &mut self,
             amount: Decimal,
         ) -> Bucket;
 
+        // Return a previoulsy received flash loan
         fn return_flash_loan(
             &mut self,
             base_coin_bucket: Bucket,
@@ -506,6 +534,7 @@ define_interface! {
             AnyPoolEvent,
         );
 
+        // The coin creator can use this method to update poll fees, user authentication is managed by RadixPump
         fn update_pool_fees(
             &mut self,
             buy_pool_fee_percentage: Decimal,
@@ -513,6 +542,8 @@ define_interface! {
             flash_loan_pool_fee: Decimal,
         ) -> AnyPoolEvent;
 
+        // The creator of a quick launched coin can use this method to burn excess coins in the
+        // pool. User authentication is managed bu RadixPump
         fn burn(
             &mut self,
             amount: Decimal,

@@ -1982,7 +1982,7 @@ mod pool {
 
                 // Prepare the argument to call the hooks
                 HookArgument {
-                    component: Runtime::global_address().into(),
+                    component: component_address.into(),
                     coin_address: coin_address,
                     operation: HookableOperation::PostQuickLaunch,
                     amount: Some(coin_supply),

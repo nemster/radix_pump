@@ -1,0 +1,33 @@
+CALL_METHOD
+    Address("${account}")
+    "lock_fee"
+    Decimal("1")
+;
+CALL_METHOD
+    Address("${account}")
+    "create_proof_of_non_fungibles"
+    Address("${creator_badge}")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("${creator_badge_id}"))
+;
+POP_FROM_AUTH_ZONE
+    Proof("creator_proof")
+;
+CALL_METHOD
+    Address("${account}")
+    "withdraw"
+    Address("${reward_coin}")
+    Decimal("${reward_coin_amount}")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("${reward_coin}")
+    Bucket("rewards_bucket")
+;
+CALL_METHOD
+    Address("${lp_rewards_component}")
+    "new_liquidity_campaign"
+    Proof("creator_proof")
+    ${start_time}i64
+    ${end_time}i64
+    Decimal("${daily_reward_per_coin}")
+    Bucket("rewards_bucket")
+;

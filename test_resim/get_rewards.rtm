@@ -1,0 +1,24 @@
+CALL_METHOD
+    Address("${account}")
+    "lock_fee"
+    Decimal("1")
+;
+CALL_METHOD
+    Address("${account}")
+    "create_proof_of_non_fungibles"
+    Address("${lp_token}")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("${lp_id}"))
+;
+POP_FROM_AUTH_ZONE
+    Proof("lp_proof")
+;
+CALL_METHOD
+    Address("${lp_rewards_component}")
+    "get_rewards"
+    Proof("lp_proof")
+;
+CALL_METHOD
+    Address("${account}")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;

@@ -245,9 +245,6 @@ mod ape_in_hook {
                 let coin_amount = launch.coins_per_buyer;
                 buckets.push(launch.vault.take(coin_amount));
 
-if launch_id == last_launch {
-    info!("launch_id: {}, remaining in vault: {}", launch_id, launch.vault.amount());
-}
             }
 
             // Compute the total number of withdrawn coins by this user
@@ -343,7 +340,7 @@ if launch_id == last_launch {
             (hook_badge_bucket, None, vec![event], vec![new_hook_argument])
         }
 
-        // Round 0, non accepting calls trigered by other hooks
+        // Round 0, non accepting calls triggered by other hooks
         fn get_hook_info(&self) -> (HookExecutionRound, bool) {(0, false)}
     }
 }

@@ -168,7 +168,7 @@ echo Names ${forbidden_names} forbidden
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
-resim publish ../hooks >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+resim publish ../hooks/test_hooks >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export hooks_package=$(grep 'Success! New Package:' $OUTPUTFILE | cut -d ' ' -f 4)
 echo Hooks package: ${hooks_package}
 

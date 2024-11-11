@@ -3,6 +3,17 @@
 version = 3
 
 [[package]]
+name = "ape_in_hook"
+version = "1.0.0"
+dependencies = [
+ "cc",
+ "radix-common",
+ "radix-engine-interface",
+ "scrypto",
+ "scrypto-interface",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -257,17 +268,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hooks"
-version = "1.0.0"
-dependencies = [
- "cc",
- "radix-common",
- "radix-engine-interface",
- "scrypto",
- "scrypto-interface",
-]
-
-[[package]]
 name = "indexmap"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -328,6 +328,17 @@ name = "log"
 version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
+
+[[package]]
+name = "lp_rewards_hook"
+version = "1.0.0"
+dependencies = [
+ "cc",
+ "radix-common",
+ "radix-engine-interface",
+ "scrypto",
+ "scrypto-interface",
+]
 
 [[package]]
 name = "memchr"
@@ -514,7 +525,6 @@ version = "1.0.0"
 dependencies = [
  "cc",
  "getrandom 0.2.15",
- "hooks",
  "radix-common",
  "radix-engine-interface",
  "random",
@@ -829,6 +839,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "test_hooks"
+version = "1.0.0"
+dependencies = [
+ "cc",
+ "radix-common",
+ "radix-engine-interface",
+ "scrypto",
+ "scrypto-interface",
 ]
 
 [[package]]

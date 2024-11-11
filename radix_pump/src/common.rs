@@ -74,16 +74,10 @@ pub struct PoolInfo {
 
     // When calling the Pool get_pool_info method, None
     // When calling the RadixPump get_pool_info method, the resource address of the badge that
-    // RadixPump uses to authenticate against round 0 and 1 hooks and that the hooks can use to
+    // RadixPump passes to round 0 and 1 hooks and that the hooks can use to
     // authenticate against a Pool
     // This is the same for all of the pools
     pub hooks_badge_resource_address: Option<ResourceAddress>,
-
-    // When calling the Pool get_pool_info method, None
-    // When calling the RadixPump get_pool_info method, the resource address of the badge that
-    // RadixPump uses to authenticate against round 2 hooks
-    // This is the same for all of the pools
-    pub read_only_hooks_badge_resource_address: Option<ResourceAddress>,
 
     // When calling the Pool get_pool_info method, None
     // When calling the RadixPump get_pool_info method, the resource address of the coin creator
@@ -353,19 +347,20 @@ define_interface! {
     Hook impl [ScryptoStub, Trait, ScryptoTestStub] {
 
         // This is the method called by RadixPump when a relevant operation is performed
+        // RadixPump uses his proxy badge when calling this method, you must ask for the address
+        // of the proxy badge in the hook instantiation and restrict this method with it.
         fn hook(
             &mut self,
 
             // This struct contains information about what caused the hook to be called
             argument: HookArgument,
 
-            // This badge has two reasons:
-            // - ensure the hook that RadixPump is calling it
-            // - authenticate when calling a Pool method
-            hook_badge_bucket: FungibleBucket,
+            // This badge is only passed to round 0 and 1 hooks, it can be used to call Poll
+            // methods
+            hook_badge_bucket: Option<FungibleBucket>,
         ) -> (
             // Return back the hook_badge_bucket
-            FungibleBucket,
+            Option<FungibleBucket>,
 
             // Any coin the hook wants to send to the user
             Option<Bucket>,

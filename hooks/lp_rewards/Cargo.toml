@@ -1,17 +1,14 @@
 [package]
-name = "radix_pump"
+name = "lp_rewards_hook"
 version = "1.0.0"
 edition = "2021"
 
 [dependencies]
 scrypto = { workspace = true }
-#scrypto-test = { workspace = true }
 radix-common = { workspace = true }
 radix-engine-interface = { workspace = true }
-scrypto-interface = { path = "../scrypto-interface" }
-random = { git = "https://github.com/dot-random/dot-random", rev = "v0.1-scrypto-1.2.0", package = "random" }
+scrypto-interface = { path = "../../scrypto-interface" }
 cc = { workspace = true }
-getrandom = { workspace = true }
 
 [features]
 default = []

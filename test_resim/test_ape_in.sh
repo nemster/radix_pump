@@ -42,22 +42,20 @@ resim call-function ${radix_pump_package} RadixPump new ${owner_badge} ${base_co
 export radix_pump_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 export creator_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export flash_loan_nft=$(grep 'Resource:' $OUTPUTFILE | head -n 2 | tail -n 1 | cut -d ' ' -f 3)
-export hooks_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 3 | tail -n 1 | cut -d ' ' -f 3)
-export ro_hooks_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 4 | tail -n 1 | cut -d ' ' -f 3)
-export integrator_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 6 | tail -n 1 | cut -d ' ' -f 3)
-echo -e "RadixPump component: ${radix_pump_component}\nCreator badge: ${creator_badge}\nFlash loan transient NFT: ${flash_loan_nft}\nHooks authentication badge: ${hooks_badge}\nRead only hooks authentication badge: ${ro_hooks_badge}\nIntegrator badge: ${integrator_badge}"
+export proxy_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 4 | tail -n 1 | cut -d ' ' -f 3)
+echo -e "RadixPump component: ${radix_pump_component}\nCreator badge: ${creator_badge}\nFlash loan transient NFT: ${flash_loan_nft}\nProxy badge: ${proxy_badge}"
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
-resim publish ../hooks >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+resim publish ../hooks/ape_in >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export hooks_package=$(grep 'Success! New Package:' $OUTPUTFILE | cut -d ' ' -f 4)
 echo Hooks package: ${hooks_package}
 
 echo
 export launches_per_buyer=85
 export base_coins_per_launch=1
-echo resim call-function ${hooks_package} ApeInHook new ${owner_badge} ${hooks_badge} ${base_coin} ${launches_per_buyer} ${base_coins_per_launch}
-resim call-function ${hooks_package} ApeInHook new ${owner_badge} ${hooks_badge} ${base_coin} ${launches_per_buyer} ${base_coins_per_launch} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-function ${hooks_package} ApeInHook new ${owner_badge} ${hooks_badge} ${proxy_coin} ${launches_per_buyer} ${base_coins_per_launch}
+resim call-function ${hooks_package} ApeInHook new ${owner_badge} ${proxy_badge} ${base_coin} ${launches_per_buyer} ${base_coins_per_launch} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export ape_in_hook_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 export buyer_badge=$(grep 'Resource:' $OUTPUTFILE | cut -d ' ' -f 3)
 echo -e "ApeInHook component: ${ape_in_hook_component}"
@@ -129,7 +127,7 @@ do
     then
         resim call-method ${ape_in_hook_component} withdraw_coins "${buyer_badge}:#$I#" >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 	export moved_coins=$(grep ResAddr: $OUTPUTFILE | cut -d ' ' -f 5 | sort | uniq | wc -l)
-	echo "Buyer badge #$I# was still in the wallet so redeemed it again, the transaction moved ${moved_coins} different resources"
+	echo "Done it again, the transaction moved ${moved_coins} different resources"
     	grep 'Transaction Cost: ' $OUTPUTFILE
     fi
 done

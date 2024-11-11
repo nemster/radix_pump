@@ -67,21 +67,20 @@ resim call-function ${radix_pump_package} RadixPump new ${owner_badge} ${base_co
 export radix_pump_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 export creator_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export flash_loan_nft=$(grep 'Resource:' $OUTPUTFILE | head -n 2 | tail -n 1 | cut -d ' ' -f 3)
-export hooks_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 3 | tail -n 1 | cut -d ' ' -f 3)
-export ro_hooks_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 4 | tail -n 1 | cut -d ' ' -f 3)
-export integrator_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 6 | tail -n 1 | cut -d ' ' -f 3)
-echo -e "RadixPump component: ${radix_pump_component}\nCreator badge: ${creator_badge}\nFlash loan transient NFT: ${flash_loan_nft}\nHooks authentication badge: ${hooks_badge}\nRead only hooks authentication badge: ${ro_hooks_badge}\nIntegrator badge: ${integrator_badge}"
+export proxy_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 4 | tail -n 1 | cut -d ' ' -f 3)
+export integrator_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 5 | tail -n 1 | cut -d ' ' -f 3)
+echo -e "RadixPump component: ${radix_pump_component}\nCreator badge: ${creator_badge}\nFlash loan transient NFT: ${flash_loan_nft}\nProxy badge: ${proxy_badge}\n\nIntegrator badge: ${integrator_badge}"
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
-resim publish ../hooks >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+resim publish ../hooks/lp_rewards >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export hooks_package=$(grep 'Success! New Package:' $OUTPUTFILE | cut -d ' ' -f 4)
 echo Hooks package: ${hooks_package}
 
 echo
 export grace_period=604800 # One week
-echo resim call-function ${hooks_package} LpRewardsHook new ${owner_badge} ${ro_hooks_badge} ${creator_badge} ${grace_period}
-resim call-function ${hooks_package} LpRewardsHook new ${owner_badge} ${ro_hooks_badge} ${creator_badge} ${grace_period} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-function ${hooks_package} LpRewardsHook new ${owner_badge} ${proxy_badge} ${creator_badge} ${grace_period}
+resim call-function ${hooks_package} LpRewardsHook new ${owner_badge} ${proxy_badge} ${creator_badge} ${grace_period} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export lp_rewards_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 echo LpRewardsHook component: ${lp_rewards_component}
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -127,8 +126,8 @@ echo Creator badge id: ${creator_badge_id}
 echo LP token: ${lp_quick}
 
 echo
-echo resim new-badge-fixed --name RewardCoin --symbol RW $supply
-resim new-badge-fixed --name RewardCoin --symbol RW $supply >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim new-token-fixed --name RewardCoin --symbol RW $supply
+resim new-token-fixed --name RewardCoin --symbol RW $supply >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export reward_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 echo Created RewardCoin ${reward_coin}
 

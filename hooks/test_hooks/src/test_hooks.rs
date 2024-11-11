@@ -25,11 +25,19 @@ struct EmptyVaultEvent {
 #[blueprint_with_traits]
 #[events(EmptyVaultEvent)]
 mod test_hook0 {
-    struct TestHook0 {
 
-        // The badge RadixPump uses to authenticate against this hook and that can be used to
-        // authenticate towards a Pool
-        hook_badge_address: ResourceAddress,
+    enable_method_auth! {
+        roles {
+            proxy => updatable_by: [OWNER];
+        },
+        methods {
+            refill_vault => PUBLIC;
+            hook => restrict_to: [proxy];
+            get_hook_info => PUBLIC;
+        }
+    }
+
+    struct TestHook0 {
 
         // A voult of base coins to buy the coins
         base_coin_vault: Vault,
@@ -43,20 +51,21 @@ mod test_hook0 {
             // Owner badge for this component
             owner_badge_address: ResourceAddress,
 
-            // The badge RadixPump uses to authenticate against this hook and that can be used to authenticate towards
-            // a Pool
-            hook_badge_address: ResourceAddress,
+            // The badge RadixPump uses to authenticate against this hook
+            proxy_badge_address: ResourceAddress,
 
             // A bucket of base coins to buy coins
             base_coin_bucket: Bucket,
 
         ) -> Global<TestHook0> {
             Self {
-                hook_badge_address: hook_badge_address,
                 base_coin_vault: Vault::with_bucket(base_coin_bucket),
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            .roles(roles!(
+                proxy => rule!(require(proxy_badge_address));
+            ))
             .globalize()
         }
 
@@ -75,25 +84,18 @@ mod test_hook0 {
         fn hook(
             &mut self,
             mut argument: HookArgument,
-            hook_badge_bucket: FungibleBucket,
+            hook_badge_bucket: Option<FungibleBucket>,
         ) -> (
-            FungibleBucket,
+            Option<FungibleBucket>,
             Option<Bucket>,
             Vec<AnyPoolEvent>,
             Vec<HookArgument>,
         ) {
 
-            // Make sure RadixPump component is the caller
-            assert!(
-                hook_badge_bucket.resource_address() == self.hook_badge_address &&
-                hook_badge_bucket.amount() == dec!(1),
-                "Wrong badge",
-            );
-
             // Take one base coin from the vault and use the badge provided by RadixPump to call
             // the buy method of the pool
             if self.base_coin_vault.amount() >= Decimal::ONE {
-                let (coin_bucket, new_hook_argument, event) = hook_badge_bucket.authorize_with_amount(
+                let (coin_bucket, new_hook_argument, event) = hook_badge_bucket.as_ref().unwrap().authorize_with_amount(
                     1,
                     || argument.component.buy(self.base_coin_vault.take(Decimal::ONE))
                 );
@@ -132,8 +134,17 @@ mod test_hook0 {
 #[blueprint_with_traits]
 #[events(TestHookEvent)]
 mod test_hook1 {
+    enable_method_auth! {
+        roles {
+            proxy => updatable_by: [OWNER];
+        },
+        methods {
+            hook => restrict_to: [proxy];
+            get_hook_info => PUBLIC;
+        }
+    }
+
     struct TestHook1 {
-        hook_badge_address: ResourceAddress,
         resource_manager: ResourceManager,
     }
 
@@ -145,7 +156,7 @@ mod test_hook1 {
             owner_badge_address: ResourceAddress,
 
             // The badge RadixPump uses to authenticate against this hook
-            hook_badge_address: ResourceAddress,
+            proxy_badge_address: ResourceAddress,
 
         ) -> Global<TestHook1> {
 
@@ -158,11 +169,13 @@ mod test_hook1 {
             .create_with_no_initial_supply();
 
             Self {
-                hook_badge_address: hook_badge_address,
                 resource_manager: resource_manager,
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            .roles(roles!(
+                proxy => rule!(require(proxy_badge_address));
+            ))
             .globalize()
         }
     }
@@ -173,20 +186,13 @@ mod test_hook1 {
         fn hook(
             &mut self,
             argument: HookArgument,
-            hook_badge_bucket: FungibleBucket,
+            hook_badge_bucket: Option<FungibleBucket>,
         ) -> (
-            FungibleBucket,
+            Option<FungibleBucket>,
             Option<Bucket>,
             Vec<AnyPoolEvent>,
             Vec<HookArgument>,
         ) {
-
-            // Make sure the RadixPump component is the caller
-            assert!(
-                hook_badge_bucket.resource_address() == self.hook_badge_address &&
-                hook_badge_bucket.amount() == dec!(1),
-                "Wrong badge",
-            );
 
             // Emit an event with information from the HookArgument
             Runtime::emit_event(
@@ -216,8 +222,17 @@ mod test_hook1 {
 #[blueprint_with_traits]
 #[events(TestHookEvent)]
 mod test_hook2 {
+    enable_method_auth! {
+        roles {
+            proxy => updatable_by: [OWNER];
+        },
+        methods {
+            hook => restrict_to: [proxy];
+            get_hook_info => PUBLIC;
+        }
+    }
+
     struct TestHook2 {
-        hook_badge_address: ResourceAddress,
         resource_manager: ResourceManager,
     }
 
@@ -226,7 +241,7 @@ mod test_hook2 {
         // TestHook2 component instantiation
         pub fn new(
             owner_badge_address: ResourceAddress,
-            hook_badge_address: ResourceAddress,
+            proxy_badge_address: ResourceAddress,
         ) -> Global<TestHook2> {
 
             // Create a coin to distribute to the users
@@ -238,11 +253,13 @@ mod test_hook2 {
             .create_with_no_initial_supply();
 
             Self {
-                hook_badge_address: hook_badge_address,
                 resource_manager: resource_manager,
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            .roles(roles!(
+                proxy => rule!(require(proxy_badge_address));
+            ))
             .globalize()
         }
     }
@@ -253,20 +270,13 @@ mod test_hook2 {
         fn hook(
             &mut self,
             argument: HookArgument,
-            hook_badge_bucket: FungibleBucket,
+            hook_badge_bucket: Option<FungibleBucket>,
         ) -> (
-            FungibleBucket,
+            Option<FungibleBucket>,
             Option<Bucket>,
             Vec<AnyPoolEvent>,
             Vec<HookArgument>,
         ) {
-
-            // Make sure the RadixPump component is the caller
-            assert!(
-                hook_badge_bucket.resource_address() == self.hook_badge_address &&
-                hook_badge_bucket.amount() == dec!(1),
-                "Wrong badge",
-            );
 
             // Emit an event with information from the HookArgument
             Runtime::emit_event(

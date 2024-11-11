@@ -78,10 +78,22 @@ static SECONDS_PER_DAY: u32 = 86400;
     ResourceAddress,
 )]
 mod lp_rewards_hook {
-    struct LpRewardsHook {
 
-        // The badge RadixPump uses to authenticate against this hook
-        ro_hook_badge_address: ResourceAddress,
+    enable_method_auth! {
+        roles {
+            proxy => updatable_by: [OWNER];
+        },
+        methods {
+            new_liquidity_campaign => PUBLIC;
+            update_liquidity_campaign => PUBLIC;
+            terminate_liquidity_campaign => PUBLIC;
+            get_rewards => PUBLIC;
+            hook => restrict_to: [proxy];
+            get_hook_info => PUBLIC;
+        }
+    }
+
+    struct LpRewardsHook {
 
         // The resource address of the creator badges minted by RadixPump
         coin_creator_badge_address: ResourceAddress,
@@ -111,7 +123,7 @@ mod lp_rewards_hook {
             owner_badge_address: ResourceAddress,
 
             // The badge RadixPump will use to authenticate against this hook
-            ro_hook_badge_address: ResourceAddress,
+            proxy_badge_address: ResourceAddress,
 
             // The resource address of the creator badges minted by RadixPump
             coin_creator_badge_address: ResourceAddress,
@@ -122,7 +134,6 @@ mod lp_rewards_hook {
             grace_period: i64,
         ) -> Global<LpRewardsHook> {
             Self {
-                ro_hook_badge_address: ro_hook_badge_address,
                 coin_creator_badge_address: coin_creator_badge_address,
                 liquidity_providers: KeyValueStore::new_with_registered_type(),
                 liquidity_campaigns: KeyValueStore::new_with_registered_type(),
@@ -132,6 +143,9 @@ mod lp_rewards_hook {
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            .roles(roles!(
+                proxy => rule!(require(proxy_badge_address));
+            ))
             .metadata(metadata! {
                 init {
                     "name" => "LpRewardsHook", updatable;
@@ -412,19 +426,13 @@ mod lp_rewards_hook {
         fn hook(
             &mut self,
             argument: HookArgument,
-            hook_badge_bucket: FungibleBucket,
+            hook_badge_bucket: Option<FungibleBucket>, // None
         ) -> (
-            FungibleBucket,
+            Option<FungibleBucket>, // None
             Option<Bucket>,
             Vec<AnyPoolEvent>, // Always empty
             Vec<HookArgument>, // Always empty
         ) {
-
-            // Make sure RadixPump is the caller
-            assert!(
-                hook_badge_bucket.resource_address() == self.ro_hook_badge_address && hook_badge_bucket.amount() == Decimal::ONE,
-                "Wrong badge",
-            );
 
             match argument.operation {
 

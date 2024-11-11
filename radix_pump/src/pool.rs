@@ -329,7 +329,6 @@ mod pool {
                 // These informations will be added by the proxy
                 flash_loan_nft_resource_address: None,
                 hooks_badge_resource_address: None,
-                read_only_hooks_badge_resource_address: None,
                 creator_badge_resource_address: None,
             }
         }

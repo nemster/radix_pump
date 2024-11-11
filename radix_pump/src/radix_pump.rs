@@ -252,11 +252,8 @@ mod radix_pump {
         // Vault to hold the badge for authentication towards pools
         proxy_badge_vault: FungibleVault,
 
-        // Vault to hold the badge for RadixPump to hook and hook to Pool authentication
+        // Vault to hold the badge for hook to Pool authentication
         hook_badge_vault: FungibleVault,
-
-        // Vault to hold the badge for RadixPump to hook authentication
-        read_only_hook_badge_vault: FungibleVault,
 
         // KeyValueStore containing information about all of the hooks allowed by the component owner
         registered_hooks: HookByName,
@@ -400,7 +397,8 @@ mod radix_pump {
             ))
             .create_with_no_initial_supply();
 
-            // Mint a single badge that will be used for authentication towards round 0 and 1 hooks
+            // Mint a single badge that will be used by round 0 and 1 hooks to authenticate towards
+            // the Pool components
             let hook_badge_bucket = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
             .divisibility(0)
             .metadata(metadata!(
@@ -412,31 +410,6 @@ mod radix_pump {
                 },
                 init {
                     "name" => "Hook badge", updatable;
-                    "dapp_definition" => dapp_definition, updatable;
-                }
-            ))
-            .mint_roles(mint_roles!(
-                minter => rule!(deny_all);
-                minter_updater => rule!(require(owner_badge_address));
-            ))
-            .burn_roles(burn_roles!(
-                burner => rule!(deny_all);
-                burner_updater => rule!(require(owner_badge_address));
-            ))
-            .mint_initial_supply(dec![1]);
-
-            // Mint a single badge that will be used for authentication towards round 2 hooks
-            let read_only_hook_badge_bucket = ResourceBuilder::new_fungible(OwnerRole::Updatable(rule!(require(owner_badge_address))))
-            .divisibility(0)
-            .metadata(metadata!(
-                roles {
-                    metadata_setter => rule!(require(owner_badge_address));
-                    metadata_setter_updater => rule!(require(owner_badge_address));
-                    metadata_locker => rule!(require(owner_badge_address));
-                    metadata_locker_updater => rule!(require(owner_badge_address));
-                },
-                init {
-                    "name" => "RO hook badge", updatable;
                     "dapp_definition" => dapp_definition, updatable;
                 }
             ))
@@ -521,7 +494,6 @@ mod radix_pump {
                 min_lock_duration: 7776000, // Three months
                 proxy_badge_vault: FungibleVault::with_bucket(proxy_badge_bucket),
                 hook_badge_vault: FungibleVault::with_bucket(hook_badge_bucket),
-                read_only_hook_badge_vault: FungibleVault::with_bucket(read_only_hook_badge_bucket),
                 registered_hooks: <KeyValueStore<String, HookInfo> as RadixPumpKeyValueStore>::new_with_registered_type(),
                 registered_hooks_operations: HooksPerOperation::new(),
                 globally_enabled_hooks: HooksPerOperation::new(),
@@ -1324,7 +1296,6 @@ mod radix_pump {
             // Add information about the badges used by RadixPump
             pool_info.flash_loan_nft_resource_address = Some(self.flash_loan_nft_resource_manager.address());
             pool_info.hooks_badge_resource_address = Some(self.hook_badge_vault.resource_address());
-            pool_info.read_only_hooks_badge_resource_address = Some(self.read_only_hook_badge_vault.resource_address());
             pool_info.creator_badge_resource_address = Some(self.creator_badge_resource_manager.address());
 
             // Return the struct cointaining all of the info
@@ -1461,10 +1432,8 @@ mod radix_pump {
             // Initialize an array of buckets to return
             let mut additional_buckets: Vec<Bucket> = vec![];
 
-            // Get a badge from the vault and remember what kind of badge it was (there are two
-            // different hook badges)
-            let mut hook_badge_bucket = self.hook_badge_vault.take(dec!(1));
-            let mut the_badge_i_gave_you = hook_badge_bucket.resource_address();
+            // Get the hook badge from the vault
+            let mut hook_badge_bucket: Option<FungibleBucket> = Some(self.hook_badge_vault.take(dec!(1)));
 
             // Initialize an array that will contain hooks triggered by other hooks
             // The first vector will always be empty: a round 0 hook can trigger a round 1 or round
@@ -1497,22 +1466,28 @@ mod radix_pump {
                         continue;
                     }
 
-                    // Call the hook method of the hook passing it the badge
+                    // Use the proxy badge to call the hook
                     let (
                         temp_badge_bucket,
                         opt_bucket,
                         events,
                         hook_arguments,
-                    ) = hook_info.unwrap().deref_mut().component_address.hook(
-                        hook_argument.clone(),
-                        hook_badge_bucket,
+                    ) = self.proxy_badge_vault.authorize_with_amount(
+                        1,
+                        || hook_info.unwrap().deref_mut().component_address.hook(
+                            hook_argument.clone(),
+                            hook_badge_bucket,
+                        )
                     );
 
-                    // Verify that the hook returned the badge
-                    assert!(
-                        temp_badge_bucket.resource_address() == the_badge_i_gave_you && temp_badge_bucket.amount() == Decimal::ONE,
-                        "Hey hook, where's my badge gone?",
-                    );
+                    // Verify that the hook returned the badge if provided
+                    if execution_round < 2 {
+                        assert!(
+                            temp_badge_bucket.as_ref().unwrap().resource_address() == self.hook_badge_vault.resource_address() &&
+                            temp_badge_bucket.as_ref().unwrap().amount() == Decimal::ONE,
+                            "Hey hook, where's my badge gone?",
+                        );
+                    }
                     hook_badge_bucket = temp_badge_bucket;
 
                     // An hook can generate any number of Pool events by calling Pool methods
@@ -1584,16 +1559,22 @@ mod radix_pump {
                                     opt_bucket,
                                     events,
                                     _,
-                                ) = op.1.hook(
-                                    op.0.clone(),
-                                    hook_badge_bucket,
+                                ) = self.proxy_badge_vault.authorize_with_amount(
+                                    1,
+                                    || op.1.hook(
+                                        op.0.clone(),
+                                        hook_badge_bucket,
+                                    )
                                 );
 
-                                // Make sure additional hooks return the badge too
-                                assert!(
-                                    temp_badge_bucket.resource_address() == the_badge_i_gave_you && temp_badge_bucket.amount() == Decimal::ONE,
-                                    "Hey hook, where's my badge gone?",
-                                );
+                                // Verify that the hook returned the badge if provided
+                                if execution_round < 2 {
+                                    assert!(
+                                        temp_badge_bucket.as_ref().unwrap().resource_address() == self.hook_badge_vault.resource_address() &&
+                                        temp_badge_bucket.as_ref().unwrap().amount() == Decimal::ONE,
+                                        "Hey hook, where's my badge gone?",
+                                    );
+                                }
                                 hook_badge_bucket = temp_badge_bucket;
 
                                 // An hook can generate any number of Pool events by calling Pool methods
@@ -1613,16 +1594,12 @@ mod radix_pump {
                     }
                 }
 
-                // At the end of round 1 switch to the read only badge
+                // At the end of round 1 put the badge back to rest
                 if execution_round == 1 {
-                    self.hook_badge_vault.put(hook_badge_bucket);
-                    hook_badge_bucket = self.read_only_hook_badge_vault.take(dec!(1));
-                    the_badge_i_gave_you = hook_badge_bucket.resource_address();
+                    self.hook_badge_vault.put(hook_badge_bucket.unwrap());
+                    hook_badge_bucket = None;
                 }
             }
-
-            // Put the read only badge back in his vault
-            self.read_only_hook_badge_vault.put(hook_badge_bucket);
 
             // Return all of the buckets to the user
             additional_buckets

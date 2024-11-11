@@ -33,11 +33,20 @@ struct CoinLaunch {
 #[blueprint_with_traits]
 #[types(u64, CoinLaunch, ApeInBuyer)]
 mod ape_in_hook {
-    struct ApeInHook {
 
-        // The badge RadixPump uses to authenticate against this hook and that can be used to
-        // authenticate towards a Pool
-        hook_badge_address: ResourceAddress,
+    enable_method_auth! {
+        roles {
+            proxy => updatable_by: [OWNER];
+        },
+        methods {
+            ape_in => PUBLIC;
+            withdraw_coins => PUBLIC;
+            hook => restrict_to: [proxy];
+            get_hook_info => PUBLIC;
+        }
+    }
+
+    struct ApeInHook {
 
         // How many quick launch a user will automatically take part
         launches_per_buyer: u16,
@@ -69,9 +78,8 @@ mod ape_in_hook {
             // Owner badge of this component
             owner_badge_address: ResourceAddress,
 
-            // The badge RadixPump uses to authenticate against this hook and that can be used to authenticate towards
-            // a Pool
-            hook_badge_address: ResourceAddress,
+            // The badge RadixPump uses to authenticate against this hook
+            proxy_badge_address: ResourceAddress,
 
             // The coin to buy launches with
             base_coin_address: ResourceAddress,
@@ -128,7 +136,6 @@ mod ape_in_hook {
 
             // Instantiate the component
             Self {
-                hook_badge_address: hook_badge_address,
                 launches_per_buyer: launches_per_buyer,
                 base_coins_per_launch: base_coins_per_launch,
                 last_buyer_id: 0,
@@ -139,6 +146,9 @@ mod ape_in_hook {
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
+            .roles(roles!(
+                proxy => rule!(require(proxy_badge_address));
+            ))
             .with_address(address_reservation)
             .metadata(metadata! {
                 init {
@@ -280,19 +290,13 @@ mod ape_in_hook {
         fn hook(
             &mut self,
             mut argument: HookArgument,
-            hook_badge_bucket: FungibleBucket,
+            hook_badge_bucket: Option<FungibleBucket>,
         ) -> (
-            FungibleBucket,
+            Option<FungibleBucket>,
             Option<Bucket>, // This is always None
             Vec<AnyPoolEvent>,
             Vec<HookArgument>,
         ) {
-
-            // Make sure RadixPump is the caller
-            assert!(
-                hook_badge_bucket.resource_address() == self.hook_badge_address && hook_badge_bucket.amount() == Decimal::ONE,
-                "Wrong badge",
-            );
 
             // Proceed only for PostQuickLaunch operations and if some buyer joined
             if argument.operation != HookableOperation::PostQuickLaunch || self.last_buyer_id == 0 {
@@ -320,7 +324,7 @@ mod ape_in_hook {
             let base_coin_bucket = self.base_coin_vault.take(self.base_coins_per_launch * buyers);
 
             // Buy the launched coin
-            let (coin_bucket, new_hook_argument, event) = hook_badge_bucket.authorize_with_amount(
+            let (coin_bucket, new_hook_argument, event) = hook_badge_bucket.as_ref().unwrap().authorize_with_amount(
                     1,
                     || argument.component.buy(base_coin_bucket)
             );

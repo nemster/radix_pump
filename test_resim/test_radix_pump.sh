@@ -148,10 +148,9 @@ resim call-function ${radix_pump_package} RadixPump new ${owner_badge} ${base_co
 export radix_pump_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 export creator_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export flash_loan_nft=$(grep 'Resource:' $OUTPUTFILE | head -n 2 | tail -n 1 | cut -d ' ' -f 3)
-export hooks_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 3 | tail -n 1 | cut -d ' ' -f 3)
-export ro_hooks_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 4 | tail -n 1 | cut -d ' ' -f 3)
-export integrator_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 6 | tail -n 1 | cut -d ' ' -f 3)
-echo -e "RadixPump component: ${radix_pump_component}\nCreator badge: ${creator_badge}\nFlash loan transient NFT: ${flash_loan_nft}\nHooks authentication badge: ${hooks_badge}\nRead only hooks authentication badge: ${ro_hooks_badge}\nIntegrator badge: ${integrator_badge}"
+export proxy_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 4 | tail -n 1 | cut -d ' ' -f 3)
+export integrator_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 5 | tail -n 1 | cut -d ' ' -f 3)
+echo -e "RadixPump component: ${radix_pump_component}\nCreator badge: ${creator_badge}\nFlash loan transient NFT: ${flash_loan_nft}\nProxy badge: ${proxy_badge}\nIntegrator badge: ${integrator_badge}"
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
@@ -174,8 +173,8 @@ export hooks_package=$(grep 'Success! New Package:' $OUTPUTFILE | cut -d ' ' -f 
 echo Hooks package: ${hooks_package}
 
 echo
-echo resim call-function ${hooks_package} TestHook0 new ${owner_badge} ${hooks_badge} ${base_coin}:100
-resim call-function ${hooks_package} TestHook0 new ${owner_badge} ${hooks_badge} ${base_coin}:100 >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-function ${hooks_package} TestHook0 new ${owner_badge} ${proxy_badge} ${base_coin}:100
+resim call-function ${hooks_package} TestHook0 new ${owner_badge} ${proxy_badge} ${base_coin}:100 >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export test_hook0_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 echo -e "TestHook0 component: ${test_hook0_component}"
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -190,8 +189,8 @@ echo Registered hook ${hook_name} for operations ${operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
-echo resim call-function ${hooks_package} TestHook1 new ${owner_badge} ${hooks_badge}
-resim call-function ${hooks_package} TestHook1 new ${owner_badge} ${hooks_badge} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-function ${hooks_package} TestHook1 new ${owner_badge} ${proxy_badge}
+resim call-function ${hooks_package} TestHook1 new ${owner_badge} ${proxy_badge} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export test_hook1_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 export test_hook1_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 echo -e "TestHook1 component: ${test_hook1_component}\nTestHook2 coin: ${test_hook1_coin}"
@@ -207,8 +206,8 @@ echo Registered hook ${hook_name} for operations ${operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
-echo resim call-function ${hooks_package} TestHook2 new ${owner_badge} ${ro_hooks_badge}
-resim call-function ${hooks_package} TestHook2 new ${owner_badge} ${ro_hooks_badge} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-function ${hooks_package} TestHook2 new ${owner_badge} ${proxy_badge}
+resim call-function ${hooks_package} TestHook2 new ${owner_badge} ${proxy_badge} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export test_hook2_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 export test_hook2_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 echo -e "TestHook2 component: ${test_hook2_component}\nTestHook2 coin: ${test_hook2_coin}"

@@ -23,7 +23,7 @@ overflow-checks = true # Panic in the case of an overflow.
 
 [workspace]
 resolver = "2"
-members= ["radix_pump", "hooks/test_hooks", "hooks/ape_in", "hooks/lp_rewards", "random_component"]
+members= ["radix_pump", "hooks/test_hooks", "hooks/ape_in", "hooks/lp_rewards", "hooks/limit_buy", "random_component"]
 
 [workspace.lints.clippy]
 arithmetic_side_effects = "warn"

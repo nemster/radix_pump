@@ -324,6 +324,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e9489c2807c139ffd9c1794f4af0ebe86a828db53ecdc7fea2111d0fed085d1"
 
 [[package]]
+name = "limit_buy_hook"
+version = "1.0.0"
+dependencies = [
+ "cc",
+ "radix-common",
+ "radix-engine-interface",
+ "scrypto",
+ "scrypto-interface",
+]
+
+[[package]]
 name = "log"
 version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"

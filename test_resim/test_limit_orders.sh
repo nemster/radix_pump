@@ -123,17 +123,28 @@ resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${quick_launched_coin}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
-for I in $(seq 100)
+export orders=100
+for I in $(seq ${orders})
 do
     echo
+    update_wallet_amounts
     export price=$(echo "scale=18; $RANDOM / 5461 + 5" | bc)
     export amount=$(echo "scale=18; $RANDOM / 1638 + 1" | bc)
     echo resim call-method ${limit_buy_component} new_order ${base_coin}:${amount} ${quick_launched_coin} ${price}
     resim call-method ${limit_buy_component} new_order ${base_coin}:${amount} ${quick_launched_coin} ${price} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
     export buy_order_nft_id="#$(grep -A 1 "ResAddr: ${buy_order_nft}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
-    echo Inserted order ${buy_order_nft_id}: price: ${price}, base coin amount: ${amount}
+    if [ "${buy_order_nft_id}" == "##" ]
+    then
+	echo Tried to insert an order at price: ${price}, base coin amount: ${amount}, received $(increase_in_wallet ${quick_launched_coin}) coins instead
+    else
+        echo Inserted order ${buy_order_nft_id}: price: ${price}, base coin amount: ${amount}
+    fi
     grep 'Transaction Cost: ' $OUTPUTFILE
 done
+
+echo
+export orders_nfts=$(resim show ${account} | grep LimitBuyOrder | cut -d ' ' -f 3)
+echo Done ${orders} orders, some of them were matched immediately so there are only ${orders_nfts} LimitBuyOrder NFTs in the wallet
 
 echo
 export integrator_id=0
@@ -144,22 +155,33 @@ export filled_orders=$(($last - $first - 2))
 echo Sold ${quick_launched_coin_received} ${quick_launched_coin}, this triggered ${hook_name} that matched $filled_orders orders
 grep 'Transaction Cost: ' $OUTPUTFILE
 
-for I in $(seq 100)
+for I in $(seq ${orders_nfts})
 do
     echo
     update_wallet_amounts
-    echo resim call-method ${limit_buy_component} withdraw "${buy_order_nft}:#$I#" true
-    resim call-method ${limit_buy_component} withdraw "${buy_order_nft}:#$I#" true >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-    echo "Attempted withdraw of bought coins from order id #$I#, $(increase_in_wallet ${quick_launched_coin}) ${quick_launched_coin} received"
+    if [ $RANDOM -gt 16384 ]
+    then
+        export coins_only=true
+    else
+        export coins_only=false
+    fi
+    echo resim call-method ${limit_buy_component} withdraw "${buy_order_nft}:#$I#" $coins_only
+    resim call-method ${limit_buy_component} withdraw "${buy_order_nft}:#$I#" $coins_only >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+    echo "Withdraw of order id #$I# with option $coins_only, $(increase_in_wallet ${quick_launched_coin}) coins received, $(increase_in_wallet ${base_coin}) base coins received"
     grep 'Transaction Cost: ' $OUTPUTFILE
 done
 
-for I in $(seq 100)
+echo
+export orders_nfts=$(resim show ${account} | grep LimitBuyOrder | cut -d ' ' -f 3)
+echo There are still ${orders_nfts} LimitBuyOrder NFTs in the wallet
+
+resim show $account | grep -A ${orders_nfts} LimitBuyOrder | grep -v LimitBuyOrder | cut -d ' ' -f 5 | while read buy_order_nft_id
 do
     echo
     update_wallet_amounts
-    echo resim call-method ${limit_buy_component} withdraw "${buy_order_nft}:#$I#" false
-    resim call-method ${limit_buy_component} withdraw "${buy_order_nft}:#$I#" false >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
-    echo "Attempted withdraw of base coins from order id #$I#, $(increase_in_wallet ${base_coin}) ${base_coin} received"
+    echo resim call-method ${limit_buy_component} withdraw "${buy_order_nft}:${buy_order_nft_id}" false
+    resim call-method ${limit_buy_component} withdraw "${buy_order_nft}:${buy_order_nft_id}" false >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+    echo "Withdraw of order id ${buy_order_nft_id} with option false, $(increase_in_wallet ${quick_launched_coin}) coins received, $(increase_in_wallet ${base_coin}) base coins received"
     grep 'Transaction Cost: ' $OUTPUTFILE
 done
+

@@ -132,7 +132,7 @@ mod limit_buy_hook {
             coin_to_buy: ResourceAddress,
             price: Decimal,
 
-        ) -> Bucket // LimitBuyOrder NFT
+        ) -> Vec<Bucket>
         {
             assert!(
                 base_coin_bucket.resource_address() == self.base_coin_vault.resource_address(),
@@ -145,6 +145,15 @@ mod limit_buy_hook {
                 pool_info.pool_mode != PoolMode::Liquidation,
                 "Pool in liquidation mode",
             );
+
+            let base_coin_amount = pool_info.coin_amount * price * ((100 - pool_info.total_buy_fee_percentage) / 100) - pool_info.base_coin_amount;
+            if base_coin_amount > base_coin_bucket.amount() {
+                let (coin_bucket, mut vec1, mut vec2): (Bucket, Vec<Bucket>, Vec<Bucket>) =
+                    self.radix_pump_component.call("swap", &(base_coin_bucket, coin_to_buy, 0u64));
+                vec1.push(coin_bucket);
+                vec1.append(&mut vec2);
+                return vec1;
+            }
 
             self.last_order_id += 1;
             let order = LimitBuyOrder::new(base_coin_bucket.amount());
@@ -192,7 +201,7 @@ mod limit_buy_hook {
 
             self.base_coin_vault.put(base_coin_bucket);
 
-            order_nft
+            vec![order_nft]
         }
 
         pub fn withdraw(
@@ -306,7 +315,7 @@ mod limit_buy_hook {
 
                 // Compute the number of base coins I can spend to buy at the desired price or this
                 // order (can be less than zero if the price is higher than the desired one)
-                let base_coin_amount = pool_info.coin_amount * *order_ref.get_price() - pool_info.base_coin_amount;
+                let base_coin_amount = pool_info.coin_amount * *order_ref.get_price() * ((100 - pool_info.total_buy_fee_percentage) / 100) - pool_info.base_coin_amount;
 
                 // If the orders with higher priority can already buy more than this amount, no deal
                 // for this order and the following

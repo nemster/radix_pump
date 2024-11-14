@@ -3,6 +3,9 @@ use crate::common::*;
 use scrypto_interface::*;
 use crate::order::*;
 
+// This blueprint implements a Limit buy order system as a hook for RadixPump.
+// RadixPump must invoke this hook when a sell operation happens on a pool
+
 // NonFungibleData for the limit buy order NFT
 #[derive(ScryptoSbor, NonFungibleData)]
 struct LimitBuyOrderData {
@@ -12,6 +15,7 @@ struct LimitBuyOrderData {
     price: Decimal,
 }
 
+// Emit this event when one or more orders are filled or partially filled
 #[derive(ScryptoSbor, ScryptoEvent)]
 struct MatchedOrderEvent {
     coin: ResourceAddress,
@@ -19,6 +23,7 @@ struct MatchedOrderEvent {
     partially_filled_orders_id: Option<u32>,
 }
 
+// Limits to avoid transaction fees can grow too much
 static MAX_MATCHING_ORDERS: usize = 50;
 static MAX_ACTIVE_ORDERS_PER_COIN: usize = 500;
 
@@ -47,12 +52,29 @@ mod limit_buy_hook {
     }
 
     struct LimitBuyHook {
+
+        // The vault where all of the base coins for the active orders are kept
         base_coin_vault: Vault,
+
+        // The resource manager to mint BuyOrder NFTs
         orders_resource_manager: ResourceManager,
+
+        // The numeric id of the last created order
         last_order_id: u32,
+
+        // This KVS contains information on the base coin and coin amounts of all of the present and past orders
         orders: KeyValueStore<u32, LimitBuyOrder>,
+
+        // This KVS contains one order book for each coin
+        // In this simple implementation the order book is just a vector sorted by decreasing price
+        // and increasing id
         active_orders: KeyValueStore<ResourceAddress, Vec<LimitBuyOrderRef>>,
+
+        // The address of the RadixPump component, it is used to perform some checks when a new
+        // order is created
         radix_pump_component: Global<AnyComponent>,
+
+        // The vaults where the different bought coins are stored
         coins_vaults: KeyValueStore<ResourceAddress, Vault>,
     }
 
@@ -126,13 +148,21 @@ mod limit_buy_hook {
             .globalize()
         }
 
+        // Users can call this method to create a new order
         pub fn new_order(
             &mut self,
-            base_coin_bucket: Bucket,
+
+            // The bucket of base coins to buy coins with
+            mut base_coin_bucket: Bucket,
+
+            // Which coin must be bought
             coin_to_buy: ResourceAddress,
+
+            // The desired price
             price: Decimal,
 
-        ) -> Vec<Bucket>
+        ) -> Vec<Bucket> // This can contain just the LimitOrder NFT or the bought coins if the
+                         // order can be immediately filled or both if case of a partial fill
         {
             assert!(
                 base_coin_bucket.resource_address() == self.base_coin_vault.resource_address(),
@@ -146,15 +176,57 @@ mod limit_buy_hook {
                 "Pool in liquidation mode",
             );
 
-            let base_coin_amount = pool_info.coin_amount * price * ((100 - pool_info.total_buy_fee_percentage) / 100) - pool_info.base_coin_amount;
-            if base_coin_amount > base_coin_bucket.amount() {
-                let (coin_bucket, mut vec1, mut vec2): (Bucket, Vec<Bucket>, Vec<Bucket>) =
-                    self.radix_pump_component.call("swap", &(base_coin_bucket, coin_to_buy, 0u64));
-                vec1.push(coin_bucket);
-                vec1.append(&mut vec2);
-                return vec1;
+            let mut buckets: Vec<Bucket> = vec![];
+
+            // This is the number of base coins that should be spend to make the coin reach the
+            // desired price
+            // It can be a negative number if the current price is higher than the desired one, or
+            // a positive number in it's lower
+            let base_coin_amount_to_sell = pool_info.coin_amount * price * 
+                ((100 - pool_info.total_buy_fee_percentage) / 100) -
+                pool_info.base_coin_amount;
+
+            // If base_coin_amount_to_sell is bigger than zero we have a match
+            if base_coin_amount_to_sell > Decimal::ZERO {
+
+                // Fill or partial fill?
+                if base_coin_amount_to_sell >= base_coin_bucket.amount() {
+
+                    // The order can be filled by buying coins fron the RadixPump component (we
+                    // have no hook badge now to talk directly to the pool)
+                    let (coin_bucket, mut vec1, mut vec2): (Bucket, Vec<Bucket>, Vec<Bucket>) = 
+                        self.radix_pump_component.call("swap", &(base_coin_bucket, coin_to_buy, 0u64));
+
+                    // Put all of the buckets received by RadixPump into one vector
+                    buckets.push(coin_bucket);
+                    buckets.append(&mut vec1);
+                    buckets.append(&mut vec2);
+
+                    return buckets;
+                } else {
+
+                    // Order partially filled, only a part of base_coin_bucket is used
+                    let (coin_bucket, mut vec1, mut vec2): (Bucket, Vec<Bucket>, Vec<Bucket>) = 
+                        self.radix_pump_component.call(
+                            "swap",
+                            &(
+                                base_coin_bucket.take_advanced(
+                                    base_coin_amount_to_sell,
+                                    WithdrawStrategy::Rounded(RoundingMode::ToZero)
+                                ),
+                                coin_to_buy,
+                                0u64
+                            )
+                        );
+
+                    // Put all of the buckets received by RadixPump into one vector
+                    buckets.push(coin_bucket);
+                    buckets.append(&mut vec1);
+                    buckets.append(&mut vec2);
+                }
             }
 
+            // Create a LimitBuyOrder object and store it in the KVS
             self.last_order_id += 1;
             let order = LimitBuyOrder::new(base_coin_bucket.amount());
             self.orders.insert(
@@ -162,6 +234,7 @@ mod limit_buy_hook {
                 order,
             );
 
+            // Create a LimitBuyOrderRef object too and add it to the active orders
             let order_ref = LimitBuyOrderRef::new(
                 self.last_order_id,
                 price,
@@ -171,6 +244,7 @@ mod limit_buy_hook {
                 None => {
                     drop(active_orders);
 
+                    // Create an order book with just this order in it
                     self.active_orders.insert(
                         coin_to_buy,
                         vec![order_ref]
@@ -182,6 +256,8 @@ mod limit_buy_hook {
                         "This orderbook is full",
                     );
 
+                    // The order book is sorted by decreasing price and increasing id
+                    // Find the right place to insert the new order
                     match active_orders.binary_search(&order_ref) {
                         Ok(_) => Runtime::panic("Should not happen".to_string()),
                         Err(pos) => active_orders.insert(pos, order_ref),
@@ -189,6 +265,8 @@ mod limit_buy_hook {
                 }
             }
 
+            // Mint an NFT for the user with visible informations about the order in it, then add
+            // it to the vec of buckets for the user
             let order_nft = self.orders_resource_manager.mint_non_fungible(
                 &NonFungibleLocalId::integer(self.last_order_id.into()),
                 LimitBuyOrderData {
@@ -198,10 +276,12 @@ mod limit_buy_hook {
                     price: price,
                 }
             );
+            buckets.push(order_nft);
 
+            // Put the base coins in the shared vault
             self.base_coin_vault.put(base_coin_bucket);
 
-            vec![order_nft]
+            buckets
         }
 
         pub fn withdraw(

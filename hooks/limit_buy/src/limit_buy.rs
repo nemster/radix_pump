@@ -387,9 +387,10 @@ mod limit_buy_hook {
 
             let mut filled_orders_id: Vec<u32> = vec![];
 
-            for (pos, order_ref) in active_orders.iter().enumerate() {
+            for (pos, order_ref) in active_orders.iter().rev().enumerate() {
 
                 if pos >= MAX_MATCHING_ORDERS {
+                    first_non_filled_order_pos = active_orders.len() - pos - 1;
                     break;
                 }
 
@@ -400,6 +401,7 @@ mod limit_buy_hook {
                 // If the orders with higher priority can already buy more than this amount, no deal
                 // for this order and the following
                 if base_coin_amount <= base_coin_amount_so_far {
+                    first_non_filled_order_pos = active_orders.len() - pos - 1;
                     break;
                 }
 
@@ -408,7 +410,6 @@ mod limit_buy_hook {
                 if base_coin_amount - base_coin_amount_so_far > *order.get_base_coin_amount() {
 
                     // Order filled
-                    first_non_filled_order_pos = pos + 1;
                     base_coin_amount_so_far += *order.get_base_coin_amount();
                 } else {
 
@@ -416,6 +417,7 @@ mod limit_buy_hook {
                     partial_filled_order_amount = base_coin_amount - base_coin_amount_so_far;
                     base_coin_amount_so_far = base_coin_amount;
                     partial_filled_order_id = Some(*order_ref.get_id());
+                    first_non_filled_order_pos = active_orders.len() - pos - 1;
 
                     break
                 }
@@ -438,17 +440,19 @@ mod limit_buy_hook {
             let bought_price = base_coin_amount_so_far / coin_bucket.amount();
 
             // Remove filled orders from self.active_orders
-            if first_non_filled_order_pos > 0 {
-                for order_ref in active_orders.drain(0..first_non_filled_order_pos as usize) {
+            if first_non_filled_order_pos < active_orders.len() - 1 {
+                for i in (first_non_filled_order_pos + 1)..active_orders.len() {
+                    let order_ref = &active_orders[i];
                     let id = order_ref.get_id();
                     self.orders.get_mut(id).unwrap().fill(bought_price);
                     filled_orders_id.push(*id);
                 }
+                active_orders.truncate(first_non_filled_order_pos + 1);
             }
 
-            // If an order has been partially filled now it is the first one, update its bought_amount
+            // update the partially filled order too (if any)
             if partial_filled_order_amount > Decimal::ZERO {
-                let id = active_orders[0].get_id();
+                let id = active_orders[first_non_filled_order_pos].get_id();
                 self.orders.get_mut(id).unwrap().partially_fill(
                     partial_filled_order_amount,
                     bought_price,

@@ -99,17 +99,17 @@ impl LimitBuyOrderRef {
 
 impl PartialEq for LimitBuyOrderRef {
     fn eq(&self, other: &Self) -> bool {
-        self.price.eq(&other.price) && self.id.eq(&other.id)
+        self.id.eq(&other.id)
     }
 }
 
-// LimitBuyOrderRef are sortable by (reverse price, id)
+// LimitBuyOrderRef are sortable by (price, reverse id)
 impl Ord for LimitBuyOrderRef {
     fn cmp(&self, other: &Self) -> Ordering {
-        let price_cmp = other.price.cmp(&self.price);
+        let price_cmp = self.price.cmp(&other.price);
 
         if price_cmp == Ordering::Equal {
-           self.id.cmp(&other.id)
+           other.id.cmp(&self.id)
         } else {
             price_cmp
         }

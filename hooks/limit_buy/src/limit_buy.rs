@@ -13,6 +13,10 @@ struct LimitBuyOrderData {
     base_coin_amount: Decimal,
     coin_to_buy: ResourceAddress,
     price: Decimal,
+    #[mutable]
+    unfilled_amount: Decimal,
+    #[mutable]
+    coin_amount_bought: Decimal,
 }
 
 // Emit this event when one or more orders are filled or partially filled
@@ -24,7 +28,7 @@ struct MatchedOrderEvent {
 }
 
 // Limits to avoid transaction fees can grow too much
-static MAX_MATCHING_ORDERS: usize = 50;
+static MAX_MATCHING_ORDERS: usize = 30;
 static MAX_ACTIVE_ORDERS_PER_COIN: usize = 500;
 
 #[blueprint_with_traits]
@@ -32,7 +36,6 @@ static MAX_ACTIVE_ORDERS_PER_COIN: usize = 500;
 #[types(
     ResourceAddress,
     u32,
-    LimitBuyOrder,
     Vec<LimitBuyOrderRef>,
     Vault,
     LimitBuyOrderData,
@@ -62,12 +65,8 @@ mod limit_buy_hook {
         // The numeric id of the last created order
         last_order_id: u32,
 
-        // This KVS contains information on the base coin and coin amounts of all of the present and past orders
-        orders: KeyValueStore<u32, LimitBuyOrder>,
-
-        // This KVS contains one order book for each coin
-        // In this simple implementation the order book is just a vector sorted by decreasing price
-        // and increasing id
+        // In this simple implementation the order book is just a vector sorted by increasing price
+        // and decreasing id
         active_orders: KeyValueStore<ResourceAddress, Vec<LimitBuyOrderRef>>,
 
         // The address of the RadixPump component, it is used to perform some checks when a new
@@ -122,6 +121,10 @@ mod limit_buy_hook {
                     "name" => "LimitBuyOrder", updatable;
                 }
             ))
+            .non_fungible_data_update_roles(non_fungible_data_update_roles!(
+                non_fungible_data_updater => rule!(require(global_caller(component_address)));
+                non_fungible_data_updater_updater => rule!(require(owner_badge_address));
+            ))
             .create_with_no_initial_supply();
 
             // Instantiate the component
@@ -129,7 +132,6 @@ mod limit_buy_hook {
                 base_coin_vault: Vault::new(base_coin_address),
                 orders_resource_manager: orders_resource_manager,
                 last_order_id: 0,
-                orders: KeyValueStore::new_with_registered_type(),
                 active_orders: KeyValueStore::new_with_registered_type(),
                 radix_pump_component: Global::from(radix_pump_component),
                 coins_vaults: KeyValueStore::new_with_registered_type(),
@@ -176,6 +178,7 @@ mod limit_buy_hook {
                 "Pool in liquidation mode",
             );
 
+            // Create the array of buckets to return
             let mut buckets: Vec<Bucket> = vec![];
 
             // This is the number of base coins that should be spend to make the coin reach the
@@ -226,15 +229,8 @@ mod limit_buy_hook {
                 }
             }
 
-            // Create a LimitBuyOrder object and store it in the KVS
-            self.last_order_id += 1;
-            let order = LimitBuyOrder::new(base_coin_bucket.amount());
-            self.orders.insert(
-                self.last_order_id,
-                order,
-            );
-
             // Create a LimitBuyOrderRef object too and add it to the active orders
+            self.last_order_id += 1;
             let order_ref = LimitBuyOrderRef::new(
                 self.last_order_id,
                 price,
@@ -256,7 +252,7 @@ mod limit_buy_hook {
                         "This orderbook is full",
                     );
 
-                    // The order book is sorted by decreasing price and increasing id
+                    // The order book is sorted by increasing price and decreasing id
                     // Find the right place to insert the new order
                     match active_orders.binary_search(&order_ref) {
                         Ok(_) => Runtime::panic("Should not happen".to_string()),
@@ -274,6 +270,8 @@ mod limit_buy_hook {
                     base_coin_amount: base_coin_bucket.amount(),
                     coin_to_buy: coin_to_buy,
                     price: price,
+                    unfilled_amount: base_coin_bucket.amount(),
+                    coin_amount_bought: Decimal::ZERO,
                 }
             );
             buckets.push(order_nft);
@@ -284,9 +282,12 @@ mod limit_buy_hook {
             buckets
         }
 
+        // Users can use this method to withdraw the bought coins so far (coins_only = true) or to cancel one or more
+        // active orders (coins_only = false)
+        // In case coins_only is true the order NFTs are returned back to the user, otherways they are burned
         pub fn withdraw(
             &mut self,
-            order_bucket: Bucket,
+            order_bucket: Bucket, // Order NFTs
             coins_only: bool,
         ) -> Vec<Bucket> {
             assert!(
@@ -294,14 +295,17 @@ mod limit_buy_hook {
                 "Unknown token",
             );
 
+            // Create the array of buckets to return
             let mut buckets: Vec<Bucket> = vec![];
+
+            // How many base coins to withdraw in case coins_only is false
             let mut base_coins_to_withdraw = Decimal::ZERO;
 
             // For each order NFT in the bucket
             for order_nft in order_bucket.as_non_fungible().non_fungibles::<LimitBuyOrderData>().iter() {
 
+                // Get data and id of the NFT
                 let order_data = order_nft.data();
-
                 let id = u32::try_from(
                     match order_nft.local_id() {
                         NonFungibleLocalId::Integer(id) => id.value(),
@@ -309,18 +313,28 @@ mod limit_buy_hook {
                     }
                 )
                 .unwrap();
-                let mut order = self.orders.get_mut(&id).unwrap();
 
-                let mut vault = self.coins_vaults.get_mut(&order_data.coin_to_buy).unwrap();
-                let bucket = vault.take(*order.get_bought_amount());
-                buckets.push(bucket);
+                // Take the bought coins and put them in the vector of buckets
+                if order_data.coin_amount_bought > Decimal::ZERO {
+                    let mut vault = self.coins_vaults.get_mut(&order_data.coin_to_buy).unwrap();
+                    let bucket = vault.take(order_data.coin_amount_bought);
+                    buckets.push(bucket);
+                }
 
                 if coins_only {
-                    order.coins_withdrawn();
-                } else {
-                    let base_coins_in_this_order = order.get_base_coin_amount();
 
-                    if  *base_coins_in_this_order > Decimal::ZERO {
+                    // Update the bought coin amount in the NFT only if the NFT will not be burned
+                    self.orders_resource_manager.update_non_fungible_data(
+                        &NonFungibleLocalId::Integer((id as u64).into()),
+                        "coin_amount_bought",
+                        Decimal::ZERO
+                    );
+
+                } else {
+
+                    // If the order has to be closed, remove it from the active orders list and
+                    // add the amount of unfilled base coins to the total to withdraw
+                    if order_data.unfilled_amount > Decimal::ZERO {
                         let mut active_orders = self.active_orders.get_mut(&order_data.coin_to_buy).unwrap();
                         let order_ref = LimitBuyOrderRef::new(id, order_data.price); 
                         let pos = active_orders.binary_search(&order_ref);
@@ -328,19 +342,29 @@ mod limit_buy_hook {
                             Ok(pos) => { active_orders.remove(pos); },
                             Err(_) => {},
                         }
-
-                        base_coins_to_withdraw += *base_coins_in_this_order;
+                        base_coins_to_withdraw += order_data.unfilled_amount;
                     }
                 }
             }
 
             if coins_only {
+
+                // If the orders doesn't have to be closed, return them to the user
                 buckets.push(order_bucket);
+
             } else {
+
+                // If there are leftover base coins in the closing orders, take them
                 if base_coins_to_withdraw > Decimal::ZERO {
-                    buckets.push(self.base_coin_vault.take(base_coins_to_withdraw));
+                    buckets.push(
+                        self.base_coin_vault.take_advanced(
+                            base_coins_to_withdraw,
+                            WithdrawStrategy::Rounded(RoundingMode::ToZero)
+                        )
+                    );
                 }
 
+                // Burn all of the order NFTs
                 order_bucket.burn();
             }
 
@@ -387,8 +411,10 @@ mod limit_buy_hook {
 
             let mut filled_orders_id: Vec<u32> = vec![];
 
+            // Try to match the active orders starting from the end of the vector
             for (pos, order_ref) in active_orders.iter().rev().enumerate() {
 
+                // If too many orders have been matched, just stop here
                 if pos >= MAX_MATCHING_ORDERS {
                     first_non_filled_order_pos = active_orders.len() - pos - 1;
                     break;
@@ -405,15 +431,20 @@ mod limit_buy_hook {
                     break;
                 }
 
-                let order = self.orders.get(order_ref.get_id()).unwrap();
+                // Get the data of the current order
+                let order_data = self.orders_resource_manager.get_non_fungible_data::<LimitBuyOrderData>(
+                    &NonFungibleLocalId::Integer(((*order_ref.get_id()) as u64).into())
+                );
 
-                if base_coin_amount - base_coin_amount_so_far > *order.get_base_coin_amount() {
+                // Compare buyable amount to the order unfilled amount
+                if base_coin_amount - base_coin_amount_so_far > order_data.unfilled_amount {
 
                     // Order filled
-                    base_coin_amount_so_far += *order.get_base_coin_amount();
+                    base_coin_amount_so_far += order_data.unfilled_amount;
+
                 } else {
 
-                    // Order partially filled
+                    // Order partially filled, take note of the position and stop
                     partial_filled_order_amount = base_coin_amount - base_coin_amount_so_far;
                     base_coin_amount_so_far = base_coin_amount;
                     partial_filled_order_id = Some(*order_ref.get_id());
@@ -423,15 +454,18 @@ mod limit_buy_hook {
                 }
             }
 
+            // If no matches happened just stop
             if base_coin_amount_so_far == Decimal::ZERO {
                 return (hook_badge_bucket, None, vec![], vec![]);
             }
 
+            // Take the matched base coin amount out of the vault
             let base_coin_bucket = self.base_coin_vault.take_advanced(
                 base_coin_amount_so_far,
                 WithdrawStrategy::Rounded(RoundingMode::ToZero)
             );
 
+            // Use the hook badge to buy coins at the pool
             let (coin_bucket, _, event) = hook_badge_bucket.as_ref().unwrap().authorize_with_amount(
                 1,
                 || argument.component.buy(base_coin_bucket)
@@ -444,18 +478,51 @@ mod limit_buy_hook {
                 for i in (first_non_filled_order_pos + 1)..active_orders.len() {
                     let order_ref = &active_orders[i];
                     let id = order_ref.get_id();
-                    self.orders.get_mut(id).unwrap().fill(bought_price);
+                    let order_data = self.orders_resource_manager.get_non_fungible_data::<LimitBuyOrderData>(
+                        &NonFungibleLocalId::Integer(((*id) as u64).into())
+                    );
+
+                    // Update their bought amounts
+                    self.orders_resource_manager.update_non_fungible_data(
+                        &NonFungibleLocalId::Integer(((*id) as u64).into()),
+                        "coin_amount_bought",
+                        order_data.coin_amount_bought + order_data.unfilled_amount / bought_price
+                    );
+
+                    // Update their unfilled amount
+                    self.orders_resource_manager.update_non_fungible_data(
+                        &NonFungibleLocalId::Integer(((*id) as u64).into()),
+                        "unfilled_amount",
+                        Decimal::ZERO
+                    );
+                   
+                    // Add this order to the list of the filled ones (it will go in the event)
                     filled_orders_id.push(*id);
                 }
+
+                // Remove all of the filled orders from the active list
                 active_orders.truncate(first_non_filled_order_pos + 1);
             }
 
             // update the partially filled order too (if any)
             if partial_filled_order_amount > Decimal::ZERO {
                 let id = active_orders[first_non_filled_order_pos].get_id();
-                self.orders.get_mut(id).unwrap().partially_fill(
-                    partial_filled_order_amount,
-                    bought_price,
+                let order_data = self.orders_resource_manager.get_non_fungible_data::<LimitBuyOrderData>(
+                    &NonFungibleLocalId::Integer((*id as u64).into())
+                );
+
+                // Update the bought amounts
+                self.orders_resource_manager.update_non_fungible_data(
+                    &NonFungibleLocalId::Integer(((*id) as u64).into()),
+                    "coin_amount_bought",
+                    order_data.coin_amount_bought + partial_filled_order_amount / bought_price
+                );
+
+                // And the unfilled one
+                self.orders_resource_manager.update_non_fungible_data(
+                    &NonFungibleLocalId::Integer((*id as u64).into()),
+                    "unfilled_amount",
+                    order_data.unfilled_amount - partial_filled_order_amount
                 );
             }
 
@@ -472,6 +539,7 @@ mod limit_buy_hook {
                 coin_vault.unwrap().put(coin_bucket);
             }
 
+            // Emit an event to let the users know of their matched orders
             Runtime::emit_event(
                 MatchedOrderEvent {
                     coin: argument.coin_address,

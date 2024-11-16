@@ -317,7 +317,10 @@ mod limit_buy_hook {
                 // Take the bought coins and put them in the vector of buckets
                 if order_data.coin_amount_bought > Decimal::ZERO {
                     let mut vault = self.coins_vaults.get_mut(&order_data.coin_to_buy).unwrap();
-                    let bucket = vault.take(order_data.coin_amount_bought);
+                    let bucket = vault.take_advanced(
+                        order_data.coin_amount_bought,
+                        WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                    );
                     buckets.push(bucket);
                 }
 

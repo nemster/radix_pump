@@ -877,11 +877,12 @@ mod pool {
                     // In case the user provided too many base coins for the provided coins the pool just accept
                     // them (pump the price!)
                     // In case the user provided too few base coins the pool returns the excess coins.
-                    let return_bucket = coin_bucket.take(
+                    let return_bucket = coin_bucket.take_advanced(
                         max(
                             (coin_amount - expected_coin_amount).checked_truncate(RoundingMode::ToZero).unwrap(),
                             Decimal::ZERO,
-                        )
+                        ),
+                        WithdrawStrategy::Rounded(RoundingMode::ToZero),
                     );
                     coin_amount = PreciseDecimal::from(coin_bucket.amount());
 
@@ -998,7 +999,9 @@ mod pool {
                             (user_share * self.base_coin_vault.amount()).checked_truncate(RoundingMode::ToZero).unwrap(),
                             WithdrawStrategy::Rounded(RoundingMode::ToZero),
                         ),
-                        Some(self.coin_vault.take(amount)),
+                        Some(
+                            self.coin_vault.take(amount)
+                        ),
                         amount,
                     )
                 },

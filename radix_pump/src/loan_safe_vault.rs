@@ -54,7 +54,10 @@ impl LoanSafeVault {
 
     // Take coins from the Vault
     pub fn take(&mut self, amount: Decimal) -> Bucket {
-        self.vault.take(amount)
+        self.vault.take_advanced(
+            amount,
+            WithdrawStrategy::Rounded(RoundingMode::ToZero),
+        )
     }
 
     // Take coins from the Vault and take note of the taken amount
@@ -68,7 +71,10 @@ impl LoanSafeVault {
 
         self.ongoing_loan = amount;
 
-        self.vault.take(amount)
+        self.vault.take_advanced(
+            amount,
+            WithdrawStrategy::Rounded(RoundingMode::ToZero),
+        )
     }
 
     // Take put coins in the Vault and make sure they match the ongoing loan (more is ok)

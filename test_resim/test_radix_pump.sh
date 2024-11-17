@@ -182,7 +182,7 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 export hook_name=TestHook0
 export test_hook_component=${test_hook0_component}
-export operations='"PostBuy"'
+export operations='"Buy"'
 echo resim run register_hook.rtm
 resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
@@ -199,7 +199,7 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 export hook_name=TestHook1
 export test_hook_component=${test_hook1_component}
-export operations='"PostBuy"'
+export operations='"Buy"'
 echo resim run register_hook.rtm
 resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
@@ -216,21 +216,21 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 export hook_name=TestHook2
 export test_hook_component=${test_hook2_component}
-export operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch", "PostTerminateRandomLaunch", "PostBuy", "PostSell", "PostReturnFlashLoan", "PostBuyTicket", "PostRedeemWinningTicket", "PostRedeemLosingTicket", "PostAddLiquidity", "PostRemoveLiquidity"'
+export operations='"FairLaunch", "TerminateFairLaunch", "QuickLaunch", "RandomLaunch", "TerminateRandomLaunch", "Buy", "Sell", "ReturnFlashLoan", "BuyTicket", "RedeemWinningTicket", "RedeemLosingTicket", "AddLiquidity", "RemoveLiquidity"'
 echo resim run register_hook.rtm
 resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
-export globally_enabled_operations='"PostFairLaunch", "PostTerminateFairLaunch", "PostQuickLaunch", "PostRandomLaunch"'
+export globally_enabled_operations='"FairLaunch", "TerminateFairLaunch", "QuickLaunch", "RandomLaunch"'
 echo resim run owner_enable_hook.rtm
 resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
-export globally_disabled_operations='"PostFairLaunch"'
+export globally_disabled_operations='"FairLaunch"'
 echo resim run owner_disable_hook.rtm
 resim run owner_disable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally disabled hook ${hook_name} for operations ${globally_disabled_operations}
@@ -300,14 +300,14 @@ resim run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supp
 echo Tried to create a new coin with an insufficient base coin deposit and the transaction failed as expected
 
 echo
-export enabled_operations='"PostBuy", "PostSell", "PostReturnFlashLoan"'
+export enabled_operations='"Buy", "Sell", "ReturnFlashLoan"'
 echo resim run creator_enable_hook.rtm
 resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${quick_launched_coin}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
-export disabled_operations='"PostSell"'
+export disabled_operations='"Sell"'
 echo resim run creator_disable_hook.rtm
 resim run creator_disable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Disabled hook ${hook_name} for operations ${disabled_operations} on ${quick_launched_coin}
@@ -706,7 +706,7 @@ echo
 get_pool_info ${random_launched_coin}
 
 echo
-export enabled_operations='"PostRedeemLosingTicket"'
+export enabled_operations='"RedeemLosingTicket"'
 echo resim run creator_enable_hook.rtm
 resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${random_launched_coin}
@@ -845,7 +845,7 @@ get_pool_info $met
 
 echo
 export hook_name=TestHook0
-export globally_enabled_operations='"PostBuy"'
+export globally_enabled_operations='"Buy"'
 echo resim run owner_enable_hook.rtm
 resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
@@ -853,7 +853,7 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export hook_name=TestHook1
-export globally_enabled_operations='"PostBuy"'
+export globally_enabled_operations='"Buy"'
 echo resim run owner_enable_hook.rtm
 resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
@@ -861,7 +861,7 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export hook_name=TestHook2
-export globally_enabled_operations='"PostBuy"'
+export globally_enabled_operations='"Buy"'
 echo resim run owner_enable_hook.rtm
 resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}

@@ -64,14 +64,14 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 export hook_name=ApeIn
 export test_hook_component=${ape_in_hook_component}
-export operations='"PostQuickLaunch"'
+export operations='"QuickLaunch"'
 echo resim run register_hook.rtm
 resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operation ${operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
-export globally_enabled_operations='"PostQuickLaunch"'
+export globally_enabled_operations='"QuickLaunch"'
 echo resim run owner_enable_hook.rtm
 resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operation ${globally_enabled_operations}

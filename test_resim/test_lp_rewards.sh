@@ -88,14 +88,14 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 export hook_name=LpRewards
 export test_hook_component=${lp_rewards_component}
-export operations='"PostAddLiquidity", "PostRemoveLiquidity"'
+export operations='"AddLiquidity", "RemoveLiquidity"'
 echo resim run register_hook.rtm
 resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
-export globally_enabled_operations='"PostAddLiquidity"'
+export globally_enabled_operations='"AddLiquidity"'
 echo resim run owner_enable_hook.rtm
 resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operation ${globally_enabled_operations}
@@ -132,7 +132,7 @@ export reward_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 echo Created RewardCoin ${reward_coin}
 
 echo
-export enabled_operations='"PostRemoveLiquidity"'
+export enabled_operations='"RemoveLiquidity"'
 echo resim run creator_enable_hook.rtm
 resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${quick_launched_coin}

@@ -73,7 +73,8 @@ The flash loan fee is fixed (not a percentage), has no uppper limit and can be i
 Hooks are external components authomatically called by RadixPump when certain operations are performed.  
 
 The component owner can make hooks available by calling the `register_hook` method, he must specify the operations this hook can be attached to.  
-The available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket`, `PostRedeemLousingTicket`, `PostAddLiquidity` and `PostRemoveLiquidity`. I avoided `Pre` hooks to prevent frontrunning and sandwitch attacks.  
+The available operations are `FairLaunch`, `TerminateFairLaunch`, `QuickLaunch`, `RandomLaunch`, `TerminateRandomLaunch`, `Buy`, `Sell`, `ReturnFlashLoan`, `BuyTicket`, `RedeemWinningTicket`, `RedeemLousingTicket`, `AddLiquidity` and `RemoveLiquidity`.  
+All hooks are executed after the completion of the operation they are hooked to; this is to prevent frontrunning and sandwitch attacks.  
 
 Once an hook is registered the component owner can attach it to one or more operation globally (i.e. for all pools) via the `owner_enable_hook` method.
 A coin owner can attach a registered hook to operations happening on his coin.
@@ -816,7 +817,7 @@ CALL_METHOD
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<HOOK_NAME>` is the name that will be used to refer to this hook.  
-`<OPERATION>` is one of the operations the hooks can be attached to. Available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket`, `PostRedeemLousingTicket`, `PostAddLiquidity` and `PostRemoveLiquidity`.  
+`<OPERATION>` is one of the operations the hooks can be attached to. Available operations are `FairLaunch`, `TerminateFairLaunch`, `QuickLaunch`, `RandomLaunch`, `TerminateRandomLaunch`, `Buy`, `Sell`, `ReturnFlashLoan`, `BuyTicket`, `RedeemWinningTicket`, `RedeemLousingTicket`, `AddLiquidity` and `RemoveLiquidity`.  
 `<HOOK_ADDRESS>` is the component address of the hook.  
 
 ### unregister_hook
@@ -1210,9 +1211,9 @@ CALL_METHOD
 ;
 ```
 
-`<ACCOUNT_ADDRESS>` is the account containing the owner badge.
-`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.
-`<COMPONENT_ADDRESS>` is the address of the RadixPump component.
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<NAME>` is the name assigned to the integrator. It has no real use: it's just a reminder for the owner of the badges he created.  
 
 ### update_dapp_definition
@@ -1233,7 +1234,37 @@ CALL_METHOD
 ;
 ```
 
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<DAPP_DEFINITION>` is the address of the new dApp definition account; this will be set as metadata on all of the components and some resources.  
+
+### get_badges
+
+The component owner can call this method to get a proxy badge and an hook badge.  
+It can be useful to set up a Timer component or to replace the RadixPump component with a new one.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "get_badges"
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 
 ## Special thanks to:
 

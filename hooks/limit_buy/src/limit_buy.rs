@@ -389,9 +389,9 @@ mod limit_buy_hook {
             Vec<HookArgument>,
         ) {
 
-            // Proceed only for PostSell and PostAddLiquidity operations and if the pool is in Normal mode
-            if argument.operation != HookableOperation::PostSell &&
-                argument.operation != HookableOperation::PostAddLiquidity ||
+            // Proceed only for Sell and Timer operations and if the pool is in Normal mode
+            if argument.operation != HookableOperation::Sell &&
+                argument.operation != HookableOperation::Timer ||
                 argument.mode != PoolMode::Normal {
                 return (hook_badge_bucket, None, vec![], vec![]);
             }
@@ -459,7 +459,15 @@ mod limit_buy_hook {
 
             // If no matches happened just stop
             if base_coin_amount_so_far == Decimal::ZERO {
-                return (hook_badge_bucket, None, vec![], vec![]);
+                if argument.operation == HookableOperation::Timer {
+
+                    // If the hook was invoked by the timer, it's ok to panic so we don't waste
+                    // fees when doing nothing
+                    Runtime::panic("Nothing to do".to_string());
+
+                } else {
+                    return (hook_badge_bucket, None, vec![], vec![]);
+                }
             }
 
             // Take the matched base coin amount out of the vault

@@ -129,6 +129,7 @@ mod radix_pump {
             owner_disable_hook => restrict_to: [OWNER];
             new_integrator => restrict_to: [OWNER];
             update_dapp_definition => restrict_to: [OWNER];
+            get_badges => restrict_to: [OWNER];
 
             new_fair_launch => PUBLIC;
             new_quick_launch => PUBLIC;
@@ -172,6 +173,7 @@ mod radix_pump {
         owner_disable_hook => Free;
         new_integrator => Free;
         update_dapp_definition => Free;
+        get_badges => Free;
 
         new_fair_launch => Usd(dec!("0.05"));
         new_quick_launch => Usd(dec!("0.05"));
@@ -414,7 +416,7 @@ mod radix_pump {
                 }
             ))
             .mint_roles(mint_roles!(
-                minter => rule!(deny_all);
+                minter => rule!(require(global_caller(component_address)));
                 minter_updater => rule!(require(owner_badge_address));
             ))
             .burn_roles(burn_roles!(
@@ -439,7 +441,7 @@ mod radix_pump {
                 }
             ))
             .mint_roles(mint_roles!(
-                minter => rule!(deny_all);
+                minter => rule!(require(global_caller(component_address)));
                 minter_updater => rule!(require(owner_badge_address));
             ))
             .mint_initial_supply(dec![1]);
@@ -907,7 +909,7 @@ mod radix_pump {
                 PoolMode::Normal,
             );
 
-            // Execute global hooks for the PostQuickLaunch operation
+            // Execute global hooks for the QuickLaunch operation
             let buckets = self.execute_hooks(
                 &vec![vec![],vec![],vec![]],
                 &hook_argument,
@@ -1213,7 +1215,7 @@ mod radix_pump {
                 )
             );
 
-            // Get the list of hooks enabled for this pool for the PostReturnFlashLoan operation
+            // Get the list of hooks enabled for this pool for the ReturnFlashLoan operation
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
 
             // Drop the pool variable to avoid conflicts with borrows
@@ -1786,7 +1788,7 @@ mod radix_pump {
                             || pool.component_address.sell(coin_bucket)
                         );
 
-                    // Get the hook list for the PostSell operation on the pool
+                    // Get the hook list for the Sell operation on the pool
                     let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
 
                     // Drop the pool variable to prevent problems with borrow
@@ -1795,7 +1797,7 @@ mod radix_pump {
                     // Emit the SellEvent
                     self.emit_pool_event(event, 0);
 
-                    // Esecute hooks for the PostSell operation
+                    // Esecute hooks for the Sell operation
                     let buckets = self.execute_hooks(
                         &pool_enabled_hooks,
                         &hook_argument,
@@ -2141,7 +2143,7 @@ mod radix_pump {
                     )
                 );
 
-            // Get the list of hooks enabled on the pool for the PostBuyTicket operation
+            // Get the list of hooks enabled on the pool for the BuyTicket operation
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
 
             // Drop the pool to avoid conflicting borrows
@@ -2185,14 +2187,14 @@ mod radix_pump {
                 || pool.component_address.redeem_ticket(ticket_bucket)
             );
 
-            // If there were losing tickets, get the hook list for the PostRedeemLosingTicket
+            // If there were losing tickets, get the hook list for the RedeemLosingTicket
             // operation
             let pool_enabled_hooks_lose = match hook_argument_lose {
                 None => None,
                 Some(ref hook_argument) => Some(pool.enabled_hooks.get_all_hooks(hook_argument.operation)),
             };
 
-            // If there were winning tickets, get the hook list for the PostRedeemWinningTicket
+            // If there were winning tickets, get the hook list for the RedeemWinningTicket
             // operation
             let pool_enabled_hooks_win = match hook_argument_win {
                 None => None,
@@ -2202,7 +2204,7 @@ mod radix_pump {
             // Drop the pool variable to avoid conflicting borrows
             drop(pool);
 
-            // If there were losing tickets, invoke the enabled hooks for the PostRedeemLosingTicket
+            // If there were losing tickets, invoke the enabled hooks for the RedeemLosingTicket
             // operation
             let lose_buckets = match hook_argument_lose {
                 None => None,
@@ -2214,7 +2216,7 @@ mod radix_pump {
                 ),
             };
 
-            // If there were winning tickets, invoke the enabled hooks for the PostRedeemLosingTicket
+            // If there were winning tickets, invoke the enabled hooks for the RedeemLosingTicket
             // operation
             let win_buckets = match hook_argument_win {
                 None => None,
@@ -2274,7 +2276,7 @@ mod radix_pump {
                 self.update_mode_in_creator_nft(creator_id, mode.unwrap());
             }
 
-            // Execute hooks for the PostAddLiquidity operation
+            // Execute hooks for the AddLiquidity operation
             let buckets = self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
@@ -2308,7 +2310,7 @@ mod radix_pump {
                 || pool.component_address.remove_liquidity(lp_bucket)
             );
 
-            // Get the list of hooks for the PostRemoveLiquidity operation enabled on the pool and
+            // Get the list of hooks for the RemoveLiquidity operation enabled on the pool and
             // drop the pool variable
             let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
             drop(pool);
@@ -2343,8 +2345,8 @@ mod radix_pump {
 
         ) -> (
             Bucket, // Coin2
-            Vec<Bucket>, // Eventual buckets returned by hooks invoked for the PostSell operation
-            Vec<Bucket> // Eventual buckets returned by hooks invoked for the PostBuy operation
+            Vec<Bucket>, // Eventual buckets returned by hooks invoked for the Sell operation
+            Vec<Bucket> // Eventual buckets returned by hooks invoked for the Buy operation
         ) {
             // Verify that the swap makes sense
             assert!(
@@ -2380,14 +2382,14 @@ mod radix_pump {
                 );
                 base_coin_bucket = bucket;
 
-                // Find the hooks for the PostSell operation and drop the pool variable
+                // Find the hooks for the Sell operation and drop the pool variable
                 let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
                 drop(pool);
 
                 // Emit the SellEvent for coin1
                 self.emit_pool_event(event, integrator_id);
 
-                // Execute hooks for the PostSell operation
+                // Execute hooks for the Sell operation
                 buckets1 = self.execute_hooks(
                     &pool_enabled_hooks,
                     &hook_argument,
@@ -2423,14 +2425,14 @@ mod radix_pump {
                 );
                 coin2_bucket = bucket;
 
-                // Find the hooks for the PostBuy operation and drop the pool variable
+                // Find the hooks for the Buy operation and drop the pool variable
                 let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
                 drop(pool);
 
                 // Emit the BuyEvent for coin2
                 self.emit_pool_event(event, integrator_id);
 
-                // Execute hooks for the PostBuy operation
+                // Execute hooks for the Buy operation
                 buckets2 = self.execute_hooks(
                     &pool_enabled_hooks,
                     &hook_argument,
@@ -2650,6 +2652,25 @@ mod radix_pump {
             dapp_definition: ComponentAddress,
         ) {
             self.dapp_definition = dapp_definition;
+        }
+
+        // Returns a proxy badge and a hook badge; it can be useful to set up a Timer component or
+        // to replace the RadixPump component with a new one
+        // This method can only be called by the component owner
+        pub fn get_badges(&self) -> (
+            Bucket, // Proxy badge
+            Bucket, // Hook badge
+        ) {
+            (
+                ResourceManager::from_address(
+                    self.proxy_badge_vault.resource_address()
+                )
+                .mint(1),
+                ResourceManager::from_address(
+                    self.hook_badge_vault.resource_address()
+                )
+                .mint(1)
+            )
         }
     }
 }

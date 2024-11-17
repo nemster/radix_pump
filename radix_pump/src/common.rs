@@ -100,22 +100,35 @@ pub struct CreatorData {
     pub pool_mode: PoolMode,
 }
 
+// Non fungible data for scheduled operations
+#[derive(Debug, ScryptoSbor, NonFungibleData)]
+pub struct TimerBadge {
+    pub minute: String,
+    pub hour: String,
+    pub day_of_month: String,
+    pub month: String,
+    pub day_of_week: String,
+    pub random_delay: i64,
+    pub hook: String,
+}
+
 // List of pool operations a hook can be attached to
 #[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
 pub enum HookableOperation {
-    PostFairLaunch,             // launch method
-    PostTerminateFairLaunch,    // terminate_launch method
-    PostQuickLaunch,            // new_quick_launch method
-    PostRandomLaunch,           // launch method
-    PostTerminateRandomLaunch,  // terminate_launch method (last invocation)
-    PostBuy,                    // buy method
-    PostSell,                   // sell method
-    PostReturnFlashLoan,        // return_flash_loan method
-    PostBuyTicket,              // buy_ticket method
-    PostRedeemWinningTicket,    // redeem_ticket method
-    PostRedeemLosingTicket,     // redeem ticket method
-    PostAddLiquidity,           // add_liquidity method
-    PostRemoveLiquidity,        // remove_liquidity method
+    FairLaunch,             // launch method
+    TerminateFairLaunch,    // terminate_launch method
+    QuickLaunch,            // new_quick_launch method
+    RandomLaunch,           // launch method
+    TerminateRandomLaunch,  // terminate_launch method (last invocation)
+    Buy,                    // buy method
+    Sell,                   // sell method
+    ReturnFlashLoan,        // return_flash_loan method
+    BuyTicket,              // buy_ticket method
+    RedeemWinningTicket,    // redeem_ticket method
+    RedeemLosingTicket,     // redeem ticket method
+    AddLiquidity,           // add_liquidity method
+    RemoveLiquidity,        // remove_liquidity method
+    Timer,                  // used by the Timer component
 }
 
 // Event created by a pool launch method
@@ -304,27 +317,28 @@ pub struct HookArgument {
     pub operation: HookableOperation,
 
     // The meaning of the amount field depends on the operation:
-    // if PostBuy it is the bought amount of coins
-    // if PostSell it is the sold amount of coins
-    // if PostBuyTicket it is the number of bought tickets (integer)
-    // if PostRedeemLosingTicket it is the number of losing tickets reedemed (integer)
-    // if PostRedeemWinningTicket it is the number of winning tickets reedemed (integer)
-    // if PostAddLiquidity it is the amount of coins added to the pool
-    // if PostRemoveLiquidity it is the amount of coins withdrawn from the pool
-    // if PostFairLaunch or PostRandomLaunch it is None
-    // if PostTerminateFairLaunch or PostQuickLaunch or PostTerminateRandomLaunch it is the total supply of the coin
-    // if PostReturnFlashLoan it is the amount of coins returned
+    // if Buy it is the bought amount of coins
+    // if Sell it is the sold amount of coins
+    // if BuyTicket it is the number of bought tickets (integer)
+    // if RedeemLosingTicket it is the number of losing tickets reedemed (integer)
+    // if RedeemWinningTicket it is the number of winning tickets reedemed (integer)
+    // if AddLiquidity it is the amount of coins added to the pool
+    // if RemoveLiquidity it is the amount of coins withdrawn from the pool
+    // if FairLaunch or RandomLaunch it is None
+    // if TerminateFairLaunch or QuickLaunch or TerminateRandomLaunch it is the total supply of the coin
+    // if ReturnFlashLoan it is the amount of coins returned
     pub amount: Option<Decimal>,
 
     pub mode: PoolMode,
     pub price: Decimal,
 
     // The meaning of the ids field depends on the operation:
-    // if PostBuyTicket it is the list of ids of the bought tickets
-    // if PostRedeemLosingTicket it is the list of ids of the redeemed losing tickets
-    // if PostRedeemWinningTicket it is the list of ids of the redeemed winning tickets
-    // if PostAddLiquidity it is the id of the minted liquidity token
-    // if PostRemoveLiquidity it is the list of the ids of the burned liquidity tokens
+    // if BuyTicket it is the list of ids of the bought tickets
+    // if RedeemLosingTicket it is the list of ids of the redeemed losing tickets
+    // if RedeemWinningTicket it is the list of ids of the redeemed winning tickets
+    // if AddLiquidity it is the id of the minted liquidity token
+    // if RemoveLiquidity it is the list of the ids of the burned liquidity tokens
+    // if Timer it is the id of the TimerBadge
     // in any other case it is just an empty array
     pub ids: Vec<u64>,
 }

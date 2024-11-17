@@ -6,7 +6,7 @@ use std::cmp::*;
 // This blueprint implements a RadixPump hook that can let users automatically buy every quick launched coin.
 // Each user must deposit the same amount of base coins, at the component intantiation time it is
 // decided how many launches users will take part and how much they pay for each launch
-// It has to be enabled globally to the PostQuickLaunch operation, it does nothing if hooked to any
+// It has to be enabled globally to the QuickLaunch operation, it does nothing if hooked to any
 // other operation.
 
 // Avoid hitting transaction limits
@@ -298,8 +298,8 @@ mod ape_in_hook {
             Vec<HookArgument>,
         ) {
 
-            // Proceed only for PostQuickLaunch operations and if some buyer joined
-            if argument.operation != HookableOperation::PostQuickLaunch || self.last_buyer_id == 0 {
+            // Proceed only for QuickLaunch operations and if some buyer joined
+            if argument.operation != HookableOperation::QuickLaunch || self.last_buyer_id == 0 {
                 return (hook_badge_bucket, None, vec![], vec![]);
             }
 

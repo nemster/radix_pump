@@ -378,7 +378,7 @@ mod pool {
                         HookArgument {
                             component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
-                            operation: HookableOperation::PostBuy,
+                            operation: HookableOperation::Buy,
                             amount: Some(coin_amount_bought),
                             mode: PoolMode::Normal,
                             price: self.last_price,
@@ -431,7 +431,7 @@ mod pool {
                             HookArgument {
                                 component: Runtime::global_address().into(),
                                 coin_address: self.coin_vault.resource_address(),
-                                operation: HookableOperation::PostBuy,
+                                operation: HookableOperation::Buy,
                                 amount: Some(coin_bucket_amount),
                                 mode: PoolMode::Launching,
                                 price: self.last_price,
@@ -515,7 +515,7 @@ mod pool {
                         HookArgument {
                             component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
-                            operation: HookableOperation::PostSell,
+                            operation: HookableOperation::Sell,
                             amount: Some(coin_bucket_amount),
                             mode: PoolMode::Normal,
                             price: self.last_price,
@@ -552,7 +552,7 @@ mod pool {
                         HookArgument {
                             component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
-                            operation: HookableOperation::PostSell,
+                            operation: HookableOperation::Sell,
                             amount: Some(coin_bucket_amount),
                             mode: PoolMode::Liquidation,
                             price: self.last_price,
@@ -640,7 +640,7 @@ mod pool {
                         HookArgument { 
                             component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
-                            operation: HookableOperation::PostBuyTicket,
+                            operation: HookableOperation::BuyTicket,
                             amount: Some(Decimal::try_from(amount).unwrap()),
                             mode: PoolMode::Launching,
                             price: self.last_price,
@@ -746,7 +746,7 @@ mod pool {
                                         HookArgument { 
                                             component: Runtime::global_address().into(),
                                             coin_address: self.coin_vault.resource_address(),
-                                            operation: HookableOperation::PostRedeemLosingTicket,
+                                            operation: HookableOperation::RedeemLosingTicket,
                                             amount: Some(Decimal::try_from(losers.len()).unwrap()),
                                             mode: PoolMode::Normal,
                                             price: self.last_price,
@@ -761,7 +761,7 @@ mod pool {
                                         HookArgument { 
                                             component: Runtime::global_address().into(),
                                             coin_address: self.coin_vault.resource_address(),
-                                            operation: HookableOperation::PostRedeemWinningTicket,
+                                            operation: HookableOperation::RedeemWinningTicket,
                                             amount: Some(Decimal::try_from(winners.len()).unwrap()),
                                             mode: PoolMode::Normal,
                                             price: self.last_price,
@@ -800,7 +800,7 @@ mod pool {
                                     HookArgument { 
                                         component: Runtime::global_address().into(),
                                         coin_address: self.coin_vault.resource_address(),
-                                        operation: HookableOperation::PostRedeemLosingTicket,
+                                        operation: HookableOperation::RedeemLosingTicket,
                                         amount: Some(number_of_tickets),
                                         mode: PoolMode::Liquidation,
                                         price: self.last_price,
@@ -934,7 +934,7 @@ mod pool {
                 HookArgument {
                     component: Runtime::global_address().into(),
                     coin_address: self.coin_vault.resource_address(),
-                    operation: HookableOperation::PostAddLiquidity,
+                    operation: HookableOperation::AddLiquidity,
                     amount: Some(coin_amount.checked_truncate(RoundingMode::ToZero).unwrap()),
                     mode: PoolMode::Normal,
                     price: self.last_price,
@@ -1034,7 +1034,7 @@ mod pool {
                 HookArgument {
                     component: Runtime::global_address().into(),
                     coin_address: self.coin_vault.resource_address(),
-                    operation: HookableOperation::PostRemoveLiquidity,
+                    operation: HookableOperation::RemoveLiquidity,
                     amount: Some(amount),
                     mode: self.mode,
                     price: self.last_price,
@@ -1088,7 +1088,7 @@ mod pool {
                         HookArgument {
                             component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
-                            operation: HookableOperation::PostFairLaunch,
+                            operation: HookableOperation::FairLaunch,
                             amount: None,
                             mode: self.mode,
                             price: self.last_price,
@@ -1123,7 +1123,7 @@ mod pool {
                         HookArgument {
                             component: Runtime::global_address().into(),
                             coin_address: self.coin_vault.resource_address(),
-                            operation: HookableOperation::PostRandomLaunch,
+                            operation: HookableOperation::RandomLaunch,
                             amount: None,
                             mode: self.mode,
                             price: self.last_price,
@@ -1213,7 +1213,7 @@ mod pool {
                             HookArgument {
                                 component: Runtime::global_address().into(),
                                 coin_address: self.coin_vault.resource_address(),
-                                operation: HookableOperation::PostTerminateFairLaunch,
+                                operation: HookableOperation::TerminateFairLaunch,
                                 amount: supply,
                                 mode: PoolMode::Normal,
                                 price: self.last_price,
@@ -1483,7 +1483,7 @@ mod pool {
                 HookArgument { 
                     component: Runtime::global_address().into(),
                     coin_address: self.coin_vault.resource_address(),
-                    operation: HookableOperation::PostReturnFlashLoan,
+                    operation: HookableOperation::ReturnFlashLoan,
                     amount: Some(coin_bucket_amount),
                     mode: PoolMode::Normal,
                     price: self.last_price,
@@ -1986,7 +1986,7 @@ mod pool {
                 HookArgument {
                     component: component_address.into(),
                     coin_address: coin_address,
-                    operation: HookableOperation::PostQuickLaunch,
+                    operation: HookableOperation::QuickLaunch,
                     amount: Some(coin_supply),
                     mode: PoolMode::Normal,
                     price: coin_price,
@@ -2587,7 +2587,7 @@ mod pool {
                             HookArgument {
                                 component: Runtime::global_address().into(),
                                 coin_address: self.coin_vault.resource_address(),
-                                operation: HookableOperation::PostTerminateRandomLaunch,
+                                operation: HookableOperation::TerminateRandomLaunch,
                                 amount: supply,
                                 mode: PoolMode::Normal,
                                 price: self.last_price,

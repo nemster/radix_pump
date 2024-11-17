@@ -88,7 +88,7 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 export hook_name=LimitBuy
 export test_hook_component=${limit_buy_component}
-export operations='"PostSell"'
+export operations='"Sell"'
 echo resim run register_hook.rtm
 resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
@@ -117,7 +117,7 @@ echo Quick launched ${quick_launched_coin}, received ${quick_launched_coin_recei
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
-export enabled_operations='"PostSell"'
+export enabled_operations='"Sell"'
 echo resim run creator_enable_hook.rtm
 resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${quick_launched_coin}

@@ -89,8 +89,8 @@ echo
 export hook_name=LimitBuy
 export test_hook_component=${limit_buy_component}
 export operations='"Sell"'
-echo resim run register_hook.rtm
-resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/register_hook.rtm
+resim run manifests/register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -108,8 +108,8 @@ export price=10
 export buy_pool_fee=0.1
 export sell_pool_fee=0.1
 export flash_loan_pool_fee=1
-echo run new_quick_launch.rtm
-resim run new_quick_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo run manifests/new_quick_launch.rtm
+resim run manifests/new_quick_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export quick_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export quick_launched_coin_received=$(increase_in_wallet ${quick_launched_coin})
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
@@ -118,8 +118,8 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export enabled_operations='"Sell"'
-echo resim run creator_enable_hook.rtm
-resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/creator_enable_hook.rtm
+resim run manifests/creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${quick_launched_coin}
 grep 'Transaction Cost: ' $OUTPUTFILE
 

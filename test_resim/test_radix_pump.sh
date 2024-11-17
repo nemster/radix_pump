@@ -155,15 +155,15 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export forbidden_symbols='"XRD"'
-echo resim run forbid_symbols.rtm
-resim run forbid_symbols.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/forbid_symbols.rtm
+resim run manifests/forbid_symbols.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Symbols ${forbidden_symbols} forbidden
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export forbidden_names='"Radix"'
-echo resim run forbid_names.rtm
-resim run forbid_names.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/forbid_names.rtm
+resim run manifests/forbid_names.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Names ${forbidden_names} forbidden
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -183,8 +183,8 @@ echo
 export hook_name=TestHook0
 export test_hook_component=${test_hook0_component}
 export operations='"Buy"'
-echo resim run register_hook.rtm
-resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/register_hook.rtm
+resim run manifests/register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -200,8 +200,8 @@ echo
 export hook_name=TestHook1
 export test_hook_component=${test_hook1_component}
 export operations='"Buy"'
-echo resim run register_hook.rtm
-resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/register_hook.rtm
+resim run manifests/register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -217,22 +217,22 @@ echo
 export hook_name=TestHook2
 export test_hook_component=${test_hook2_component}
 export operations='"FairLaunch", "TerminateFairLaunch", "QuickLaunch", "RandomLaunch", "TerminateRandomLaunch", "Buy", "Sell", "ReturnFlashLoan", "BuyTicket", "RedeemWinningTicket", "RedeemLosingTicket", "AddLiquidity", "RemoveLiquidity"'
-echo resim run register_hook.rtm
-resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/register_hook.rtm
+resim run manifests/register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operations ${operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export globally_enabled_operations='"FairLaunch", "TerminateFairLaunch", "QuickLaunch", "RandomLaunch"'
-echo resim run owner_enable_hook.rtm
-resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/owner_enable_hook.rtm
+resim run manifests/owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export globally_disabled_operations='"FairLaunch"'
-echo resim run owner_disable_hook.rtm
-resim run owner_disable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/owner_disable_hook.rtm
+resim run manifests/owner_disable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally disabled hook ${hook_name} for operations ${globally_disabled_operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -250,8 +250,8 @@ export price=10
 export buy_pool_fee=0.1
 export sell_pool_fee=0.1
 export flash_loan_pool_fee=1
-echo run new_quick_launch.rtm
-resim run new_quick_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo run manifests/new_quick_launch.rtm
+resim run manifests/new_quick_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export quick_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export lp_quick=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
@@ -267,49 +267,49 @@ get_pool_info ${quick_launched_coin}
 
 echo
 export name=SameSymbolCoin
-echo resim run new_quick_launch.rtm
-resim run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/new_quick_launch.rtm
+resim run manifests/new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with the same symbol and the transaction failed as expected
 
 echo
 export symbol=QL2
 export name=QuickLaunchedCoin
-echo resim run new_quick_launch.rtm
-resim run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/new_quick_launch.rtm
+resim run manifests/new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with the same name and the transaction failed as expected
 
 echo
 export symbol=XRD
 export name=FakeRadix
-echo resim run new_quick_launch.rtm
-resim run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/new_quick_launch.rtm
+resim run manifests/new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with XRD as symbol and the transaction failed as expected
 
 echo
 export symbol=XXX
 export name=Radix
-echo resim run new_quick_launch.rtm
-resim run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/new_quick_launch.rtm
+resim run manifests/new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with Radix as name and the transaction failed as expected
 
 echo
 export base_coin_amount=$((${minimum_deposit} - 1))
 export name=YYY
-echo resim run new_quick_launch.rtm
-resim run new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/new_quick_launch.rtm
+resim run manifests/new_quick_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to create a new coin with an insufficient base coin deposit and the transaction failed as expected
 
 echo
 export enabled_operations='"Buy", "Sell", "ReturnFlashLoan"'
-echo resim run creator_enable_hook.rtm
-resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/creator_enable_hook.rtm
+resim run manifests/creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${quick_launched_coin}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export disabled_operations='"Sell"'
-echo resim run creator_disable_hook.rtm
-resim run creator_disable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/creator_disable_hook.rtm
+resim run manifests/creator_disable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Disabled hook ${hook_name} for operations ${disabled_operations} on ${quick_launched_coin}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -329,15 +329,15 @@ get_pool_info ${quick_launched_coin}
 
 echo
 update_wallet_amounts
-echo resim run owner_get_fees.rtm
-resim run owner_get_fees.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/owner_get_fees.rtm
+resim run manifests/owner_get_fees.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo "The component owner withdrawed $(increase_in_wallet ${base_coin}) ${base_coin} in fees (should be about ${collected_fees} - transaction cost)"
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 integrator_name="test"
-echo resim run new_integrator.rtm
-resim run new_integrator.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/new_integrator.rtm
+resim run manifests/new_integrator.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export integrator_id="$(grep -A 1 "ResAddr: ${integrator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)"
 export integrator_badge_id="#${integrator_id}#"
 echo Integrator badge ${integrator_badge_id} minted
@@ -357,8 +357,8 @@ get_pool_info ${quick_launched_coin}
 
 echo
 export burn_amount=100000000
-echo resim run burn.rtm
-resim run burn.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/burn.rtm
+resim run manifests/burn.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo The creator tried to burn $burn_amount ${quick_launched_coin}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -366,8 +366,8 @@ echo
 get_pool_info ${quick_launched_coin}
 
 echo
-echo resim run burn.rtm
-resim run burn.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/burn.rtm
+resim run manifests/burn.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo The creator tried to burn $burn_amount ${quick_launched_coin} but the transaction failed becaouse all of the excess coins have already been burned
 
 echo
@@ -382,8 +382,8 @@ export creator_locked_percentage=10
 export buy_pool_fee=5
 export sell_pool_fee=0.1
 export flash_loan_pool_fee=1
-echo resim run new_fair_launch.rtm
-resim run new_fair_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/new_fair_launch.rtm
+resim run manifests/new_fair_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export fair_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export creator_badge_id="#$(grep -A 1 "ResAddr: ${creator_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
 echo Fair launched ${fair_launched_coin}, received $(increase_in_wallet ${fair_launched_coin})
@@ -409,23 +409,23 @@ resim set-current-time $date
 echo Date is now $unix_epoch
 export end_launch_time=$(($unix_epoch + $min_launch_duration -1))
 export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration))
-echo resim run launch.rtm
-resim run launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/launch.rtm
+resim run manifests/launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to launch with a launching perdiod too short, the transaction faild as expected
 
 echo
 export end_launch_time=$(($unix_epoch + $min_launch_duration))
 export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration - 1))
-echo resim run launch.rtm
-resim run launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/launch.rtm
+resim run manifests/launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to launch with an unlocking perdiod too short, the transaction faild as expected
 
 echo
 update_wallet_amounts
 export end_launch_time=$(($unix_epoch + $min_launch_duration))
 export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration))
-echo resim run launch.rtm
-resim run launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/launch.rtm
+resim run manifests/launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Fair sale launched for ${fair_launched_coin}, received $(increase_in_wallet ${fair_launched_coin})
 echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -465,8 +465,8 @@ unix_epoch=$(($end_launch_time -1))
 date=$(date -u -d @$unix_epoch +"%Y-%m-%dT%H:%M:%SZ")
 resim set-current-time $date
 echo Date is now $unix_epoch
-echo resim run terminate_launch.rtm
-resim run terminate_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/terminate_launch.rtm
+resim run manifests/terminate_launch.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Tried to terminate launch ahead of time and the transaction failed as expected
 
 echo
@@ -474,8 +474,8 @@ date=$(date -u -d @$end_launch_time +"%Y-%m-%dT%H:%M:%SZ")
 resim set-current-time $date
 echo Date is now $end_launch_time
 update_wallet_amounts
-echo resim run terminate_launch.rtm
-resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/terminate_launch.rtm
+resim run manifests/terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Fair launch terminated for ${fair_launched_coin}, received $(increase_in_wallet ${fair_launched_coin})
 echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -503,8 +503,8 @@ echo Date is now $unix_epoch
 update_wallet_amounts
 export amount=100000
 export sell=false
-echo resim run unlock.rtm
-resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/unlock.rtm
+resim run manifests/unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Unlock up to $amount $fair_launched_coin, $(increase_in_wallet ${fair_launched_coin}) received
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -515,8 +515,8 @@ echo
 update_wallet_amounts
 export amount=100000
 export sell=false
-echo resim run unlock.rtm
-resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/unlock.rtm
+resim run manifests/unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Unlock up to $amount $fair_launched_coin, $(increase_in_wallet ${fair_launched_coin}) received
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -528,8 +528,8 @@ echo Date is now $unix_epoch
 update_wallet_amounts
 export amount=1
 export sell=true
-echo resim run unlock.rtm
-resim run unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/unlock.rtm
+resim run manifests/unlock.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Unlock up to $amount $fair_launched_coin and sell them, $(increase_in_wallet ${fair_launched_coin}) received
 echo $(increase_in_wallet ${base_coin}) ${base_coin} received
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -538,8 +538,8 @@ echo
 get_pool_info ${fair_launched_coin}
 
 echo
-echo resim run creator_set_liquidation_mode.rtm
-resim run creator_set_liquidation_mode.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/creator_set_liquidation_mode.rtm
+resim run manifests/creator_set_liquidation_mode.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo The coin creator set liquidation mode for $fair_launched_coin
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -547,8 +547,8 @@ echo
 get_pool_info ${fair_launched_coin}
 
 echo
-echo resim run unlock.rtm
-resim run unlock.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/unlock.rtm
+resim run manifests/unlock.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo The coin creator tried to unlock coins but the transaction failed because this is not allowed in Liquidation mode: creator coins are now locked forever
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -565,8 +565,8 @@ export coins_per_winning_ticket=10
 export buy_pool_fee=5
 export sell_pool_fee=0.1
 export flash_loan_pool_fee=1
-echo resim run new_random_launch.rtm
-resim run new_random_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/new_random_launch.rtm
+resim run manifests/new_random_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export random_ticket=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export random_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 2 | tail -n 1 | cut -d ' ' -f 3)
 export random_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 3 | tail -n 1 | cut -d ' ' -f 3)
@@ -591,8 +591,8 @@ echo
 update_wallet_amounts
 export end_launch_time=$(($unix_epoch + $min_launch_duration))
 export unlocking_time=$(($unix_epoch + $min_launch_duration + $min_lock_duration))
-echo resim run launch.rtm
-resim run launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/launch.rtm
+resim run manifests/launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Random sale launched for ${random_launched_coin}, received $(increase_in_wallet ${random_launched_coin})
 echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -611,8 +611,8 @@ echo
 export buy_pool_fee_percentage=0.1
 export sell_pool_fee_percentage=0.1
 export flash_loan_pool_fee=2
-echo resim run update_pool_fees.rtm
-resim run update_pool_fees.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/update_pool_fees.rtm
+resim run manifests/update_pool_fees.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Failed attempt to update fees during launch phase, this is not allowed
 
 echo
@@ -642,8 +642,8 @@ echo
 unix_epoch=$(($unix_epoch + 604800))
 date=$(date -u -d @$unix_epoch +"%Y-%m-%dT%H:%M:%SZ")
 resim set-current-time $date
-echo resim run terminate_launch.rtm
-resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/terminate_launch.rtm
+resim run manifests/terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Random launch termination started for ${random_launched_coin}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -661,8 +661,8 @@ echo Called the do_callback method of the random component
 
 echo
 update_wallet_amounts
-echo resim run terminate_launch.rtm
-resim run terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/terminate_launch.rtm
+resim run manifests/terminate_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Random launch termination completed for ${random_launched_coin}
 echo $(increase_in_wallet ${base_coin}) ${base_coin} received
 echo TestHook2 coin received: $(increase_in_wallet ${test_hook2_coin})
@@ -689,16 +689,16 @@ echo
 export buy_pool_fee_percentage=0.1
 export sell_pool_fee_percentage=0.2
 export flash_loan_pool_fee=3
-echo resim run update_pool_fees.rtm
-resim run update_pool_fees.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/update_pool_fees.rtm
+resim run manifests/update_pool_fees.rtm >$OUTPUTFILE && ( echo "This transaction was supposed to fail!" ; cat $OUTPUTFILE ; exit 1 )
 echo Transaction failed because the creator tried to increase sell_pool_fee_percentage
 
 echo
 export buy_pool_fee_percentage=0.1
 export sell_pool_fee_percentage=0.1
 export flash_loan_pool_fee=3
-echo resim run update_pool_fees.rtm
-resim run update_pool_fees.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/update_pool_fees.rtm
+resim run manifests/update_pool_fees.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Updated ${random_launched_coin} pool fees
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -707,8 +707,8 @@ get_pool_info ${random_launched_coin}
 
 echo
 export enabled_operations='"RedeemLosingTicket"'
-echo resim run creator_enable_hook.rtm
-resim run creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/creator_enable_hook.rtm
+resim run manifests/creator_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Enabled hook ${hook_name} for operations ${enabled_operations} on ${random_launched_coin}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -734,8 +734,8 @@ export coin=${random_launched_coin}
 export loan_amount=9
 export sell_amount=9
 export fee=$(($flash_loan_fee + $flash_loan_pool_fee))
-echo resim run flash_loan_attack_sell.rtm
-resim run flash_loan_attack_sell.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/flash_loan_attack_sell.rtm
+resim run manifests/flash_loan_attack_sell.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo "Tried to manipulate price via flash loan: get flash loan -> sell when the pool has few coins (so the price should be high) -> return loan -> buy"
 echo "${random_launched_coin} variation in wallet: $(increase_in_wallet ${random_launched_coin}) (if negative the attack failed)"
 grep 'Transaction Cost: ' $OUTPUTFILE
@@ -751,8 +751,8 @@ export base_coin_amount=12.149159002 # coin_amount x last_price
 export loan_amount=9
 export lp=${lp_random}
 export fee=$(($flash_loan_fee + $flash_loan_pool_fee))
-echo resim run flash_loan_attack_lp.rtm
-resim run flash_loan_attack_lp.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/flash_loan_attack_lp.rtm
+resim run manifests/flash_loan_attack_lp.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo "Tried to steal liquidity via flash loan: get flash loan -> add liquidity when the pool has few coins (so the share should be high) -> return loan -> withdraw liquidity"
 echo "${random_launched_coin} variation in wallet: $(increase_in_wallet ${random_launched_coin})"
 echo "${base_coin} variation in wallet: $(increase_in_wallet ${base_coin}) (if both are negative the attack failed)"
@@ -802,8 +802,8 @@ get_pool_info ${quick_launched_coin}
 
 echo
 update_wallet_amounts
-echo resim run integrator_get_fees.rtm
-resim run integrator_get_fees.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/integrator_get_fees.rtm
+resim run manifests/integrator_get_fees.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Integrator ${integrator_id} withdrawed $(increase_in_wallet ${base_coin}) ${base_coin}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -846,24 +846,24 @@ get_pool_info $met
 echo
 export hook_name=TestHook0
 export globally_enabled_operations='"Buy"'
-echo resim run owner_enable_hook.rtm
-resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/owner_enable_hook.rtm
+resim run manifests/owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export hook_name=TestHook1
 export globally_enabled_operations='"Buy"'
-echo resim run owner_enable_hook.rtm
-resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/owner_enable_hook.rtm
+resim run manifests/owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export hook_name=TestHook2
 export globally_enabled_operations='"Buy"'
-echo resim run owner_enable_hook.rtm
-resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim run manifests/owner_enable_hook.rtm
+resim run manifests/owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operations ${globally_enabled_operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 

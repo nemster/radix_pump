@@ -100,16 +100,33 @@ pub struct CreatorData {
     pub pool_mode: PoolMode,
 }
 
+#[derive(Debug, ScryptoSbor, PartialEq)]
+pub enum TaskStatus {
+    OK,
+    LowGas,
+    HookUnregistered,
+    CoinDisabled,
+}
+
 // Non fungible data for scheduled operations
 #[derive(Debug, ScryptoSbor, NonFungibleData)]
 pub struct TimerBadge {
+    #[mutable]
     pub minute: String,
+    #[mutable]
     pub hour: String,
+    #[mutable]
     pub day_of_month: String,
+    #[mutable]
     pub month: String,
+    #[mutable]
     pub day_of_week: String,
-    pub random_delay: i64,
+    #[mutable]
+    pub random_delay: u32,
+    #[mutable]
+    pub status: TaskStatus,
     pub hook: String,
+    pub coin_address: ResourceAddress,
 }
 
 // List of pool operations a hook can be attached to

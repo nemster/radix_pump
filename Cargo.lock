@@ -873,6 +873,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "timer"
+version = "1.0.0"
+dependencies = [
+ "radix-common",
+ "radix-engine-interface",
+ "scrypto",
+ "scrypto-interface",
+]
+
+[[package]]
 name = "typenum"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

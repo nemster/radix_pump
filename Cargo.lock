@@ -146,6 +146,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dca"
+version = "1.0.0"
+dependencies = [
+ "cc",
+ "radix-common",
+ "radix-engine-interface",
+ "scrypto",
+ "scrypto-interface",
+]
+
+[[package]]
 name = "digest"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

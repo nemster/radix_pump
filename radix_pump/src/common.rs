@@ -105,7 +105,6 @@ pub enum TaskStatus {
     OK,
     LowGas,
     HookUnregistered,
-    CoinDisabled,
 }
 
 // Non fungible data for scheduled operations

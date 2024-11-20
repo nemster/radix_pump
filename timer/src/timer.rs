@@ -6,12 +6,6 @@ static XRD_RESOURCE_ADDRESS: &str = "resource_sim1tknxxxxxxxxxradxrdxxxxxxxxx009
 static LOCKED_FEE_AMOUNT: Decimal = dec![11];
 
 #[derive(ScryptoSbor, ScryptoEvent)]
-struct CoinEnableEvent {
-    coin_address: ResourceAddress,
-    enabled: bool,
-}
-
-#[derive(ScryptoSbor, ScryptoEvent)]
 struct NewTaskEvent {
     id: u64,
     minute: String,
@@ -35,9 +29,13 @@ struct RegisteredHook {
 
 #[blueprint]
 #[events(
-    CoinEnableEvent,
     NewTaskEvent,
     RemoveTaskEvent,
+    BuyEvent,
+    SellEvent,
+    BuyTicketEvent,
+    AddLiquidityEvent,
+    RemoveLiquidityEvent,
 )]
 #[types(
     u64,
@@ -59,8 +57,6 @@ mod timer {
             get_alarm_clock_badge => restrict_to: [OWNER];
 
             alarm_clock => restrict_to: [alarm_clock];
-
-            enable_coin => PUBLIC;
 
             new_task => PUBLIC;
             change_schedule => PUBLIC;
@@ -87,7 +83,7 @@ mod timer {
 
         registered_hooks: KeyValueStore<String, RegisteredHook>,
 
-        enabled_coins: KeyValueStore<ResourceAddress, RadixPumpPoolInterfaceScryptoStub>,
+        pools: KeyValueStore<ResourceAddress, RadixPumpPoolInterfaceScryptoStub>,
 
         max_hourly_frequency: u8,
     }
@@ -153,7 +149,7 @@ mod timer {
                 },
                 init {
                     "symbol" => "CLOCK", updatable;
-                    "name" => "Clock badge", updatable;
+                    "name" => "Alarm clock badge", updatable;
                 }
             ))
             .mint_roles(mint_roles!(
@@ -178,7 +174,7 @@ mod timer {
                 proxy_badge_vault: FungibleVault::with_bucket(FungibleBucket(proxy_badge_bucket)),
                 hook_badge_vault: FungibleVault::with_bucket(FungibleBucket(hook_badge_bucket)),
                 registered_hooks: KeyValueStore::new_with_registered_type(),
-                enabled_coins: KeyValueStore::new_with_registered_type(),
+                pools: KeyValueStore::new_with_registered_type(),
                 max_hourly_frequency: max_hourly_frequency,
             }
             .instantiate()
@@ -263,6 +259,19 @@ mod timer {
                 }
             }
             fee_vault.lock_fee(LOCKED_FEE_AMOUNT);
+            drop(fee_vault);
+
+            let pool_component = self.get_pool_address(non_fungible_data.coin_address);
+
+            let hook_argument = HookArgument {
+                component: pool_component,
+                coin_address: non_fungible_data.coin_address,
+                operation: HookableOperation::Timer,
+                amount: None,
+                mode: PoolMode::Normal, // I hope it is so
+                price: Decimal::ZERO, // I don't know
+                ids: vec![nft_id],
+            };
 
             let mut hook_info = self.registered_hooks.get_mut(&non_fungible_data.hook);
             match hook_info {
@@ -289,42 +298,6 @@ mod timer {
                 },
             }
             let hook_info = hook_info.as_mut().unwrap();
-           
-            let pool_component = self.enabled_coins.get(&non_fungible_data.coin_address);
-            match pool_component {
-                Some(_) => {
-                    if non_fungible_data.status == TaskStatus::CoinDisabled {
-                        self.timer_badge_resource_manager.update_non_fungible_data(
-                            &NonFungibleLocalId::Integer(nft_id.into()),
-                            "status",
-                            TaskStatus::OK,
-                        );
-                    }
-                },
-                None => {
-                    if non_fungible_data.status == TaskStatus::OK {
-                        self.timer_badge_resource_manager.update_non_fungible_data(
-                            &NonFungibleLocalId::Integer(nft_id.into()),
-                            "status",
-                            TaskStatus::CoinDisabled,
-                        );
-                        return;
-                    } else {
-                        Runtime::panic("Timer not enabled for this coin".to_string());
-                    }
-                },
-            }
-            let pool_component = pool_component.unwrap();
-
-            let hook_argument = HookArgument {
-                component: *pool_component,
-                coin_address: non_fungible_data.coin_address,
-                operation: HookableOperation::Timer,
-                amount: None,
-                mode: PoolMode::Normal, // I hope it is so
-                price: Decimal::ZERO, // I don't know
-                ids: vec![nft_id],
-            };
 
             let hook_badge_bucket = match hook_info.execution_round < 2 {
                 true => Some(self.hook_badge_vault.take(Decimal::ONE)),
@@ -382,38 +355,22 @@ mod timer {
             }
         }
 
-        pub fn enable_coin(
+        fn get_pool_address(
             &mut self,
-            coin_creator_proof: Proof,
-            enable: bool,
-        ) {
-            let checked_proof = coin_creator_proof.check_with_message(
-                self.coin_creator_badge_address,
-                "Wrong badge",
-            );
+            coin_address: ResourceAddress,
+        ) -> RadixPumpPoolInterfaceScryptoStub {
+            let pool = self.pools.get(&coin_address);
 
-            let coin_address =
-                checked_proof.as_non_fungible().non_fungible::<CreatorData>().data().coin_resource_address;
+            match pool {
+                Some(pool) => *pool,
+                None => {
+                    let pool_info: PoolInfo = self.radix_pump_component.call("get_pool_info", &(coin_address, ));
 
-            // Make sure the pool exists and it is not in liquidation mode
-            let pool_info: PoolInfo = self.radix_pump_component.call("get_pool_info", &(coin_address, ));
-            assert!(
-                pool_info.pool_mode != PoolMode::Liquidation,
-                "Pool in liquidation mode",
-            );
+                    self.pools.insert(coin_address, pool_info.component);
 
-            if enable {
-                self.enabled_coins.insert(coin_address, pool_info.component);
-            } else {
-                self.enabled_coins.remove(&coin_address);
+                    pool_info.component
+                },
             }
-
-            Runtime::emit_event(
-                CoinEnableEvent {
-                    coin_address: coin_address,
-                    enabled: enable,
-                }
-            );
         }
 
         fn check_minute(
@@ -434,19 +391,21 @@ mod timer {
             for m in minute.split(",") {
 
                 // Try to match */number
-                let (star_slash, number) = m.split_at(2);
-                if star_slash == "*/" {
-                    match number.to_string().parse::<u8>() {
-                        Ok(number) => {
-                            assert!(
-                                number >= 1 && number <= 60,
-                                "Invalid minute specification",
-                            );
-                            frequency += 60 / number;
-                        },
-                        Err(_) => Runtime::panic("Invalid minute specification".to_string()),
+                if m.len() > 2 {
+                    let (star_slash, number) = m.split_at(2);
+                    if star_slash == "*/" {
+                        match number.to_string().parse::<u8>() {
+                            Ok(number) => {
+                                assert!(
+                                    number >= 1 && number <= 60,
+                                    "Invalid minute specification",
+                                );
+                                frequency += 60 / number;
+                            },
+                            Err(_) => Runtime::panic("Invalid minute specification".to_string()),
+                        }
+                        continue;
                     }
-                    continue;
                 }
 
                 // Try to match start-end
@@ -496,17 +455,19 @@ mod timer {
             for p in parameter.split(",") {
 
                 // Try to match */number
-                let (star_slash, number) = p.split_at(2);
-                if star_slash == "*/" {
-                    match number.to_string().parse::<u8>() {
-                        Ok(number) => {
-                            if number < min || number > max {
-                                return false;
-                            }
-                        },
-                        Err(_) => return false,
+                if p.len() > 2 {
+                    let (star_slash, number) = p.split_at(2);
+                    if star_slash == "*/" {
+                        match number.to_string().parse::<u8>() {
+                            Ok(number) => {
+                                if number < min || number > max {
+                                    return false;
+                                }
+                            },
+                            Err(_) => return false,
+                        }
+                        continue;
                     }
-                    continue;
                 }
 
                 // Try to match start-end
@@ -577,8 +538,9 @@ mod timer {
             );
 
             let _hook_component = self.registered_hooks.get(&hook).expect("Hook not found");
+            drop(_hook_component);
 
-            let _pool_component = self.enabled_coins.get(&coin_address).expect("Timer not enabled for this coin");
+            let _pool_component = self.get_pool_address(coin_address);
 
             let xrd_resource_address = ResourceAddress::try_from_bech32(
                 &AddressBech32Decoder::new(&NetworkDefinition::simulator()),
@@ -763,20 +725,16 @@ mod timer {
                 _ => Runtime::panic("WTF".to_string()),
             };
 
-            assert!(
-                xrd_bucket.amount() >= LOCKED_FEE_AMOUNT,
-                "Not enough XRD",
-            );
+            let mut fee_vault = self.fee_vaults.get_mut(&id).unwrap();
+            fee_vault.put(xrd_bucket.as_fungible());
 
-            if non_fungible_data.status == TaskStatus::LowGas {
+            if non_fungible_data.status == TaskStatus::LowGas && fee_vault.amount() >= LOCKED_FEE_AMOUNT {
                 self.timer_badge_resource_manager.update_non_fungible_data(
                     &nft_id,
                     "status",
                     TaskStatus::OK,
                 );
             }
-
-            self.fee_vaults.get_mut(&id).unwrap().put(xrd_bucket.as_fungible());
         }
 
         pub fn remove_task(

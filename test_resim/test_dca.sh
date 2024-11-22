@@ -84,8 +84,8 @@ echo Timer package: ${timer_package}
 
 echo
 export max_hourly_frequency=1
-echo resim call-function ${timer_package} Timer new ${owner_badge} ${radix_pump_component} ${creator_badge} ${proxy_badge}:1 ${hook_badge}:1 ${max_hourly_frequency}
-resim call-function ${timer_package} Timer new ${owner_badge} ${radix_pump_component} ${creator_badge} ${proxy_badge}:1 ${hook_badge}:1 ${max_hourly_frequency} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-function ${timer_package} Timer new ${owner_badge} ${radix_pump_component} ${proxy_badge}:1 ${hook_badge}:1 ${max_hourly_frequency}
+resim call-function ${timer_package} Timer new ${owner_badge} ${radix_pump_component} ${proxy_badge}:1 ${hook_badge}:1 ${max_hourly_frequency} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export timer_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 export timer_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export alarm_clock_badge=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)

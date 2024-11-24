@@ -105,9 +105,13 @@ If a non existing or inactive `integrator_id` is specified (as an example `0u64`
 
 Both the component owner and the integrators can withdraw the fees by using the `get_fees` method.  
 
+## Scheduled tasks
+
+The users can schedule the execution of hooks that interact with the pools; more about this in the Timer README.  
+
 ## Transaction manifests
 
-### Instantiate (Stokenet)
+### Instantiate
 
 Use this functions to create a RadixPump and the test hook components in Stokenet
 
@@ -168,7 +172,7 @@ CALL_FUNCTION
 `<BUY_SELL_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the component owner.  
 `<FLASH_LOAN_FEE>` is the amount of base coins paid by flash borrowers to the component owner.  
 `<DAPP_DEFINITION>` is the address of the dApp definition account; this will be set as metadata on all of the components and some resources.  
-`<HOOKS_BADGE>` is the resource address of the badge created by RadixPump to authenticate towards the hooks; you can get it from `get_pool_info`.
+`<HOOKS_BADGE>` is the resource address of the badge created by RadixPump to authenticate towards the hooks; you can get it from `get_pool_info`.  
 `<BASE_COIN_AMOUNT>` is the amount of base coins to deposit in the TestHook0 component.  
 
 ### forbid_symbols
@@ -1024,12 +1028,12 @@ CALL_METHOD
 ;
 ```
 
-`<ACCOUNT_ADDRESS>` is the account of the user buying the tickets.
-`<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).
-`<BASE_COIN_AMOUNT>` is the base coin amount to buy the tickets.
-`<COMPONENT_ADDRESS>` is the address of the RadixPump component.
-`<COIN_ADDRESS>` is the resource address of the random launched coin the user wants to buy the tickets for.
-`<AMOUNT>` is the number of tickets the user wants to buy.
+`<ACCOUNT_ADDRESS>` is the account of the user buying the tickets.  
+`<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
+`<BASE_COIN_AMOUNT>` is the base coin amount to buy the tickets.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<COIN_ADDRESS>` is the resource address of the random launched coin the user wants to buy the tickets for.  
+`<AMOUNT>` is the number of tickets the user wants to buy.  
 
 This method emits a `BuyTicketEvent` event.  
 
@@ -1163,7 +1167,7 @@ CALL_METHOD
 ;
 TAKE_ALL_FROM_WORKTOP
     Address("<COIN1_ADDRESS>") 
-    Bucket("coin_bucket")
+    Bucket("coin1_bucket")
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
@@ -1179,11 +1183,11 @@ CALL_METHOD
 ; 
 ```
 
-`<ACCOUNT_ADDRESS>` is the account of the user swapping the coins.
-`<COIN1_ADDRESS>` is the coin the user wants to sell.
-`<COIN1_AMOUNT>` is the coin amount the user wants to sell.
-`<COMPONENT_ADDRESS>` is the address of the RadixPump component.
-`<COIN2_ADDRESS>` is the coin the user wants to buy.
+`<ACCOUNT_ADDRESS>` is the account of the user swapping the coins.  
+`<COIN1_ADDRESS>` is the coin the user wants to sell.  
+`<COIN1_AMOUNT>` is the coin amount the user wants to sell.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<COIN2_ADDRESS>` is the coin the user wants to buy.  
 `<INTEGRATOR_ID>` is 0 or the id of the badge of the integrator that will receive the platform fees.  
 
 Depending on the coins, a `BuyEvent` and/or a `SellEvent`event is issued. It contains the resource address of the bought coin, the pool mode, the bought or sold amount, the new price, the number of coins currently in the pool and the fees paid to the pool.  

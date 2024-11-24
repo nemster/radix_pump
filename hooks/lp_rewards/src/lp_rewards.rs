@@ -312,6 +312,8 @@ mod lp_rewards_hook {
             rewards_bucket
         }
 
+        // A user can invoke this method to withdraw his rewards without removing his liquidity
+        // from a pool
         pub fn get_rewards(
             &mut self,
             lp_proof: Proof,

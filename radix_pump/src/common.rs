@@ -463,6 +463,7 @@ define_interface! {
             base_coin_bucket: Bucket,
         ) -> (
             Bucket,
+            Bucket,
             HookArgument,
             AnyPoolEvent,
         );

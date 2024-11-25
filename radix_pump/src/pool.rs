@@ -590,9 +590,10 @@ mod pool {
             amount: u32,
 
             // Base coins to buy the tickets
-            base_coin_bucket: Bucket,
+            mut base_coin_bucket: Bucket,
         ) -> (
-            Bucket, // Base coins
+            Bucket, // Eventual excess base coins
+            Bucket, // Tickets
             HookArgument, // Short description of the operation happened, to be used by hooks
             AnyPoolEvent, // BuyTicketEvent
         ) {
@@ -605,12 +606,22 @@ mod pool {
                 "It is not permitted to buy more than {} tickets in a single operation",
                 MAX_TICKETS_PER_OPERATION,
             );
-        
+       
+            let excess_base_coin_bucket: Bucket;
+
             match self.launch {
                 LaunchType::Random(ref mut random_launch) => {
+
+                    // Check there are enough base coins to buy that number of tickets and put
+                    // the excess in a bucket to return to the user
+                    let base_coin_needded_amount = Decimal::try_from(amount).unwrap() * random_launch.ticket_price;
                     assert!(
                         base_coin_bucket.amount() >= Decimal::try_from(amount).unwrap() * random_launch.ticket_price,
                         "Not enough cois to buy that amount of tickets",
+                    );
+                    excess_base_coin_bucket = base_coin_bucket.take_advanced(
+                        base_coin_bucket.amount() - base_coin_needded_amount,
+                        WithdrawStrategy::Rounded(RoundingMode::ToZero),
                     );
 
                     let fee = base_coin_bucket.amount() * self.buy_pool_fee_percentage / 100;
@@ -639,6 +650,7 @@ mod pool {
                     self.base_coin_vault.put(base_coin_bucket);
 
                     (
+                        excess_base_coin_bucket,
                         ticket_bucket,
 
                         // Create the HookArgument that RadixPump will use to call hooks

@@ -2125,28 +2125,34 @@ mod radix_pump {
             // Number of tickets the user wants to buy
             amount: u32,
 
-            // Base coins to buy the tickets
-            base_coin_bucket: Bucket,
+            // Coins to buy the tickets
+            coin1_bucket: Bucket,
 
         ) -> (
+            Bucket, // Eventual excess coins
             Bucket, // Tickets
-            Vec<Bucket>, // Eventual additional buckets returned by the hooks
+            Vec<Bucket>, // Eventual additional buckets returned by the hooks for the Sell operation
+            Vec<Bucket>, // Eventual additional buckets returned by the hooks for the BuyTicket operation
         ) {
             // Check input parameters
-            assert!(
-                base_coin_bucket.resource_address() == self.base_coin_address,
-                "Wrong base coin",
-            ); 
             assert!(
                 amount > 0,
                 "Can't buy zero tickets",
             );
 
+            let (base_coin_bucket, buckets1) = match coin1_bucket.resource_address() == self.base_coin_address {
+
+                // If coin1 is the base coin there's no sell operation
+                true => (coin1_bucket, vec![]),
+
+                false => self.sell(coin1_bucket, 0),
+            };
+ 
             // Find the pool
             let mut pool = self.pools.get_mut(&coin_address).expect(COIN_NOT_FOUND);
 
             // Use the proxy badge to call the buy_ticket method of the pool component
-            let (ticket_bucket, hook_argument, event) =
+            let (excess_bucket, ticket_bucket, hook_argument, event) =
                 self.proxy_badge_vault.authorize_with_amount(
                     1,
                     || pool.component_address.buy_ticket(
@@ -2165,12 +2171,12 @@ mod radix_pump {
             self.emit_pool_event(event, 0);
 
             // Execute the hooks
-            let buckets = self.execute_hooks(
+            let buckets2 = self.execute_hooks(
                 &pool_enabled_hooks,
                 &hook_argument,
             );
 
-            (ticket_bucket, buckets)
+            (excess_bucket, ticket_bucket, buckets1, buckets2)
         }
 
         // When the launch of a random launched coin ends, a user can use this method to get his
@@ -2375,38 +2381,13 @@ mod radix_pump {
             // owner)
             integrator_id = self.check_integrator_id(integrator_id);
 
-            let mut base_coin_bucket: Bucket;
-            let mut buckets1: Vec<Bucket> = vec![];
-
-            if coin1_address == self.base_coin_address {
+            let (mut base_coin_bucket, buckets1) = match coin1_address == self.base_coin_address {
 
                 // If coin1 is the base coin there's no sell operation
-                base_coin_bucket = coin1_bucket;
-            } else {
+                true => (coin1_bucket, vec![]),
 
-                // If coin1 has to be sold, find its pool
-                let mut pool = self.pools.get_mut(&coin1_address).expect("Coin1 not found");
-
-                // Use the proxy badge to call the sell method of the pool of coin1
-                let (bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
-                    1,
-                    || pool.component_address.sell(coin1_bucket)
-                );
-                base_coin_bucket = bucket;
-
-                // Find the hooks for the Sell operation and drop the pool variable
-                let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
-                drop(pool);
-
-                // Emit the SellEvent for coin1
-                self.emit_pool_event(event, integrator_id);
-
-                // Execute hooks for the Sell operation
-                buckets1 = self.execute_hooks(
-                    &pool_enabled_hooks,
-                    &hook_argument,
-                );
-            }
+                false => self.sell(coin1_bucket, integrator_id),
+            };
  
             // Whatever coin1 was, now we have a bucket of base coins, use this to pay the fees to
             // the integrator or the component owner
@@ -2683,6 +2664,40 @@ mod radix_pump {
                 )
                 .mint(1)
             )
+        }
+
+        fn sell(
+            &mut self,
+            coin_bucket: Bucket,
+            integrator_id: u64,
+        ) -> (
+            Bucket, // Base coins
+            Vec<Bucket>, // Eventual buckets returned by hooks
+        ) {
+            // Find the pool to sell coins
+            let coin_address = coin_bucket.resource_address();
+            let mut pool = self.pools.get_mut(&coin_address).expect("Coin not found");
+
+            // Use the proxy badge to call the sell method of the pool of coin1
+            let (bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
+                1,
+                || pool.component_address.sell(coin_bucket)
+            );
+
+            // Find the hooks for the Sell operation and drop the pool variable
+            let pool_enabled_hooks = pool.enabled_hooks.get_all_hooks(hook_argument.operation);
+            drop(pool);
+
+            // Emit the SellEvent
+            self.emit_pool_event(event, integrator_id);
+
+            // Execute hooks for the Sell operation
+            let buckets = self.execute_hooks(
+                &pool_enabled_hooks,
+                &hook_argument,
+            );
+
+            (bucket, buckets)
         }
     }
 }

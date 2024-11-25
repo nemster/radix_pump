@@ -1008,19 +1008,19 @@ This method allows to buy one or more tickets during a random launch.
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
     "withdraw"
-    Address("<BASE_COIN_ADDRESS>")
-    Decimal("<BASE_COIN_AMOUNT>")
+    Address("<COIN1_ADDRESS>")
+    Decimal("<COIN1_AMOUNT>")
 ;
 TAKE_ALL_FROM_WORKTOP
-    Address("<BASE_COIN_ADDRESS>")
-    Bucket("base_coin_bucket")
+    Address("<COIN1_ADDRESS>")
+    Bucket("coin1_bucket")
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "buy_ticket"
     Address("<COIN_ADDRESS>")
     <AMOUNT>u32
-    Bucket("base_coin_bucket")
+    Bucket("coin1_bucket")
 ;
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
@@ -1030,8 +1030,8 @@ CALL_METHOD
 ```
 
 `<ACCOUNT_ADDRESS>` is the account of the user buying the tickets.  
-`<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
-`<BASE_COIN_AMOUNT>` is the base coin amount to buy the tickets.  
+`<COIN1_ADDRESS>` is the resource address of the coin that will be used to buy the tickets; it can be the base coin or any listed coin.  
+`<COIN1_AMOUNT>` is the coin1 amount to buy the tickets.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<COIN_ADDRESS>` is the resource address of the random launched coin the user wants to buy the tickets for.  
 `<AMOUNT>` is the number of tickets the user wants to buy.  

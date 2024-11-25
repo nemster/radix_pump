@@ -83,6 +83,7 @@ Hooks can be used to extend RadixPump features in any way; just few examples:
 - make an airdrop to the 100 first buyers on my coin  
 - authomatically buy the next 10 quick launched coins  
 - authomatically buy the dips  
+- mint an NFT when my coin reached an ATH and give it to the buyer who made it possible  
 ...  
 
 A simple hook that just emits an event and mints a token is provided as example; when developing a new hook make sure it has a `hook` method with the same arguments and return type as the provided example.
@@ -423,7 +424,6 @@ CALL_METHOD
     "create_proof_of_non_fungibles"
     Address("<INTEGRATOR_BADGE_ADDRESS>")
     Array<NonFungibleLocalId>(NonFungibleLocalId("#<INTEGRATOR_BADGE_ID>#"))
-    
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
@@ -522,7 +522,7 @@ CALL_METHOD
 ;
 ```
 
-`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<ACCOUNT_ADDRESS>` is the account containing the coin creator badge.  
 `<CREATOR_BADGE_ADDRESS>` is the badge receaved when creating the coin.  
 `<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  

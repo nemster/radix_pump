@@ -148,7 +148,7 @@ echo Done ${orders} orders, some of them were matched immediately so there are o
 
 echo
 export integrator_id=0
-echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:${quick_launched_coin_received} ${base_coin} ${integrator_id} >$OUTPUTFILE
+echo resim call-method ${radix_pump_component} swap ${quick_launched_coin}:${quick_launched_coin_received} ${base_coin} ${integrator_id}
 resim call-method ${radix_pump_component} swap ${quick_launched_coin}:${quick_launched_coin_received} ${base_coin} ${integrator_id} >$OUTPUTFILE
 first=$(grep -n filled_orders_id $OUTPUTFILE | head -n 1 | cut -d : -f 1)
 last=$(grep -n filled_orders_id $OUTPUTFILE | tail -n 1 | cut -d : -f 1)

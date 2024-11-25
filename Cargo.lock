@@ -14,6 +14,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ath_club_hook"
+version = "1.0.0"
+dependencies = [
+ "cc",
+ "radix-common",
+ "radix-engine-interface",
+ "scrypto",
+ "scrypto-interface",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

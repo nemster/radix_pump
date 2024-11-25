@@ -29,6 +29,9 @@ pub struct PoolInfo {
     // The price of the last buy or sell operation
     pub last_price: Decimal,
 
+    // Amount of non ingnored or locked coins
+    pub circulating_supply: Decimal,
+
     // When calling the Pool get_pool_info method, these are the pool fees
     // When calling the RadixPump get_pool_info method, these are the total fees (owner/integrator
     // + pool)
@@ -216,6 +219,7 @@ pub struct BuyEvent {
     pub coins_in_pool: Decimal,
     pub fee_paid_to_the_pool: Decimal,
     pub integrator_id: u64,
+    pub circulating_supply: Decimal,
 }
 
 // Event created by a pool sell method
@@ -228,6 +232,7 @@ pub struct SellEvent {
     pub coins_in_pool: Decimal,
     pub fee_paid_to_the_pool: Decimal,
     pub integrator_id: u64,
+    pub circulating_supply: Decimal,
 }
 
 // Event created by a pool set_liquidation_mode method
@@ -279,6 +284,7 @@ pub struct AddLiquidityEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
     pub lp_id: u64,
+    pub coins_in_pool: Decimal,
 }
 
 // Event created by a pool remove_liquidity method
@@ -286,6 +292,7 @@ pub struct AddLiquidityEvent {
 pub struct RemoveLiquidityEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
+    pub coins_in_pool: Decimal,
 }
 
 // A wrapper for any event a pool can generate

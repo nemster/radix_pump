@@ -287,6 +287,7 @@ mod pool {
                 base_coin_amount: self.base_coin_vault.amount(),
                 coin_amount: coin_amount,
                 last_price: self.last_price,
+                circulating_supply: self.circulating_supply(),
                 total_buy_fee_percentage: self.buy_pool_fee_percentage,
                 total_sell_fee_percentage: self.sell_pool_fee_percentage,
                 total_flash_loan_fee: self.flash_loan_pool_fee,
@@ -395,6 +396,7 @@ mod pool {
                                 coins_in_pool: self.coin_vault.amount(),
                                 fee_paid_to_the_pool: fee,
                                 integrator_id: 0, // This will be set by RadixPump
+                                circulating_supply: self.circulating_supply(),
                             }
                         )
                     )
@@ -448,6 +450,7 @@ mod pool {
                                     coins_in_pool: self.coin_vault.amount(),
                                     fee_paid_to_the_pool: fee,
                                     integrator_id: 0, // This will be set by RadixPump
+                                    circulating_supply: self.circulating_supply(),
                                 }
                             )
                         )
@@ -532,6 +535,7 @@ mod pool {
                                 coins_in_pool: self.coin_vault.amount(),
                                 fee_paid_to_the_pool: fee_amount,
                                 integrator_id: 0, // This will be set by RadixPump
+                                circulating_supply: self.circulating_supply(),
                             }
                         )
                     )
@@ -569,6 +573,7 @@ mod pool {
                                 coins_in_pool: self.coin_vault.amount(),
                                 fee_paid_to_the_pool: Decimal::ZERO,
                                 integrator_id: 0,
+                                circulating_supply: self.circulating_supply(),
                             }
                         )
                     )
@@ -947,6 +952,7 @@ mod pool {
                         resource_address: self.coin_vault.resource_address(),
                         amount: coin_amount.checked_truncate(RoundingMode::ToZero).unwrap(),
                         lp_id: self.last_lp_id,
+                        coins_in_pool: self.coins_in_pool(),
                     }
                 ),
                 mode, // Tell RadixPump about the new mode (if changed)
@@ -1046,6 +1052,7 @@ mod pool {
                     RemoveLiquidityEvent {
                         resource_address: self.coin_vault.resource_address(),
                         amount: amount,
+                        coins_in_pool: self.coins_in_pool(),
                     }
                 ),
             )
@@ -2696,6 +2703,17 @@ mod pool {
 
                 // For non quick launched coins do nothing
                 _ => {}
+            }
+        }
+
+        fn circulating_supply(&self) -> Decimal {
+            let resource_manager = ResourceManager::from_address(self.coin_vault.resource_address());
+
+            resource_manager.total_supply().unwrap() - match &self.launch {
+                LaunchType::Fair(fair_launch) => fair_launch.locked_vault.amount(),
+                LaunchType::Random(random_launch) => random_launch.locked_vault.amount(),
+                LaunchType::Quick(quick_launch) => quick_launch.ignored_coins,
+                _ => Decimal::ZERO,
             }
         }
     }

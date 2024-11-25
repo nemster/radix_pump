@@ -586,6 +586,14 @@ mod radix_pump {
                 "Coin symbol can't be empty",
             );
             assert!(
+                coin_symbol.len() <= 5,
+                "Symbol too long",
+            );
+            assert!(
+                coin_symbol.chars().all(char::is_alphanumeric),
+                "Non alphanumeric characters in symbol",
+            );
+            assert!(
                 self.forbidden_symbols.get(&coin_symbol).is_none(),
                 "Symbol already used",
             );
@@ -595,6 +603,10 @@ mod radix_pump {
             assert!(
                 coin_name.len() > 0,
                 "Coin name can't be empty",
+            );
+            assert!(
+                coin_name.len() <= 32,
+                "Coin name too long",
             );
             let uppercase_coin_name = coin_name.to_uppercase();
             assert!(

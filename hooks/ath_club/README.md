@@ -30,10 +30,11 @@ CALL_FUNCTION
 
 ### init_coin
 
-If the ATH Club hook is enabled for a non fresh launched coin, the creator may want to initialize it with past ATH value.  
+If the ATH Club hook is enabled for a non fresh launched coin, the creator may want to initialize it with past ATH value; this method makes it possible.  
+This method also allows setting a minimum amount of bought coins for a new ATH to be accepted.   
 This is not mandatory: it is possible to just the let the hook consider the first buy operation as the first ATH.  
 
-This method will panic if an ATH Club NFT has already been minted for the coin.  
+This method can be called only once per coin and panics if an ATH Club NFT has already been minted for the coin (it would not be fair to change the rules after a record has already been established).  
 
 ```
 CALL_METHOD
@@ -50,6 +51,8 @@ CALL_METHOD
     "init_coin"
     Proof("creator_proof")
     Decimal("<ATH_PRICE>")
+    Decimal("<MIN_AMOUNT>")
+
 ;
 ```
 
@@ -58,3 +61,4 @@ CALL_METHOD
 `<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
 `<ATH_CLUB_COMPONENT>` is the address of the Ath Club component.  
 `<ATH_PRICE>` is the old ATH that needs to be passed for an NFT to be minted.  
+`<MIN_AMOUNT>` is the minimum amount of bought coins for a new ATH to be accepted.  

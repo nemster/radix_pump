@@ -11,8 +11,15 @@ use crate::ath_club_data::*;
 // Internal representation of an ATH
 #[derive(ScryptoSbor)]
 struct Ath {
+
+    // Local id of the NFT minted to celebrate the last ATH
     nft_id: Option<u64>,
+
+    // Last ATH price
     price: Decimal,
+
+    // Minimum amount of bought coins for a new ATH to be accepted
+    min_amount: Decimal,
 }
 
 #[blueprint_with_traits]
@@ -126,8 +133,8 @@ mod ath_club_hook {
             .globalize()
         }
 
-        // If this hook is enabled for a non fresh launched coin, the creator may want to
-        // initialize it with past ATH value.
+        // A coin creator may want to initialize this hook with past ATH value and set a minimum amount of bought
+        // coins for a new ATH to be registered.
         // This method can't be used if an ATH Club NFT has already been minted for the coin.
         pub fn init_coin(
             &mut self,
@@ -137,6 +144,9 @@ mod ath_club_hook {
 
             // Past ATH price
             ath_price: Decimal,
+
+            // Minimum amount of bought coins for a new ATH to be accepted
+            min_amount: Decimal,
         ) {
 
             // Verify the coin creator proof
@@ -154,12 +164,18 @@ mod ath_club_hook {
                 "An ATH Club NFT for this coin has already been minted",
             );
 
+            assert!(
+                min_amount >= Decimal::ZERO,
+                "Minimum amount can't be a negative number",
+            );
+
             // Add this ATH to the list without a cossesponding NFT local id
             self.aths.insert(
                 coin_resource_address,
                 Ath {
                     nft_id: None,
                     price: ath_price,
+                    min_amount: min_amount,
                 }
             );
         }
@@ -221,13 +237,16 @@ mod ath_club_hook {
         fn hook(
             &mut self,
             argument: HookArgument,
-            hook_badge_bucket: Option<FungibleBucket>, // None
+            hook_badge_bucket: Option<FungibleBucket>, // Should be None
         ) -> (
-            Option<FungibleBucket>, // None
+            Option<FungibleBucket>,
             Option<Bucket>,
             Vec<AnyPoolEvent>, // Always empty
             Vec<HookArgument>, // Always empty
         ) {
+            if argument.operation != HookableOperation::Buy {
+                return (hook_badge_bucket, None, vec![], vec![]);
+            }
 
             // Is there already an ATH for this coin?
             let mut previous_ath = self.aths.get_mut(&argument.coin_address);
@@ -248,6 +267,7 @@ mod ath_club_hook {
                         Ath {
                             nft_id: Some(self.last_ath_club_id),
                             price: argument.price,
+                            min_amount: Decimal::ZERO,
                         }
                     );
 
@@ -258,37 +278,37 @@ mod ath_club_hook {
                 Some(ref mut ath) => {
 
                     // Check if we passed it
-                    if ath.price < argument.price {
+                    if argument.price > ath.price && argument.amount.unwrap() >= ath.min_amount {
 
-                        // If so, obsolete the previous ATH for this coin
-                        if ath.nft_id.is_some() {
-                            self.ath_club_resource_manager.update_non_fungible_data(
-                                &NonFungibleLocalId::integer(ath.nft_id.unwrap().into()),
-                                "obsoleted_by",
-                                self.last_ath_club_id + 1
-                            );
-                        }
-
-                        // Register new ATH
-                        ath.nft_id = Some(self.last_ath_club_id + 1);
-                        ath.price = argument.price;
-
-                        // Release the mutable borrow
-                        drop(previous_ath);
-
-                        // Mint the new NFT
-                        Some(self.mint(&argument))
-
-                    } else {
-                        None // Below previous ATH, nothing to do
+                    // If so, obsolete the previous ATH for this coin
+                    if ath.nft_id.is_some() {
+                        self.ath_club_resource_manager.update_non_fungible_data(
+                            &NonFungibleLocalId::integer(ath.nft_id.unwrap().into()),
+                            "obsoleted_by",
+                            self.last_ath_club_id + 1
+                        );
                     }
-                },
-            };
 
-            (hook_badge_bucket, ath_club_nft, vec![], vec![])
-        }
+                    // Register new ATH
+                    ath.nft_id = Some(self.last_ath_club_id + 1);
+                    ath.price = argument.price;
 
-        // Round 2, non accepting calls triggered by other hooks
-        fn get_hook_info(&self) -> (HookExecutionRound, bool) {(2, false)}
+                    // Release the mutable borrow
+                    drop(previous_ath);
+
+                    // Mint the new NFT
+                    Some(self.mint(&argument))
+
+                } else {
+                    None // Below previous ATH, nothing to do
+                }
+            },
+        };
+
+        (hook_badge_bucket, ath_club_nft, vec![], vec![])
+    }
+
+    // Round 2, non accepting calls triggered by other hooks
+    fn get_hook_info(&self) -> (HookExecutionRound, bool) {(2, false)}
     }
 }

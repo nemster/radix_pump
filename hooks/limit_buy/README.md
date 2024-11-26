@@ -7,6 +7,7 @@ This hook can both be invoked by RadixPump when a Sell operation happens on a po
 
 Pending order are kept in a Vec; this limits the maximum number of pending orders that can be stored without the transaction costs grow too much. This limit is set to 500 per coin.  
 The number of matched orders per operation is limited too to limit the transaction costs; this is set to 30.  
+Price calculation can be not 100% precise for quick launched coins.  
 
 ## Transaction manifests
 

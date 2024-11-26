@@ -29,6 +29,9 @@ pub struct PoolInfo {
     // The price of the last buy or sell operation
     pub last_price: Decimal,
 
+    // The current price based on the vault amount ratio
+    pub price: Decimal,
+
     // Amount of non ingnored or locked coins
     pub circulating_supply: Decimal,
 

@@ -35,6 +35,8 @@ get_pool_info () {
       echo coin_amount: $(echo $coin_amount | cut -d '"' -f 2)
       read last_price
       echo last_price: $(echo $last_price | cut -d '"' -f 2)
+      read price
+      echo price: $(echo $price | cut -d '"' -f 2)
       read circulating_supply
       echo circulating_supply: $(echo $circulating_supply | cut -d '"' -f 2)
       read total_buy_fee_percentage

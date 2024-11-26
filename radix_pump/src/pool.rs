@@ -159,6 +159,9 @@ enum LaunchType {
 static MAX_TICKETS_PER_OPERATION: u32 = 50;
 static MAX_CALLS_TO_RANDOM: u32 = 10;
 
+// How many coins to unignore for each bought coin (quick launch only)
+static UNIGNORE_FACTOR: Decimal = dec!["0.3"];
+
 // Some common error message
 static MODE_NOT_ALLOWED: &str = "Not allowed in this mode";
 static TYPE_NOT_ALLOWED: &str = "Not allowed for this launch type";
@@ -273,6 +276,15 @@ mod pool {
         fn get_pool_info(&self) -> PoolInfo {
 
             let coin_amount = self.coins_in_pool();
+            let price: Decimal;
+            if coin_amount > Decimal::ZERO {
+                price = (PreciseDecimal::from(self.base_coin_vault.amount()) /
+                    PreciseDecimal::from(coin_amount))
+                    .checked_truncate(RoundingMode::ToZero)
+                    .unwrap();
+            } else {
+                price = Decimal::ZERO;
+            }
 
             // Not launched pools have zero LP
             let coin_lp_ratio: Decimal;
@@ -287,6 +299,7 @@ mod pool {
                 base_coin_amount: self.base_coin_vault.amount(),
                 coin_amount: coin_amount,
                 last_price: self.last_price,
+                price: price,
                 circulating_supply: self.circulating_supply(),
                 total_buy_fee_percentage: self.buy_pool_fee_percentage,
                 total_sell_fee_percentage: self.sell_pool_fee_percentage,
@@ -353,24 +366,45 @@ mod pool {
             match self.mode {
                 PoolMode::Normal => {
 
-                    // In Normal mode use the constant product formula to get the number of coins
-                    // bought
-                    let constant_product = PreciseDecimal::from(self.base_coin_vault.amount()) * PreciseDecimal::from(self.coins_in_pool());
-                    let coins_in_pool_new = (
-                        constant_product /
-                        PreciseDecimal::from(self.base_coin_vault.amount() + base_coin_bucket.amount() - fee)
-                    )
-                    .checked_truncate(RoundingMode::ToZero)
-                    .unwrap();
-                    let coin_amount_bought = self.coins_in_pool() - coins_in_pool_new;
+                    let coin_amount_bought = match self.launch {
+                        LaunchType::Quick(ref mut quick_launch) => {
+
+                            // In case of a quick launch we have to use a different formula if
+                            // there are ignored coins
+                            if quick_launch.ignored_coins > Decimal::ZERO {
+
+                                // This formula was derived by imposing the price on the bought
+                                // coins equal to the new base coin / coin ratio in the pool after
+                                // a number of ignored coins is unignored.
+                                // Because of the fees the new price will be a little smaller than
+                                // the bought price.
+                                let coin_amount_bought = (PreciseDecimal::from(self.coin_vault.amount() - quick_launch.ignored_coins) * PreciseDecimal::from(base_coin_bucket.amount()) /
+                                    (PreciseDecimal::from(self.base_coin_vault.amount()) + (pdec![2] - UNIGNORE_FACTOR) * PreciseDecimal::from(base_coin_bucket.amount())))
+                                    .checked_truncate(RoundingMode::ToZero)
+                                    .unwrap();
+
+                                // Unignore coins
+                                let unignored_coins = min(
+                                    UNIGNORE_FACTOR * coin_amount_bought,
+                                    quick_launch.ignored_coins
+                                );
+                                quick_launch.ignored_coins -= unignored_coins;
+
+                                coin_amount_bought
+                            } else {
+
+                                // Classic constant product formula
+                                self.constant_product_buy(PreciseDecimal::from(base_coin_bucket.amount() - fee))
+                            }
+                        },
+
+                        // Classic constant product formula
+                        _ => self.constant_product_buy(PreciseDecimal::from(base_coin_bucket.amount() - fee)),
+                    };
 
                     self.last_price = base_coin_bucket.amount() / coin_amount_bought;
 
                     self.base_coin_vault.put(base_coin_bucket);
-
-                    // In case of quick launched coins we need to update the number of ignored
-                    // coins at each movement
-                    self.update_ignored_coins();
 
                     (
                         self.coin_vault.take(coin_amount_bought),
@@ -506,10 +540,6 @@ mod pool {
                     self.last_price = base_coin_bucket.amount() / coin_bucket_amount;
 
                     self.coin_vault.put(coin_bucket);
-
-                    // In case of quick launched coins we need to update the number of ignored
-                    // coins at each movement
-                    self.update_ignored_coins();
 
                     (
                         base_coin_bucket,
@@ -938,10 +968,6 @@ mod pool {
             self.base_coin_vault.put(base_coin_bucket);
             self.coin_vault.put(coin_bucket);
 
-            // In case of quick launched coins we need to update the number of ignored
-            // coins at each movement
-            self.update_ignored_coins();
-
             (
                 lp_bucket, // LP token
 
@@ -1040,9 +1066,6 @@ mod pool {
 
             self.total_lp -= lp_share;
             self.total_users_lp -= lp_share;
-
-            // Needed?
-            self.update_ignored_coins();
 
             (
                 base_coin_bucket,
@@ -1492,10 +1515,6 @@ mod pool {
 
             self.base_coin_vault.put(base_coin_bucket);
             self.coin_vault.return_loan(coin_bucket);
-
-            // In case of quick launched coins we need to update the number of ignored
-            // coins at each movement
-            self.update_ignored_coins();
 
             (
                 // Create the HookArgument that RadixPump will use to call hooks
@@ -2354,6 +2373,24 @@ mod pool {
 
 // PRIVATE METHODS AND FUNCTIONS
 
+        // Private method implementing the classic constant product formula, it returns the bought
+        // amount of coins
+        fn constant_product_buy(
+            &self,
+            base_coin_amount: PreciseDecimal,
+        ) -> Decimal {
+            let constant_product = PreciseDecimal::from(self.base_coin_vault.amount()) * PreciseDecimal::from(self.coin_vault.amount());
+
+            let coins_in_pool_new = (
+                constant_product /
+                (PreciseDecimal::from(self.base_coin_vault.amount()) + base_coin_amount)
+            )
+                .checked_truncate(RoundingMode::ToZero)
+                .unwrap();
+
+            self.coin_vault.amount() - coins_in_pool_new
+        }
+
         // This private function contains the common part of the coin resource manager creation used
         // by 3 pool constructors
         fn start_resource_manager_creation(
@@ -2696,25 +2733,6 @@ mod pool {
                     
                 // For non quick launched coins there are no ignored coins
                 _ => self.coin_vault.amount(),
-            }
-        }
-
-        // Update the number of ignored coins according to the price and the number of base coins
-        // in the pool
-        fn update_ignored_coins(&mut self) {
-            match self.launch {
-                LaunchType::Quick(ref mut quick_launch) =>
-
-                    // Once ignored_coins reaches zero, it will be no longer updated
-                    if quick_launch.ignored_coins > Decimal::ZERO {
-                        quick_launch.ignored_coins = max(
-                            self.coin_vault.amount() - self.base_coin_vault.amount() / self.last_price,
-                            Decimal::ZERO,
-                        );
-                    }
-
-                // For non quick launched coins do nothing
-                _ => {}
             }
         }
 

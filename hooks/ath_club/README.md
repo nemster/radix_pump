@@ -57,3 +57,4 @@ CALL_METHOD
 `<CREATOR_BADGE_ADDRESS>` is the badge receaved when creating the coin.  
 `<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
 `<ATH_CLUB_COMPONENT>` is the address of the Ath Club component.  
+`<ATH_PRICE>` is the old ATH that needs to be passed for an NFT to be minted.  

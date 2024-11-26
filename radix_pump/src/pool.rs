@@ -276,15 +276,20 @@ mod pool {
         fn get_pool_info(&self) -> PoolInfo {
 
             let coin_amount = self.coins_in_pool();
-            let price: Decimal;
-            if coin_amount > Decimal::ZERO {
-                price = (PreciseDecimal::from(self.base_coin_vault.amount()) /
-                    PreciseDecimal::from(coin_amount))
-                    .checked_truncate(RoundingMode::ToZero)
-                    .unwrap();
-            } else {
-                price = Decimal::ZERO;
-            }
+            let price = match self.mode {
+                PoolMode::Normal => {
+                    if coin_amount > Decimal::ZERO {
+                        (PreciseDecimal::from(self.base_coin_vault.amount()) /
+                            PreciseDecimal::from(coin_amount))
+                            .checked_truncate(RoundingMode::ToZero)
+                            .unwrap()
+                    } else {
+                        Decimal::ZERO
+                    }
+                },
+                PoolMode::Uninitialised => Decimal::ZERO,
+                _ => self.last_price,
+            };
 
             // Not launched pools have zero LP
             let coin_lp_ratio: Decimal;

@@ -644,6 +644,7 @@ The method returns a `PoolInfo` struct containing these information:
 - the amount of base coins in the pool.  
 - the amount of coins in the pool.  
 - the price of the last buy or sell operation.  
+- the current price based on ratio of amounts of coins in the pool.  
 - the circulating supply of the coin.  
 - total (component owner + pool) buy fee percentage.  
 - total (component owner + pool) sell fee percentage.  

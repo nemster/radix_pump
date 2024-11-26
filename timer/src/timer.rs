@@ -68,6 +68,8 @@ mod timer {
             register_hook => restrict_to: [OWNER];
             unregister_hook => restrict_to: [OWNER];
             get_alarm_clock_badge => restrict_to: [OWNER];
+            update_owner_fee => restrict_to: [OWNER];
+            get_owner_fee => restrict_to: [OWNER];
 
             alarm_clock => restrict_to: [alarm_clock];
 
@@ -106,6 +108,12 @@ mod timer {
 
         // Maximum hourly frequency acceptable for scheduled tasks
         max_hourly_frequency: u8,
+
+        // Component owner's XRDs
+        owner_vault: Vault,
+
+        // How many XRD go to the component owner at each successful execution
+        owner_fee: Decimal,
     }
 
     impl Timer {
@@ -125,6 +133,9 @@ mod timer {
 
             // Maximum hourly frequency acceptable for scheduled tasks
             max_hourly_frequency: u8,
+
+            // How many XRD go to the component owner at each successful execution
+            owner_fee: Decimal,
         ) -> (
             Global<Timer>,
             FungibleBucket, // Alarm clock badge
@@ -132,6 +143,10 @@ mod timer {
             assert!(
                 max_hourly_frequency > 0 && max_hourly_frequency <= 60,
                 "Max hourly frequency out of 1-60 range",
+            );
+            assert!(
+                owner_fee >= Decimal::ZERO,
+                "Owner fee can't be a negative number",
             );
 
             // Reserve a component address to set proper permissions on the TimerBadge
@@ -193,6 +208,13 @@ mod timer {
 
             let alarm_clock_badge_address = alarm_clock_badge_bucket.resource_address();
 
+            // Find the ResourceAddress of XRD for this network
+            let xrd_resource_address = ResourceAddress::try_from_bech32(
+                &AddressBech32Decoder::new(&NetworkDefinition::simulator()),
+                XRD_RESOURCE_ADDRESS,
+            )
+            .unwrap();
+
             // Instantiate the component
             let timer = Self {
                 fee_vaults: KeyValueStore::new_with_registered_type(),
@@ -205,6 +227,8 @@ mod timer {
                 registered_hooks: KeyValueStore::new_with_registered_type(),
                 pools: KeyValueStore::new_with_registered_type(),
                 max_hourly_frequency: max_hourly_frequency,
+                owner_vault: Vault::new(xrd_resource_address),
+                owner_fee: owner_fee,
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
@@ -265,6 +289,24 @@ mod timer {
             self.alarm_clock_badge_resource_manager.mint(1)
         }
 
+        // Set the XRD amount owed to the component owner for each successful execution
+        pub fn update_owner_fee(
+            &mut self,
+            owner_fee: Decimal,
+        ) {
+            assert!(
+                owner_fee >= Decimal::ZERO,
+                "Owner fee can't be a negative number",
+            );
+
+            self.owner_fee = owner_fee;
+        }
+
+        // Withdraw the component owner collected fees
+        pub fn get_owner_fee(&mut self) -> Bucket {
+            self.owner_vault.take_all()
+        }
+
         // This method must be called when it's time to execute a scheduled task
         pub fn alarm_clock(
             &mut self,
@@ -281,7 +323,7 @@ mod timer {
             // Find the vault to pay network fees and make sure thera are enough funds
             let mut fee_vault = self.fee_vaults.get_mut(&nft_id).unwrap();
             let fee_vault_amount = fee_vault.amount();
-            if fee_vault_amount < LOCKED_FEE_AMOUNT {
+            if fee_vault_amount < LOCKED_FEE_AMOUNT + self.owner_fee {
                 if non_fungible_data.status == TaskStatus::OK {
 
                     // If the status in the TimerBadge is OK but fees level is low, use the remaining XRD to
@@ -302,6 +344,9 @@ mod timer {
 
             // Lock the fees so that the invoking software doesn't have to pay network fees
             fee_vault.lock_fee(LOCKED_FEE_AMOUNT);
+
+            // Take the owner share of the fee
+            self.owner_vault.put(fee_vault.take(self.owner_fee).into());
             drop(fee_vault);
 
             // Find the pool component address that must be priveded to the hook
@@ -610,16 +655,9 @@ mod timer {
             // Make sure we know about the pool for this coin
             let _pool_component = self.get_pool_address(coin_address);
 
-            // Find the ResourceAddress of XRD for this network
-            let xrd_resource_address = ResourceAddress::try_from_bech32(
-                &AddressBech32Decoder::new(&NetworkDefinition::simulator()),
-                XRD_RESOURCE_ADDRESS,
-            )
-            .unwrap();
-
             // Make sure we have fees to execute at least once the task
             assert!(
-                xrd_bucket.resource_address() == xrd_resource_address,
+                xrd_bucket.resource_address() == self.owner_vault.resource_address(),
                 "Wrong coins in bucket",
             );
             assert!(

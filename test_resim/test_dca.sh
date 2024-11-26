@@ -56,7 +56,8 @@ export radix_pump_package=$(grep 'Success! New Package:' $OUTPUTFILE | cut -d ' 
 echo RadixPump package: ${radix_pump_package}
 
 echo
-export base_coin=resource_sim1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxakj8n3
+export xrd=resource_sim1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxakj8n3
+export base_coin=$xrd
 export minimum_deposit=1000
 export creation_fee_percentage=0.1
 export buy_sell_fee_percentage=0.1
@@ -84,8 +85,9 @@ echo Timer package: ${timer_package}
 
 echo
 export max_hourly_frequency=1
-echo resim call-function ${timer_package} Timer new ${owner_badge} ${radix_pump_component} ${proxy_badge}:1 ${hook_badge}:1 ${max_hourly_frequency}
-resim call-function ${timer_package} Timer new ${owner_badge} ${radix_pump_component} ${proxy_badge}:1 ${hook_badge}:1 ${max_hourly_frequency} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export owner_fee=1
+echo resim call-function ${timer_package} Timer new ${owner_badge} ${radix_pump_component} ${proxy_badge}:1 ${hook_badge}:1 ${max_hourly_frequency} ${owner_fee}
+resim call-function ${timer_package} Timer new ${owner_badge} ${radix_pump_component} ${proxy_badge}:1 ${hook_badge}:1 ${max_hourly_frequency} ${owner_fee} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export timer_component=$(grep 'Component:' $OUTPUTFILE | cut -d ' ' -f 3)
 export timer_badge=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
 export alarm_clock_badge=$(grep 'Resource:' $OUTPUTFILE | tail -n 1 | cut -d ' ' -f 3)
@@ -152,8 +154,8 @@ export month="*"
 export day_of_week="*"
 export random_delay=1800
 export xrd_amount=100
-echo resim call-method ${timer_component} new_task "$minute" "$hour" "$day_of_month" "$month" "$day_of_week" $random_delay DCA ${quick_launched_coin2} resource_sim1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxakj8n3:$xrd_amount
-resim call-method ${timer_component} new_task "$minute" "$hour" "$day_of_month" "$month" "$day_of_week" $random_delay DCA ${quick_launched_coin2} resource_sim1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxakj8n3:$xrd_amount >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo resim call-method ${timer_component} new_task "$minute" "$hour" "$day_of_month" "$month" "$day_of_week" $random_delay DCA ${quick_launched_coin2} $xrd:$xrd_amount
+resim call-method ${timer_component} new_task "$minute" "$hour" "$day_of_month" "$month" "$day_of_week" $random_delay DCA ${quick_launched_coin2} $xrd:$xrd_amount >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export timer_badge_number="$(grep -A 1 "ResAddr: ${timer_badge}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)"
 export timer_badge_id="#${timer_badge_number}#"
 echo "Created a task in the Timer for the DCA hook on ${quick_launched_coin2}, received timer badge ${timer_badge}:#${timer_badge_id}#"
@@ -245,3 +247,9 @@ resim run manifests/dca_withdraw.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 
 echo "Called the withdraw method of the Dca component with bought_coins_only parameter = ${bought_coins_only}, $(increase_in_wallet ${quick_launched_coin1}) ${quick_launched_coin1} and $(increase_in_wallet ${quick_launched_coin2}) ${quick_launched_coin2} received"
 grep 'Transaction Cost: ' $OUTPUTFILE
 
+echo
+update_wallet_amounts
+echo resim call-method ${timer_component} get_owner_fee --proofs ${owner_badge}:${owner_badge_id}
+resim call-method ${timer_component} get_owner_fee --proofs ${owner_badge}:${owner_badge_id} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+echo Collected owner fees: $(increase_in_wallet $xrd)
+grep 'Transaction Cost: ' $OUTPUTFILE

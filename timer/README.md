@@ -36,6 +36,7 @@ CALL_FUNCTION
     Bucket("proxy_badge")
     Bucket("hook_badge")
     <MAX_HOURLY_FREQUENCY>u8
+    Decimal("<OWNER_FEE>")
 ;
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
@@ -50,6 +51,7 @@ CALL_METHOD
 `<PROXY_BADGE_ADDRESS>` is the resource address of the proxy badge minted by the RadixPump component.  
 `<HOOK_BADGE_ADDRESS>` is the resource address of the hook badge minted by the RadixPump component.  
 `<MAX_HOURLY_FREQUENCY>` is the maximum hourly frequency that users can schedule their tasks (from 1 to 60).  
+`<OWNER_FEE>` is the amount of XRD paid to the component owner at each seccessful execution of a task.   
 
 The function returns an alarm clock badge that can be used to invoke the `alarm_clock` method.  
 
@@ -120,6 +122,50 @@ CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
     "deposit_batch"
     Expression("ENTIRE_WORKTOP")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<TIMER_COMPONENT>` is the address of the Timer component.  
+
+### update_owner_fee
+
+The component owner can call this method to update the XRD amount he gets at each successful execution of a task.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<TIMER_COMPONENT>)
+    "update_owner_fee"
+    Decimal("<OWNER_FEE>")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<TIMER_COMPONENT>` is the address of the Timer component.  
+`<OWNER_FEE>` is the amount of XRD paid to the component owner at each seccessful execution of a task.   
+
+### get_owner_fee
+
+The component owner can call this method to withdraw the collected XRDs.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<TIMER_COMPONENT>)
+    "get_owner_fee"
 ;
 ```
 

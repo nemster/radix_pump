@@ -1421,6 +1421,11 @@ mod pool {
                 self.mode == PoolMode::TerminatingLaunch,
                 "Not allowed in this mode",
             );
+            assert!(
+                self.launch != LaunchType::AlreadyExistingCoin,
+                "Can't put an externally launched coin in liquidation mode",
+            );
+
             self.mode = PoolMode::Liquidation;
 
             // Get the total supply of the coin

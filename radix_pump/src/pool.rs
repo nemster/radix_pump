@@ -2743,8 +2743,12 @@ mod pool {
 
         fn circulating_supply(&self) -> Decimal {
             let resource_manager = ResourceManager::from_address(self.coin_vault.resource_address());
+            let mut supply = resource_manager.total_supply().unwrap();
 
-            resource_manager.total_supply().unwrap() - match &self.launch {
+            if self.mode == PoolMode::Liquidation {
+                supply -= self.coins_in_pool();
+            }
+            supply - match &self.launch {
                 LaunchType::Fair(fair_launch) => fair_launch.locked_vault.amount(),
                 LaunchType::Random(random_launch) => random_launch.locked_vault.amount(),
                 LaunchType::Quick(quick_launch) => quick_launch.ignored_coins,

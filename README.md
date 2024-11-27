@@ -387,6 +387,8 @@ Another winning ticket equivalent is used to initialise the pool, so the total s
 
 This function creates a pool for an already existing coin, it can only be called by the component owner.  
 
+It issues a coin creator badge, just like any launch method.  
+
 ```
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
@@ -397,7 +399,7 @@ CALL_METHOD
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "new_pool"
-    "<COIN_ADDRESS>"
+    Address("<COIN_ADDRESS>")
     Decimal("<BUY_POOL_FEE_PERCENTAGE>")
     Decimal("<SELL_POOL_FEE_PERCENTAGE>")
     Decimal("<FLASH_LOAN_POOL_FEE>")
@@ -413,6 +415,37 @@ CALL_METHOD
 `<FLASH_LOAN_POOL_FEE>`  is the amount of base coins paid by flash borrowers to the coin pool.  
 
 The created pool is not initialised: the `add_liquidity` method must be called to make it usable.  
+
+### new_launched_pool
+
+This method allows the owner to add an externally instantiated component as a pool; it can also replace an existing pool with the new one.  
+It can be used to add new kinds of pools or in a number of bad situations.  
+
+
+It issues a coin creator badge, just like any launch method.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "new_launched_pool"
+    Address("<COIN_ADDRESS>")
+    Address("<POOL_ADDRESS>")
+    Address("<LP_TOKEN_ADDRESS>")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<COIN_ADDRESS>` is the resource address of the existing coin.  
+`<POOL_ADDRESS>` is the address of the new pool component.  
+`<LP_TOKEN_ADDRESS>` is the resource address of the liquidity token for the new pool.  
 
 ### get_fees
 

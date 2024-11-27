@@ -135,6 +135,7 @@ mod radix_pump {
             new_quick_launch => PUBLIC;
             new_random_launch => PUBLIC;
             new_pool => restrict_to: [OWNER];
+            new_launched_pool => restrict_to: [OWNER];
 
             creator_set_liquidation_mode => PUBLIC;
             update_pool_fees => PUBLIC;
@@ -179,6 +180,7 @@ mod radix_pump {
         new_quick_launch => Usd(dec!("0.05"));
         new_random_launch => Usd(dec!("0.05"));
         new_pool => Free;
+        new_launched_pool => Free;
 
         creator_set_liquidation_mode => Free;
         update_pool_fees => Free;
@@ -2513,6 +2515,74 @@ mod radix_pump {
                     creator_id: self.next_creator_badge_id,
                 }
             );
+
+            // Mint a creator badge and return it to the user
+            self.mint_creator_badge(
+                coin_address,
+                coin_name,
+                coin_symbol,
+                lp_resource_address,
+                coin_icon_url,
+                PoolMode::Uninitialised,
+            )
+        }
+
+        // This method allows the owner to add an externally instantiated component as a pool.
+        // It can also replace an existing pool with a new one.
+        pub fn new_launched_pool(
+            &mut self,
+            coin_address: ResourceAddress,
+            component_address: RadixPumpPoolInterfaceScryptoStub,
+            lp_resource_address: ResourceAddress,
+        ) -> Bucket // Creator badge for the pool
+        {
+            // Get the metadata for the coin
+            let resource_manager = ResourceManager::from_address(coin_address);
+            let coin_symbol: String = resource_manager.get_metadata("symbol")
+                .expect(UNEXPECTED_METADATA_TYPE)
+                .expect("Coins without symbol are not allowed");
+            let coin_name: String = resource_manager.get_metadata("name")
+                .expect(UNEXPECTED_METADATA_TYPE)
+                .expect("Coins without name are not allowed");
+            let coin_icon_url: UncheckedUrl = resource_manager.get_metadata("icon_url")
+                .expect(UNEXPECTED_METADATA_TYPE)
+                .expect("Coins without icon are not allowed");
+
+            // Does a pool for this coin already exist?
+            let mut opt_pool = self.pools.get_mut(&coin_address);
+            match opt_pool {
+                None => {
+                    drop(opt_pool);
+
+                    // If not add the new pool to the pools KVS
+                    self.pools.insert(
+                        coin_address,
+                        PoolStruct {
+                            component_address: component_address,
+                            enabled_hooks: HooksPerOperation::new(),
+                            creator_id: self.next_creator_badge_id,
+                        }
+                    );
+                }
+                Some(ref mut pool) => {
+
+                    // If yes, replace the old one with the new one
+                    pool.component_address = component_address;
+                    pool.creator_id = self.next_creator_badge_id;
+
+                    drop(opt_pool);
+
+                    // Forbid new coins to have the same name or symbol
+                    self.forbidden_symbols.insert(
+                        coin_symbol.to_uppercase().trim().to_string(),
+                        true,
+                    );
+                    self.forbidden_names.insert(
+                        coin_name.to_uppercase().trim().to_string(),
+                        true,
+                    );
+                },
+            }
 
             // Mint a creator badge and return it to the user
             self.mint_creator_badge(

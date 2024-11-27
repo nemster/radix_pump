@@ -36,6 +36,8 @@ mod ath_club_hook {
         },
         methods {
             init_coin => PUBLIC;
+            update_min_amount => PUBLIC;
+
             hook => restrict_to: [proxy];
             get_hook_info => PUBLIC;
         }
@@ -178,6 +180,31 @@ mod ath_club_hook {
                     min_amount: min_amount,
                 }
             );
+        }
+
+        // Update the minimum amount of bought coins for an ATH to be accepted
+        pub fn update_min_amount(
+            &mut self,
+
+            // Proof that you are the creator of a coin
+            coin_creator_proof: Proof,
+
+            // Minimum amount of bought coins for a new ATH to be accepted
+            min_amount: Decimal,
+        ) {
+
+            // Verify the coin creator proof
+            let checked_proof = coin_creator_proof.check_with_message(
+                self.coin_creator_badge_address,
+                "Wrong badge",
+            );
+
+            // Make sure the proof contains exactly one badge and get the address of the coin
+            // created coin by this user
+            let coin_resource_address = checked_proof.as_non_fungible().non_fungible::<CreatorData>().data().coin_resource_address;
+
+            // Update the minimum amount of bought coins for an ATH to be accepted
+            self.aths.get_mut(&coin_resource_address).expect("ATH not initialised").min_amount = min_amount;
         }
 
         // Private method to mint a new ATH Club NFT (called by the hook method)

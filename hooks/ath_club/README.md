@@ -32,9 +32,9 @@ CALL_FUNCTION
 
 If the ATH Club hook is enabled for a non fresh launched coin, the creator may want to initialize it with past ATH value; this method makes it possible.  
 This method also allows setting a minimum amount of bought coins for a new ATH to be accepted.   
-This is not mandatory: it is possible to just the let the hook consider the first buy operation as the first ATH.  
+Calling this method is not mandatory: it is possible to just the let the hook consider the first buy operation as the first ATH.  
 
-This method can be called only once per coin and panics if an ATH Club NFT has already been minted for the coin (it would not be fair to change the rules after a record has already been established).  
+This method can be called only once per coin and panics if an ATH Club NFT has already been minted for the coin.  
 
 ```
 CALL_METHOD
@@ -61,4 +61,35 @@ CALL_METHOD
 `<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
 `<ATH_CLUB_COMPONENT>` is the address of the Ath Club component.  
 `<ATH_PRICE>` is the old ATH that needs to be passed for an NFT to be minted.  
+`<MIN_AMOUNT>` is the minimum amount of bought coins for a new ATH to be accepted.  
+
+### update_min_amount
+
+Update the minimum amount of bought coins for an ATH to be accepted.  
+
+On the countrary of the `init_coin` method, this method can only be called for an initialised coin. The coin creator can call this method as many times as he wishes.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_non_fungibles"
+    Address("<CREATOR_BADGE_ADDRESS>")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("#<CREATOR_BADGE_ID>#"))
+;
+POP_FROM_AUTH_ZONE
+    Proof("creator_proof")
+;
+CALL_METHOD
+    Address("<ATH_CLUB_COMPONENT>")
+    "update_min_amount"
+    Proof("creator_proof")
+    Decimal("<MIN_AMOUNT>")
+
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the coin creator badge.  
+`<CREATOR_BADGE_ADDRESS>` is the badge receaved when creating the coin.  
+`<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
+`<ATH_CLUB_COMPONENT>` is the address of the Ath Club component.  
 `<MIN_AMOUNT>` is the minimum amount of bought coins for a new ATH to be accepted.  

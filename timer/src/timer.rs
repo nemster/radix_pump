@@ -86,11 +86,11 @@ mod timer {
         fee_vaults: KeyValueStore<u64, FungibleVault>,
 
         // Resource manager for the users badges
-        timer_badge_resource_manager: ResourceManager,
+        timer_badge_resource_manager: NonFungibleResourceManager,
         last_timer_badge_id: u64,
 
         // Resource manager for the badge that will be used by a offchain system to invoke Timer
-        alarm_clock_badge_resource_manager: ResourceManager,
+        alarm_clock_badge_resource_manager: FungibleResourceManager,
 
         // The component address of RadixPump; this is needed to query informations about coins and
         // pools
@@ -220,7 +220,7 @@ mod timer {
                 fee_vaults: KeyValueStore::new_with_registered_type(),
                 timer_badge_resource_manager: timer_badge_resource_manager,
                 last_timer_badge_id: 0,
-                alarm_clock_badge_resource_manager: ResourceManager::from_address(alarm_clock_badge_address),
+                alarm_clock_badge_resource_manager: FungibleResourceManager::from(alarm_clock_badge_address),
                 radix_pump_component: radix_pump_component,
                 proxy_badge_vault: FungibleVault::with_bucket(FungibleBucket(proxy_badge_bucket)),
                 hook_badge_vault: FungibleVault::with_bucket(FungibleBucket(hook_badge_bucket)),
@@ -285,7 +285,7 @@ mod timer {
         }
 
         // Get a new alarm clock badge
-        pub fn get_alarm_clock_badge(&self) -> Bucket {
+        pub fn get_alarm_clock_badge(&self) -> FungibleBucket {
             self.alarm_clock_badge_resource_manager.mint(1)
         }
 
@@ -621,7 +621,7 @@ mod timer {
             // XRD to pay the network fees for all of the task executions
             xrd_bucket: Bucket,
 
-        ) -> Bucket {
+        ) -> NonFungibleBucket {
 
             // Normalize and check the schedule syntax
             minute.retain(|c| !c.is_whitespace());

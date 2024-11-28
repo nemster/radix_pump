@@ -442,9 +442,9 @@ define_interface! {
         // Call this method to buy coins with base coins
         fn buy(
             &mut self,
-            base_coin_bucket: Bucket,
+            base_coin_bucket: FungibleBucket,
         ) -> (
-            Bucket,
+            FungibleBucket,
             HookArgument,
             AnyPoolEvent,
         );
@@ -452,9 +452,9 @@ define_interface! {
         // Call this method to sell coins for base coins
         fn sell(
             &mut self,
-            coin_bucket: Bucket,
+            coin_bucket: FungibleBucket,
         ) -> (
-            Bucket,
+            FungibleBucket,
             HookArgument,
             AnyPoolEvent,
         );
@@ -463,10 +463,10 @@ define_interface! {
         fn buy_ticket(
             &mut self,
             amount: u32,
-            base_coin_bucket: Bucket,
+            base_coin_bucket: FungibleBucket,
         ) -> (
             Bucket,
-            Bucket,
+            NonFungibleBucket,
             HookArgument,
             AnyPoolEvent,
         );
@@ -477,8 +477,8 @@ define_interface! {
             &mut self,
             ticket_bucket: Bucket,
         ) -> (
-            Bucket, // base coin bucket
-            Option<Bucket>, // coin bucket
+            FungibleBucket, // base coin bucket
+            Option<FungibleBucket>, // coin bucket
             Option<HookArgument>,
             Option<HookArgument>,
         );
@@ -490,7 +490,7 @@ define_interface! {
             base_coin_bucket: Bucket,
             coin_bucket: Bucket,
         ) -> (  
-            Bucket,
+            NonFungibleBucket,
             Option<Bucket>,
             HookArgument, 
             AnyPoolEvent,
@@ -502,8 +502,8 @@ define_interface! {
             &mut self,
             lp_bucket: Bucket,
         ) -> (  
-            Bucket, 
-            Option<Bucket>,
+            FungibleBucket, 
+            Option<FungibleBucket>,
             HookArgument,
             AnyPoolEvent,
         );
@@ -531,7 +531,7 @@ define_interface! {
         // - TerminatingLaunch -> TerminatingLaunch (request more random data to the RandomComponent)
         // - TerminatingLaunch -> Normal (tickets extraction completed)
         fn terminate_launch(&mut self) -> (
-            Option<Bucket>,
+            Option<FungibleBucket>,
             Option<PoolMode>,
             Option<HookArgument>,
             Option<AnyPoolEvent>,
@@ -543,7 +543,7 @@ define_interface! {
         fn unlock(
             &mut self,
             amount: Option<Decimal>,
-        ) -> Bucket;
+        ) -> FungibleBucket;
 
         // Call this method to put the pool in Liquidation mode (authentication is in RadixPump
         // component)
@@ -558,7 +558,7 @@ define_interface! {
         fn get_flash_loan(
             &mut self,
             amount: Decimal,
-        ) -> Bucket;
+        ) -> FungibleBucket;
 
         // Return a previoulsy received flash loan
         fn return_flash_loan(

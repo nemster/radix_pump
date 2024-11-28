@@ -40,7 +40,7 @@ mod test_hook0 {
     struct TestHook0 {
 
         // A voult of base coins to buy the coins
-        base_coin_vault: Vault,
+        base_coin_vault: FungibleVault,
     }
 
     impl TestHook0 {
@@ -59,7 +59,7 @@ mod test_hook0 {
 
         ) -> Global<TestHook0> {
             Self {
-                base_coin_vault: Vault::with_bucket(base_coin_bucket),
+                base_coin_vault: FungibleVault::with_bucket(FungibleBucket(base_coin_bucket)),
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
@@ -74,7 +74,7 @@ mod test_hook0 {
             &mut self,
             base_coin_bucket: Bucket,
         ) {
-            self.base_coin_vault.put(base_coin_bucket);
+            self.base_coin_vault.put(FungibleBucket(base_coin_bucket));
         }
     }
 
@@ -102,7 +102,7 @@ mod test_hook0 {
 
                 (
                     hook_badge_bucket, // The hook_badge_bucket must always be returned!
-                    Some(coin_bucket), // Give the bought coins to the user
+                    Some(coin_bucket.into()), // Give the bought coins to the user
                     vec![event], // Report the pool BuyEvent back to RadixPump
                     vec![new_hook_argument], // Report the new HookArgument the Pool prepared back
                                              // to RadixPump so that it can trigger more hooks
@@ -145,7 +145,7 @@ mod test_hook1 {
     }
 
     struct TestHook1 {
-        resource_manager: ResourceManager,
+        resource_manager: FungibleResourceManager,
     }
 
     impl TestHook1 {
@@ -207,7 +207,7 @@ mod test_hook1 {
 
             (
                 hook_badge_bucket, // The hook_badge_bucket must always be returned!
-                Some(self.resource_manager.mint(1)), // Mint a coin for the user
+                Some(self.resource_manager.mint(1).into()), // Mint a coin for the user
                 vec![],
                 vec![],
             )
@@ -233,7 +233,7 @@ mod test_hook2 {
     }
 
     struct TestHook2 {
-        resource_manager: ResourceManager,
+        resource_manager: FungibleResourceManager,
     }
 
     impl TestHook2 {
@@ -291,7 +291,7 @@ mod test_hook2 {
 
             (
                 hook_badge_bucket, // The hook_badge_bucket must always be returned!
-                Some(self.resource_manager.mint(1)), // Mint a coin for the user
+                Some(self.resource_manager.mint(1).into()), // Mint a coin for the user
                 vec![],
                 vec![],
             )

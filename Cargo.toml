@@ -3,14 +3,13 @@ version = "1.0.0"
 edition = "2021"
 
 [workspace.dependencies]
-sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "v1.2.0" }
-scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "v1.2.0" }
-scrypto-test = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "v1.2.0" }
-radix-engine = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "v1.2.0" }
-radix-common = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "v1.2.0" }
-radix-engine-interface = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "v1.2.0" }
-radix-blueprint-schema-init = { git = "https://www.github.com/radixdlt/radixdlt-scrypto", tag = "v1.2.0" }
-cc = { version = "1.1.31" }
+sbor = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "v1.3.0" }
+scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "v1.3.0" }
+scrypto-test = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "v1.3.0" }
+radix-engine = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "v1.3.0" }
+radix-common = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "v1.3.0" }
+radix-engine-interface = { git = "https://github.com/radixdlt/radixdlt-scrypto", tag = "v1.3.0" }
+radix-blueprint-schema-init = { git = "https://www.github.com/radixdlt/radixdlt-scrypto", tag = "v1.3.0" }
 getrandom = { version = "0.2.15", features = ["js"] }
 
 [profile.release]

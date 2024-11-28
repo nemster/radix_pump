@@ -46,7 +46,7 @@ mod ath_club_hook {
     struct AthClubHook {
 
         // The resource manager to mint the ATH Club NFTs
-        ath_club_resource_manager: ResourceManager,
+        ath_club_resource_manager: NonFungibleResourceManager,
 
         // Numeric id of the last minted NFT
         last_ath_club_id: u64,
@@ -254,7 +254,7 @@ mod ath_club_hook {
                     key_image_url: coin_icon_url,
                     obsoleted_by: 0, // Zero stands for None
                 }
-            )
+            ).into()
         }
     }
 

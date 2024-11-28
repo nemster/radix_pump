@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 scrypto = { workspace = true }
-cc = { workspace = true }
 
 [features]
 default = []

@@ -112,7 +112,7 @@ struct PoolStruct {
     Vec<String>,
     IntegratorData,
     u64,
-    Vault,
+    FungibleVault,
 )]
 mod radix_pump {
 
@@ -215,10 +215,10 @@ mod radix_pump {
         minimum_deposit: Decimal,
 
         // Resource Manager for minting creators badges
-        creator_badge_resource_manager: ResourceManager,
+        creator_badge_resource_manager: NonFungibleResourceManager,
 
         // Resource manager for minting the transient NFT used in flash loans
-        flash_loan_nft_resource_manager: ResourceManager,
+        flash_loan_nft_resource_manager: NonFungibleResourceManager,
 
         // Id of the next creator badge to create
         next_creator_badge_id: u64,
@@ -269,12 +269,12 @@ mod radix_pump {
         globally_enabled_hooks: HooksPerOperation,
 
         // Resource managed to mint integrator badges
-        integrator_badge_resource_manager: ResourceManager,
+        integrator_badge_resource_manager: NonFungibleResourceManager,
 
         // This KVS contain the vaults where the fees are collected
         // Key 0 contains the fees paid to the component owner
         // Key N contains the fees paid to the integrator with badge id N
-        fee_vaults: KeyValueStore<u64, Vault>,
+        fee_vaults: KeyValueStore<u64, FungibleVault>,
 
         // Numeric id of the next integrator badge to create
         next_integrator_badge_id: u64,
@@ -502,7 +502,7 @@ mod radix_pump {
                 registered_hooks_operations: HooksPerOperation::new(),
                 globally_enabled_hooks: HooksPerOperation::new(),
                 integrator_badge_resource_manager: integrator_badge_resource_manager,
-                fee_vaults: <KeyValueStore<u64, Vault> as RadixPumpKeyValueStore>::new_with_registered_type(),
+                fee_vaults: <KeyValueStore<u64, FungibleVault> as RadixPumpKeyValueStore>::new_with_registered_type(),
                 next_integrator_badge_id: 1,
                 dapp_definition: dapp_definition,
             }
@@ -663,7 +663,7 @@ mod radix_pump {
             // Amount of base coins paid to the pool when taking a flash loan
             flash_loan_pool_fee: Decimal,
 
-        ) -> Bucket // Creator badge
+        ) -> NonFungibleBucket // Creator badge
         {
             // Verify that the fees specified by the coin creator are acceptable
             self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee, true);
@@ -753,7 +753,7 @@ mod radix_pump {
             // Amount of base coins paid to the pool when taking a flash loan
             flash_loan_pool_fee: Decimal,
 
-        ) -> Bucket // Creator badge
+        ) -> NonFungibleBucket // Creator badge
         {
             // Verify that the fees specified by the coin creator are acceptable
             self.check_fees(buy_pool_fee_percentage, sell_pool_fee_percentage, flash_loan_pool_fee, true);
@@ -847,7 +847,7 @@ mod radix_pump {
             flash_loan_pool_fee: Decimal,
 
         ) -> (
-            Bucket, // Creator badge
+            NonFungibleBucket, // Creator badge
             Bucket, // Creator share of the launched coin
             Vec<Bucket>, // Eventual additional buckets created by the hooks
         ) {
@@ -864,9 +864,11 @@ mod radix_pump {
             // Pay the component owner share of the coin deposit
             self.deposit_fee(
                 0,
-                base_coin_bucket.take_advanced(
-                    self.creation_fee_percentage * base_coin_bucket.amount() / 100,
-                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                FungibleBucket(
+                    base_coin_bucket.take_advanced(
+                        self.creation_fee_percentage * base_coin_bucket.amount() / 100,
+                        WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                    )
                 )
             );
 
@@ -978,7 +980,7 @@ mod radix_pump {
             // Either an integrator badge proof or an owner badge proof
             proof: Proof,
 
-        ) -> Bucket // Fees collected (base coins)
+        ) -> FungibleBucket // Fees collected (base coins)
         {
             let integrator_id: u64;
 
@@ -1134,8 +1136,8 @@ mod radix_pump {
             // The amount of coins to borrow
             amount: Decimal
         ) -> (
-            Bucket, // Coin bucket
-            Bucket, // Transient NFT
+            FungibleBucket, // Coin bucket
+            NonFungibleBucket, // Transient NFT
         ) {
             // Find the pool holding the coin
             let mut pool = self.pools.get_mut(&coin_address).expect(COIN_NOT_FOUND);
@@ -1211,9 +1213,11 @@ mod radix_pump {
             // Deposit component owner (or integrator) fees
             self.deposit_fee(
                 integrator_id,
-                base_coin_bucket.take_advanced(
-                    self.creation_fee_percentage * base_coin_bucket.amount() / 100,
-                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                FungibleBucket(
+                    base_coin_bucket.take_advanced(
+                        self.creation_fee_percentage * base_coin_bucket.amount() / 100,
+                        WithdrawStrategy::Rounded(RoundingMode::ToZero),
+                    )
                 )
             );
 
@@ -1633,7 +1637,7 @@ mod radix_pump {
             creator_proof: Proof,
 
         ) -> (
-            Option<Bucket>, // Launch proceeds (base coins)
+            Option<FungibleBucket>, // Launch proceeds (base coins)
             Option<Vec<Bucket>>, // Additional buckets eventually returned by hooks
         ) {
             // Extract information from the creator proof
@@ -1723,7 +1727,7 @@ mod radix_pump {
             // Current mode of the pool created by the owner of this badge
             pool_mode: PoolMode
 
-        ) -> Bucket // The minted creator badge
+        ) -> NonFungibleBucket // The minted creator badge
         {
             let creator_badge = self.creator_badge_resource_manager.mint_non_fungible(
                 &NonFungibleLocalId::integer(self.next_creator_badge_id.into()),
@@ -1745,12 +1749,12 @@ mod radix_pump {
 
         // All of the coin creator badges have the same resource address, what makes them different
         // one from the other is the NonFungibleLocalId
-        // This private method creates an AccessRuleNode that combines the resource address of the
+        // This private method creates an CompositeRequirement that combines the resource address of the
         // creator badge with the NonFungibleLocalId of the next badge that will be minted, use
-        // this AccessRuleNode as owner for the resources that will be created
-        fn next_creator_badge_rule(&mut self) -> AccessRuleNode {
-            AccessRuleNode::ProofRule(
-                ProofRule::Require (
+        // this CompositeRequirement as owner for the resources that will be created
+        fn next_creator_badge_rule(&mut self) -> CompositeRequirement {
+            CompositeRequirement::BasicRequirement(
+                BasicRequirement::Require (
                     ResourceOrNonFungible::NonFungible (
                         NonFungibleGlobalId::new(
                             self.creator_badge_resource_manager.address(),
@@ -1774,7 +1778,7 @@ mod radix_pump {
             // Whether to sell or not the coins received
             sell: bool,
         ) -> (
-            Bucket, // Coins (if sell is false) or base coins (if sell is true)
+            FungibleBucket, // Coins (if sell is false) or base coins (if sell is true)
             Vec<Bucket>, // Eventual additional buckets created by the hooks
         ) {
             // Get the coin address from the creator badge proof
@@ -2132,7 +2136,7 @@ mod radix_pump {
 
         ) -> (
             Bucket, // Eventual excess coins
-            Bucket, // Tickets
+            NonFungibleBucket, // Tickets
             Vec<Bucket>, // Eventual additional buckets returned by the hooks for the Sell operation
             Vec<Bucket>, // Eventual additional buckets returned by the hooks for the BuyTicket operation
         ) {
@@ -2145,7 +2149,7 @@ mod radix_pump {
             let (base_coin_bucket, buckets1) = match coin1_bucket.resource_address() == self.base_coin_address {
 
                 // If coin1 is the base coin there's no sell operation
-                true => (coin1_bucket, vec![]),
+                true => (FungibleBucket(coin1_bucket), vec![]),
 
                 false => self.sell(coin1_bucket, 0),
             };
@@ -2191,14 +2195,14 @@ mod radix_pump {
             // The tickets to redeem
             ticket_bucket: Bucket,
         ) -> (
-            Bucket, // Base coins (losing tickets)
-            Option<Bucket>, // Random launched coins (winning tickets)
+            FungibleBucket, // Base coins (losing tickets)
+            Option<FungibleBucket>, // Random launched coins (winning tickets)
             Option<Vec<Bucket>>, // Eventual buckets returned by the hooks for losers
             Option<Vec<Bucket>>, // Eventual buckets returned by the hooks for winners
         ) {
             // Use the ticket NonFungibleData to find the pool
             let ticket_id = &ticket_bucket.as_non_fungible().non_fungible_local_ids()[0];
-            let ticket_data = ResourceManager::from_address(ticket_bucket.resource_address()).get_non_fungible_data::<TicketData>(ticket_id);
+            let ticket_data = NonFungibleResourceManager::from(ticket_bucket.resource_address()).get_non_fungible_data::<TicketData>(ticket_id);
             let mut pool = self.pools.get_mut(&ticket_data.coin_resource_address).expect(COIN_NOT_FOUND);
 
             // Use the proxy badge to call the redeem_ticket method of the pool
@@ -2264,7 +2268,7 @@ mod radix_pump {
             // Coins to add to the pool
             coin_bucket: Bucket,
         ) -> (
-            Bucket, // Non fungibles representing the added liquidity
+            NonFungibleBucket, // Non fungibles representing the added liquidity
             Option<Bucket>, // Eventual excess coins to return
             Vec<Bucket>, // Eventual additional buckets returned by the hooks
         ) {
@@ -2315,13 +2319,13 @@ mod radix_pump {
             // LP tokens representing the added liquidity
             lp_bucket: Bucket,
         ) -> (
-            Bucket, // Base coins
-            Option<Bucket>, // Coins (if the pool is not in liquidation mode)
+            FungibleBucket, // Base coins
+            Option<FungibleBucket>, // Coins (if the pool is not in liquidation mode)
             Vec<Bucket>, // Eventual buckets returned by the hooks
         ) {
             // Use the LP token NonFungibleData to find the pool
             let lp_id = &lp_bucket.as_non_fungible().non_fungible_local_ids()[0];
-            let lp_data = ResourceManager::from_address(lp_bucket.resource_address()).get_non_fungible_data::<LPData>(lp_id);
+            let lp_data = NonFungibleResourceManager::from(lp_bucket.resource_address()).get_non_fungible_data::<LPData>(lp_id);
             let mut pool = self.pools.get_mut(&lp_data.coin_resource_address).expect(COIN_NOT_FOUND);
 
             // Use the proxy badge to invoke the remove_liquidity method of the pool
@@ -2364,7 +2368,7 @@ mod radix_pump {
             mut integrator_id: u64,
 
         ) -> (
-            Bucket, // Coin2
+            FungibleBucket, // Coin2
             Vec<Bucket>, // Eventual buckets returned by hooks invoked for the Sell operation
             Vec<Bucket> // Eventual buckets returned by hooks invoked for the Buy operation
         ) {
@@ -2386,7 +2390,7 @@ mod radix_pump {
             let (mut base_coin_bucket, buckets1) = match coin1_address == self.base_coin_address {
 
                 // If coin1 is the base coin there's no sell operation
-                true => (coin1_bucket, vec![]),
+                true => (FungibleBucket(coin1_bucket), vec![]),
 
                 false => self.sell(coin1_bucket, integrator_id),
             };
@@ -2401,7 +2405,7 @@ mod radix_pump {
                 )
             );
 
-            let coin2_bucket: Bucket;
+            let coin2_bucket: FungibleBucket;
             let mut buckets2: Vec<Bucket> = vec![];
 
             if coin2_address == self.base_coin_address {
@@ -2451,7 +2455,7 @@ mod radix_pump {
             sell_pool_fee_percentage: Decimal,
             flash_loan_pool_fee: Decimal,
 
-        ) -> Bucket // Creator badge for the pool
+        ) -> NonFungibleBucket // Creator badge for the pool
         {
             // Make sure there isn't already a pool for this coin
             assert!(
@@ -2534,7 +2538,7 @@ mod radix_pump {
             coin_address: ResourceAddress,
             component_address: RadixPumpPoolInterfaceScryptoStub,
             lp_resource_address: ResourceAddress,
-        ) -> Bucket // Creator badge for the pool
+        ) -> NonFungibleBucket // Creator badge for the pool
         {
             // Get the metadata for the coin
             let resource_manager = ResourceManager::from_address(coin_address);
@@ -2668,11 +2672,11 @@ mod radix_pump {
             integrator_id: u64,
 
             // Thee fee to deposit
-            fee_bucket: Bucket,
+            fee_bucket: FungibleBucket,
         ) {
             // Create the fee vault if it doesn't exist
             if self.fee_vaults.get(&integrator_id).is_none() {
-                self.fee_vaults.insert(integrator_id, Vault::new(self.base_coin_address));
+                self.fee_vaults.insert(integrator_id, FungibleVault::new(self.base_coin_address));
             }
 
             // Deposit the fee bucket in the vault
@@ -2687,7 +2691,7 @@ mod radix_pump {
             // component owner
             name: String,
 
-        ) -> Bucket // The minted integrator badge
+        ) -> NonFungibleBucket // The minted integrator badge
         {
             // Mint the integrator badge
             let integrator_badge = self.integrator_badge_resource_manager.mint_non_fungible(
@@ -2721,15 +2725,15 @@ mod radix_pump {
         // to replace the RadixPump component with a new one
         // This method can only be called by the component owner
         pub fn get_badges(&self) -> (
-            Bucket, // Proxy badge
-            Bucket, // Hook badge
+            FungibleBucket, // Proxy badge
+            FungibleBucket, // Hook badge
         ) {
             (
-                ResourceManager::from_address(
+                FungibleResourceManager::from(
                     self.proxy_badge_vault.resource_address()
                 )
                 .mint(1),
-                ResourceManager::from_address(
+                FungibleResourceManager::from(
                     self.hook_badge_vault.resource_address()
                 )
                 .mint(1)
@@ -2741,7 +2745,7 @@ mod radix_pump {
             coin_bucket: Bucket,
             integrator_id: u64,
         ) -> (
-            Bucket, // Base coins
+            FungibleBucket, // Base coins
             Vec<Bucket>, // Eventual buckets returned by hooks
         ) {
             // Find the pool to sell coins
@@ -2751,7 +2755,7 @@ mod radix_pump {
             // Use the proxy badge to call the sell method of the pool of coin1
             let (bucket, hook_argument, event) = self.proxy_badge_vault.authorize_with_amount(
                 1,
-                || pool.component_address.sell(coin_bucket)
+                || pool.component_address.sell(FungibleBucket(coin_bucket))
             );
 
             // Find the hooks for the Sell operation and drop the pool variable

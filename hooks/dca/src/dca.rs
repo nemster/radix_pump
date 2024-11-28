@@ -382,13 +382,13 @@ mod dca {
                     let (base_coin_bucket, new_argument, event) =
                         hook_badge_bucket.as_ref().unwrap().authorize_with_amount(
                             1,
-                            || component.as_mut().unwrap().sell(coin1_bucket)
+                            || component.as_mut().unwrap().sell(FungibleBucket(coin1_bucket))
                         );
 
                     events.push(event);
                     hook_arguments.push(new_argument);
 
-                    base_coin_bucket
+                    base_coin_bucket.into()
                 },
             };
 
@@ -401,13 +401,13 @@ mod dca {
                     let (coin2_bucket, new_argument, event) =
                         hook_badge_bucket.as_ref().unwrap().authorize_with_amount(
                             1,
-                            || argument.component.buy(base_coin_bucket)
+                            || argument.component.buy(FungibleBucket(base_coin_bucket))
                         );
 
                     events.push(event);
                     hook_arguments.push(new_argument);
 
-                    coin2_bucket
+                    coin2_bucket.into()
                 },
             };
 

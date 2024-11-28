@@ -27,7 +27,7 @@ struct ApeInBuyer {
 struct CoinLaunch {
     last_buyer_id: u64,
     coins_per_buyer: Decimal,
-    vault: Vault,
+    vault: FungibleVault,
 }
 
 #[blueprint_with_traits]
@@ -64,10 +64,10 @@ mod ape_in_hook {
         launches: KeyValueStore<u64, CoinLaunch>,
 
         // Resource manager for minting buyer badges
-        buyers_resource_manager: ResourceManager,
+        buyers_resource_manager: NonFungibleResourceManager,
 
         // Where to store the base coins to buy all of the launches
-        base_coin_vault: Vault,
+        base_coin_vault: FungibleVault,
     }
 
     impl ApeInHook {
@@ -142,7 +142,7 @@ mod ape_in_hook {
                 last_launch_id: 0,
                 launches: KeyValueStore::new_with_registered_type(),
                 buyers_resource_manager: buyers_resource_manager,
-                base_coin_vault: Vault::new(base_coin_address),
+                base_coin_vault: FungibleVault::new(base_coin_address),
             }
             .instantiate()
             .prepare_to_globalize(OwnerRole::Updatable(rule!(require(owner_badge_address))))
@@ -167,7 +167,7 @@ mod ape_in_hook {
             mut base_coin_bucket: Bucket,
 
         ) -> (
-            Bucket, // Buyer badge
+            NonFungibleBucket, // Buyer badge
             Bucket, // Eventual excess base coins provided
         ) {
 
@@ -182,7 +182,7 @@ mod ape_in_hook {
             );
 
             // Put only the requested amount in the component vault
-            self.base_coin_vault.put(base_coin_bucket.take(self.base_coins_per_launch * self.launches_per_buyer));
+            self.base_coin_vault.put(FungibleBucket(base_coin_bucket.take(self.base_coins_per_launch * self.launches_per_buyer)));
 
             // Mint a buyer badge
             self.last_buyer_id += 1;
@@ -253,7 +253,7 @@ mod ape_in_hook {
                 let mut launch = self.launches.get_mut(&launch_id).unwrap();
 
                 let coin_amount = launch.coins_per_buyer;
-                buckets.push(launch.vault.take(coin_amount));
+                buckets.push(launch.vault.take(coin_amount).into());
 
             }
 
@@ -336,7 +336,7 @@ mod ape_in_hook {
                 CoinLaunch {
                     last_buyer_id: self.last_buyer_id,
                     coins_per_buyer: coin_bucket.amount() / buyers,
-                    vault: Vault::with_bucket(coin_bucket),
+                    vault: FungibleVault::with_bucket(coin_bucket),
                 }
             );
 

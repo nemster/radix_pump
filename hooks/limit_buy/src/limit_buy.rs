@@ -37,7 +37,7 @@ static MAX_ACTIVE_ORDERS_PER_COIN: usize = 500;
     ResourceAddress,
     u32,
     Vec<LimitBuyOrderRef>,
-    Vault,
+    FungibleVault,
     LimitBuyOrderData,
 )]
 mod limit_buy_hook {
@@ -57,10 +57,10 @@ mod limit_buy_hook {
     struct LimitBuyHook {
 
         // The vault where all of the base coins for the active orders are kept
-        base_coin_vault: Vault,
+        base_coin_vault: FungibleVault,
 
         // The resource manager to mint BuyOrder NFTs
-        orders_resource_manager: ResourceManager,
+        orders_resource_manager: NonFungibleResourceManager,
 
         // The numeric id of the last created order
         last_order_id: u32,
@@ -74,7 +74,7 @@ mod limit_buy_hook {
         radix_pump_component: Global<AnyComponent>,
 
         // The vaults where the different bought coins are stored
-        coins_vaults: KeyValueStore<ResourceAddress, Vault>,
+        coins_vaults: KeyValueStore<ResourceAddress, FungibleVault>,
     }
 
     impl LimitBuyHook {
@@ -129,7 +129,7 @@ mod limit_buy_hook {
 
             // Instantiate the component
             Self {
-                base_coin_vault: Vault::new(base_coin_address),
+                base_coin_vault: FungibleVault::new(base_coin_address),
                 orders_resource_manager: orders_resource_manager,
                 last_order_id: 0,
                 active_orders: KeyValueStore::new_with_registered_type(),
@@ -274,10 +274,10 @@ mod limit_buy_hook {
                     coin_amount_bought: Decimal::ZERO,
                 }
             );
-            buckets.push(order_nft);
+            buckets.push(order_nft.into());
 
             // Put the base coins in the shared vault
-            self.base_coin_vault.put(base_coin_bucket);
+            self.base_coin_vault.put(FungibleBucket(base_coin_bucket));
 
             buckets
         }
@@ -321,7 +321,7 @@ mod limit_buy_hook {
                         order_data.coin_amount_bought,
                         WithdrawStrategy::Rounded(RoundingMode::ToZero),
                     );
-                    buckets.push(bucket);
+                    buckets.push(bucket.into());
                 }
 
                 if coins_only {
@@ -363,7 +363,7 @@ mod limit_buy_hook {
                         self.base_coin_vault.take_advanced(
                             base_coins_to_withdraw,
                             WithdrawStrategy::Rounded(RoundingMode::ToZero)
-                        )
+                        ).into()
                     );
                 }
 
@@ -544,7 +544,7 @@ mod limit_buy_hook {
 
                 self.coins_vaults.insert(
                     argument.coin_address,
-                    Vault::with_bucket(coin_bucket)
+                    FungibleVault::with_bucket(coin_bucket)
                 );
             } else {
                 coin_vault.unwrap().put(coin_bucket);

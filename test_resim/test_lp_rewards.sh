@@ -124,6 +124,7 @@ export quick_launched_coin_received=$(increase_in_wallet ${quick_launched_coin})
 echo Quick launched ${quick_launched_coin}, received ${quick_launched_coin_received}
 echo Creator badge id: ${creator_badge_id}
 echo LP token: ${lp_quick}
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 echo resim new-token-fixed --name RewardCoin --symbol RW $supply
@@ -151,12 +152,14 @@ echo resim call-method ${radix_pump_component} add_liquidity ${base_coin}:${base
 resim call-method ${radix_pump_component} add_liquidity ${base_coin}:${base_coin_amount} ${quick_launched_coin}:${quick_coin_amount} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export lp_id1="#$(grep -A 1 "ResAddr: ${lp_quick}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
 echo Added ${quick_coin_amount} ${quick_launched_coin} to the pool, LP id ${lp_id1} received
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 echo resim call-method ${radix_pump_component} add_liquidity ${base_coin}:${base_coin_amount} ${quick_launched_coin}:${quick_coin_amount}
 resim call-method ${radix_pump_component} add_liquidity ${base_coin}:${base_coin_amount} ${quick_launched_coin}:${quick_coin_amount} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 export lp_id2="#$(grep -A 1 "ResAddr: ${lp_quick}" $OUTPUTFILE | tail -n 1 | cut -d '#' -f 2)#"
 echo Added ${quick_coin_amount} ${quick_launched_coin} to the pool, LP id ${lp_id2} received
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export reward_coin_amount=$((${supply} / 2))
@@ -166,6 +169,7 @@ export daily_reward_per_coin=10
 echo resim run manifests/new_liquidity_campaign.rtm
 resim run manifests/new_liquidity_campaign.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Created liquidity campaign: ${daily_reward_per_coin} ${reward_coin} per coin per day
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export unix_epoch=1800086400
@@ -180,6 +184,7 @@ export lp_id=${lp_id1}
 echo resim run manifests/get_rewards.rtm
 resim run manifests/get_rewards.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Withdraw rewards without removing liquidity for LP token ${lp_id}, $(increase_in_wallet ${reward_coin}) ${reward_coin} received
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 export unix_epoch=1800691200
@@ -192,12 +197,14 @@ update_wallet_amounts
 echo resim call-method ${radix_pump_component} remove_liquidity ${lp_quick}:${lp_id1}
 resim call-method ${radix_pump_component} remove_liquidity ${lp_quick}:${lp_id1} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Removed liquidity using LP token ${lp_id1}, received $(increase_in_wallet ${reward_coin}) ${reward_coin}
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 update_wallet_amounts
 echo resim call-method ${radix_pump_component} remove_liquidity ${lp_quick}:${lp_id2}
 resim call-method ${radix_pump_component} remove_liquidity ${lp_quick}:${lp_id2} >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Removed liquidity using LP token ${lp_id2}, received $(increase_in_wallet ${reward_coin}) ${reward_coin}
+grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
 echo resim run manifests/terminate_liquidity_campaign.rtm
@@ -215,4 +222,4 @@ update_wallet_amounts
 echo resim run manifests/terminate_liquidity_campaign.rtm
 resim run manifests/terminate_liquidity_campaign.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Coin creator terminated liquidity campaign, received back $(increase_in_wallet ${reward_coin}) ${reward_coin}
-
+grep 'Transaction Cost: ' $OUTPUTFILE

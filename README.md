@@ -227,7 +227,6 @@ CALL_METHOD
 ### new_fair_launch
 
 A user can create a new coin and launch it using this method.  
-A Radix network transaction that calls this method adds a small royalty that goes to the package owner (about $0.05 in XRD).  
 
 ```
 CALL_METHOD
@@ -277,7 +276,6 @@ This badge allows the creator to:
 ### new_quick_launch
 
 A user can create a new coin and launch it using this method.  
-A Radix network transaction that calls this method adds a small royalty that goes to the package owner (about $0.05 in XRD).  
 
 ```
 CALL_METHOD
@@ -565,7 +563,6 @@ A `LiquidationEvent` containing the resource address of the liquidating coin is 
 ### get_flash_loan
 
 Get a flash loan of a coin created in RadixPump
-A Radix network transaction that calls this method adds a very small royalty that goes to the package owner (about $0.002 in XRD).  
 
 ```
 CALL_METHOD

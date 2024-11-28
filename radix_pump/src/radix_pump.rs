@@ -160,50 +160,6 @@ mod radix_pump {
         }
     }
 
-    enable_package_royalties! {
-        new => Free;
-
-        forbid_symbols => Free;
-        forbid_names => Free;
-        update_fees => Free;
-        owner_set_liquidation_mode => Free;
-        update_time_limits => Free;
-        register_hook => Free;
-        unregister_hook => Free;
-        owner_enable_hook => Free;
-        owner_disable_hook => Free;
-        new_integrator => Free;
-        update_dapp_definition => Free;
-        get_badges => Free;
-
-        new_fair_launch => Usd(dec!("0.05"));
-        new_quick_launch => Usd(dec!("0.05"));
-        new_random_launch => Usd(dec!("0.05"));
-        new_pool => Free;
-        new_launched_pool => Free;
-
-        creator_set_liquidation_mode => Free;
-        update_pool_fees => Free;
-        launch => Free;
-        terminate_launch => Free;
-        unlock => Usd(dec!("0.005"));
-        creator_enable_hook => Free;
-        creator_disable_hook => Free;
-        burn => Free;
-
-        get_flash_loan => Usd(dec!("0.002"));
-        return_flash_loan => Free;
-        buy_ticket => Usd(dec!("0.005"));
-        redeem_ticket => Free;
-        add_liquidity => Free;
-        remove_liquidity => Free;
-        swap => Usd(dec!("0.005"));
-
-        get_pool_info => Free;
-
-        get_fees => Free;
-    }
-
     struct RadixPump {
         // Resource address of the owner badge
         owner_badge_address: ResourceAddress,

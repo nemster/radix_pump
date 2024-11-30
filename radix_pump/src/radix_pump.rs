@@ -765,8 +765,8 @@ mod radix_pump {
         pub fn new_quick_launch(
             &mut self,
 
-            // Bucket of base coins to initialize the pool
-            mut base_coin_bucket: Bucket,
+            // Bucket of coins to initialize the pool
+            coin1_bucket: Bucket,
 
             // Symbol of the coin to launch
             mut coin_symbol: String,
@@ -805,13 +805,17 @@ mod radix_pump {
         ) -> (
             NonFungibleBucket, // Creator badge
             Bucket, // Creator share of the launched coin
-            Vec<Bucket>, // Eventual additional buckets created by the hooks
+            Vec<Bucket>, // Eventual additional buckets created by the sell hooks
+            Vec<Bucket>, // Eventual additional buckets created by the QuickLaunch hooks
         ) {
-            // Make sure the base coin deposit is acceptable
-            assert!(
-                base_coin_bucket.resource_address() == self.base_coin_address,
-                "Wrong base coin deposited",
-            );
+            
+            // If the provided bucket is not base coins sell them to get base coins
+            let (mut base_coin_bucket, buckets1) = match coin1_bucket.resource_address() == self.base_coin_address {
+                false => self.sell(coin1_bucket, 0),
+                true => (FungibleBucket(coin1_bucket), vec![]),
+            };
+
+            // Make sure the base coins are enough
             assert!(
                 base_coin_bucket.amount() >= self.minimum_deposit,
                 "Insufficient base coin deposit",
@@ -820,11 +824,9 @@ mod radix_pump {
             // Pay the component owner share of the coin deposit
             self.deposit_fee(
                 0,
-                FungibleBucket(
-                    base_coin_bucket.take_advanced(
-                        self.creation_fee_percentage * base_coin_bucket.amount() / 100,
-                        WithdrawStrategy::Rounded(RoundingMode::ToZero),
-                    )
+                base_coin_bucket.take_advanced(
+                    self.creation_fee_percentage * base_coin_bucket.amount() / 100,
+                    WithdrawStrategy::Rounded(RoundingMode::ToZero),
                 )
             );
 
@@ -882,13 +884,13 @@ mod radix_pump {
             );
 
             // Execute global hooks for the QuickLaunch operation
-            let buckets = self.execute_hooks(
+            let buckets2 = self.execute_hooks(
                 &vec![vec![],vec![],vec![]],
                 &hook_argument,
             );
 
             // Return all of the buckets to the coin creator
-            (creator_badge_bucket, creator_coin_bucket, buckets)
+            (creator_badge_bucket, creator_coin_bucket, buckets1, buckets2)
         }
 
         // This method can emit any event created by a pool component.

@@ -281,17 +281,17 @@ A user can create a new coin and launch it using this method.
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
     "withdraw"
-    Address("<BASE_COIN_ADDRESS>")
-    Decimal("<BASE_COIN_AMOUNT>")
+    Address("<COIN1_ADDRESS>")
+    Decimal("<COIN1_AMOUNT>")
 ;
 TAKE_ALL_FROM_WORKTOP
-    Address("<BASE_COIN_ADDRESS>")
-    Bucket("base_coin_bucket")
+    Address("<COIN1_ADDRESS>")
+    Bucket("coin1_bucket")
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "new_quick_launch"
-    Bucket("base_coin_bucket")
+    Bucket("coin1_bucket")
     "<COIN_SYMBOL>"
     "<COIN_NAME>"
     "<COIN_ICON_URL>"
@@ -312,8 +312,8 @@ CALL_METHOD
 ```
 
 `<ACCOUNT_ADDRESS>` is the account of the user creating the new coin.  
-`<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
-`<BASE_COIN_AMOUNT>` is the base coin amount used to initialize the pool. It must be no less than the `<MINIMUM_DEPOSIT>` specifiled during the component creation. Not all of the amount goes into the pool: a percentage of `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<COIN1_ADDRESS>` is the base coin address or the address of any listed coin that will be sold to initialize the pool.  
+`<COIN1_AMOUNT>` is the coin amount used to initialize the pool. It must correspond to no less than the `<MINIMUM_DEPOSIT>` base coins.  
 `<COIN_SYMBOL>` is the symbol to assign to the new coin. This is converted to uppercase and checked against all of the previously created coins' symbols and all of the symbols forbidden by the component owner.  
 `<COIN_NAME>` is the name to assign to the new coin. This is checked against all of the previously created coins' names and all of the names forbidden by the component owner.  
 `<COIN_ICON_URL>` is the URL of the image to assign as icon to the new coin; it must be a valid URL.  

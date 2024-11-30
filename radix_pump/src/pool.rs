@@ -1892,7 +1892,7 @@ mod pool {
             hook_badge_address: ResourceAddress,
 
             // Base coins to initialize the pool
-            base_coin_bucket: Bucket,
+            base_coin_bucket: FungibleBucket,
 
             // Metadata for the coin to create
             coin_symbol: String,
@@ -1990,7 +1990,7 @@ mod pool {
 
             // Instantiate the component
             Self {
-                base_coin_vault: FungibleVault::with_bucket(FungibleBucket(base_coin_bucket)),
+                base_coin_vault: FungibleVault::with_bucket(base_coin_bucket),
                 coin_vault: LoanSafeVault::with_bucket(coin_bucket.into()),
                 mode: PoolMode::Normal,
                 last_price: coin_price,

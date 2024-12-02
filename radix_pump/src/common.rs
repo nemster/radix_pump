@@ -29,6 +29,12 @@ pub struct PoolInfo {
     // The price of the last buy or sell operation
     pub last_price: Decimal,
 
+    // The current price based on the vault amount ratio
+    pub price: Decimal,
+
+    // Amount of non ingnored or locked coins
+    pub circulating_supply: Decimal,
+
     // When calling the Pool get_pool_info method, these are the pool fees
     // When calling the RadixPump get_pool_info method, these are the total fees (owner/integrator
     // + pool)
@@ -100,22 +106,51 @@ pub struct CreatorData {
     pub pool_mode: PoolMode,
 }
 
+#[derive(Debug, ScryptoSbor, PartialEq)]
+pub enum TaskStatus {
+    OK,
+    LowGas,
+    HookUnregistered,
+}
+
+// Non fungible data for scheduled operations
+#[derive(Debug, ScryptoSbor, NonFungibleData)]
+pub struct TimerBadge {
+    #[mutable]
+    pub minute: String,
+    #[mutable]
+    pub hour: String,
+    #[mutable]
+    pub day_of_month: String,
+    #[mutable]
+    pub month: String,
+    #[mutable]
+    pub day_of_week: String,
+    #[mutable]
+    pub random_delay: u32,
+    #[mutable]
+    pub status: TaskStatus,
+    pub hook: String,
+    pub coin_address: ResourceAddress,
+}
+
 // List of pool operations a hook can be attached to
 #[derive(Debug, ScryptoSbor, PartialEq, Clone, Copy)]
 pub enum HookableOperation {
-    PostFairLaunch,             // launch method
-    PostTerminateFairLaunch,    // terminate_launch method
-    PostQuickLaunch,            // new_quick_launch method
-    PostRandomLaunch,           // launch method
-    PostTerminateRandomLaunch,  // terminate_launch method (last invocation)
-    PostBuy,                    // buy method
-    PostSell,                   // sell method
-    PostReturnFlashLoan,        // return_flash_loan method
-    PostBuyTicket,              // buy_ticket method
-    PostRedeemWinningTicket,    // redeem_ticket method
-    PostRedeemLosingTicket,     // redeem ticket method
-    PostAddLiquidity,           // add_liquidity method
-    PostRemoveLiquidity,        // remove_liquidity method
+    FairLaunch,             // launch method
+    TerminateFairLaunch,    // terminate_launch method
+    QuickLaunch,            // new_quick_launch method
+    RandomLaunch,           // launch method
+    TerminateRandomLaunch,  // terminate_launch method (last invocation)
+    Buy,                    // buy method
+    Sell,                   // sell method
+    ReturnFlashLoan,        // return_flash_loan method
+    BuyTicket,              // buy_ticket method
+    RedeemWinningTicket,    // redeem_ticket method
+    RedeemLosingTicket,     // redeem ticket method
+    AddLiquidity,           // add_liquidity method
+    RemoveLiquidity,        // remove_liquidity method
+    Timer,                  // used by the Timer component
 }
 
 // Event created by a pool launch method
@@ -187,6 +222,7 @@ pub struct BuyEvent {
     pub coins_in_pool: Decimal,
     pub fee_paid_to_the_pool: Decimal,
     pub integrator_id: u64,
+    pub circulating_supply: Decimal,
 }
 
 // Event created by a pool sell method
@@ -199,6 +235,7 @@ pub struct SellEvent {
     pub coins_in_pool: Decimal,
     pub fee_paid_to_the_pool: Decimal,
     pub integrator_id: u64,
+    pub circulating_supply: Decimal,
 }
 
 // Event created by a pool set_liquidation_mode method
@@ -250,6 +287,7 @@ pub struct AddLiquidityEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
     pub lp_id: u64,
+    pub coins_in_pool: Decimal,
 }
 
 // Event created by a pool remove_liquidity method
@@ -257,6 +295,7 @@ pub struct AddLiquidityEvent {
 pub struct RemoveLiquidityEvent {
     pub resource_address: ResourceAddress,
     pub amount: Decimal,
+    pub coins_in_pool: Decimal,
 }
 
 // A wrapper for any event a pool can generate
@@ -304,27 +343,28 @@ pub struct HookArgument {
     pub operation: HookableOperation,
 
     // The meaning of the amount field depends on the operation:
-    // if PostBuy it is the bought amount of coins
-    // if PostSell it is the sold amount of coins
-    // if PostBuyTicket it is the number of bought tickets (integer)
-    // if PostRedeemLosingTicket it is the number of losing tickets reedemed (integer)
-    // if PostRedeemWinningTicket it is the number of winning tickets reedemed (integer)
-    // if PostAddLiquidity it is the amount of coins added to the pool
-    // if PostRemoveLiquidity it is the amount of coins withdrawn from the pool
-    // if PostFairLaunch or PostRandomLaunch it is None
-    // if PostTerminateFairLaunch or PostQuickLaunch or PostTerminateRandomLaunch it is the total supply of the coin
-    // if PostReturnFlashLoan it is the amount of coins returned
+    // if Buy it is the bought amount of coins
+    // if Sell it is the sold amount of coins
+    // if BuyTicket it is the number of bought tickets (integer)
+    // if RedeemLosingTicket it is the number of losing tickets reedemed (integer)
+    // if RedeemWinningTicket it is the number of winning tickets reedemed (integer)
+    // if AddLiquidity it is the amount of coins added to the pool
+    // if RemoveLiquidity it is the amount of coins withdrawn from the pool
+    // if FairLaunch or RandomLaunch it is None
+    // if TerminateFairLaunch or QuickLaunch or TerminateRandomLaunch it is the total supply of the coin
+    // if ReturnFlashLoan it is the amount of coins returned
     pub amount: Option<Decimal>,
 
     pub mode: PoolMode,
     pub price: Decimal,
 
     // The meaning of the ids field depends on the operation:
-    // if PostBuyTicket it is the list of ids of the bought tickets
-    // if PostRedeemLosingTicket it is the list of ids of the redeemed losing tickets
-    // if PostRedeemWinningTicket it is the list of ids of the redeemed winning tickets
-    // if PostAddLiquidity it is the id of the minted liquidity token
-    // if PostRemoveLiquidity it is the list of the ids of the burned liquidity tokens
+    // if BuyTicket it is the list of ids of the bought tickets
+    // if RedeemLosingTicket it is the list of ids of the redeemed losing tickets
+    // if RedeemWinningTicket it is the list of ids of the redeemed winning tickets
+    // if AddLiquidity it is the id of the minted liquidity token
+    // if RemoveLiquidity it is the list of the ids of the burned liquidity tokens
+    // if Timer it is the id of the TimerBadge
     // in any other case it is just an empty array
     pub ids: Vec<u64>,
 }
@@ -402,9 +442,9 @@ define_interface! {
         // Call this method to buy coins with base coins
         fn buy(
             &mut self,
-            base_coin_bucket: Bucket,
+            base_coin_bucket: FungibleBucket,
         ) -> (
-            Bucket,
+            FungibleBucket,
             HookArgument,
             AnyPoolEvent,
         );
@@ -412,9 +452,9 @@ define_interface! {
         // Call this method to sell coins for base coins
         fn sell(
             &mut self,
-            coin_bucket: Bucket,
+            coin_bucket: FungibleBucket,
         ) -> (
-            Bucket,
+            FungibleBucket,
             HookArgument,
             AnyPoolEvent,
         );
@@ -423,9 +463,10 @@ define_interface! {
         fn buy_ticket(
             &mut self,
             amount: u32,
-            base_coin_bucket: Bucket,
+            base_coin_bucket: FungibleBucket,
         ) -> (
             Bucket,
+            NonFungibleBucket,
             HookArgument,
             AnyPoolEvent,
         );
@@ -436,8 +477,8 @@ define_interface! {
             &mut self,
             ticket_bucket: Bucket,
         ) -> (
-            Bucket, // base coin bucket
-            Option<Bucket>, // coin bucket
+            FungibleBucket, // base coin bucket
+            Option<FungibleBucket>, // coin bucket
             Option<HookArgument>,
             Option<HookArgument>,
         );
@@ -449,7 +490,7 @@ define_interface! {
             base_coin_bucket: Bucket,
             coin_bucket: Bucket,
         ) -> (  
-            Bucket,
+            NonFungibleBucket,
             Option<Bucket>,
             HookArgument, 
             AnyPoolEvent,
@@ -461,8 +502,8 @@ define_interface! {
             &mut self,
             lp_bucket: Bucket,
         ) -> (  
-            Bucket, 
-            Option<Bucket>,
+            FungibleBucket, 
+            Option<FungibleBucket>,
             HookArgument,
             AnyPoolEvent,
         );
@@ -490,7 +531,7 @@ define_interface! {
         // - TerminatingLaunch -> TerminatingLaunch (request more random data to the RandomComponent)
         // - TerminatingLaunch -> Normal (tickets extraction completed)
         fn terminate_launch(&mut self) -> (
-            Option<Bucket>,
+            Option<FungibleBucket>,
             Option<PoolMode>,
             Option<HookArgument>,
             Option<AnyPoolEvent>,
@@ -502,7 +543,7 @@ define_interface! {
         fn unlock(
             &mut self,
             amount: Option<Decimal>,
-        ) -> Bucket;
+        ) -> FungibleBucket;
 
         // Call this method to put the pool in Liquidation mode (authentication is in RadixPump
         // component)
@@ -517,7 +558,7 @@ define_interface! {
         fn get_flash_loan(
             &mut self,
             amount: Decimal,
-        ) -> Bucket;
+        ) -> FungibleBucket;
 
         // Return a previoulsy received flash loan
         fn return_flash_loan(

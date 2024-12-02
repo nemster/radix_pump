@@ -216,19 +216,19 @@ impl HooksPerOperation {
 // String to operation conversion
 pub fn string_to_operation(operation: &String) -> HookableOperation {
     match operation.as_str() {
-        "PostFairLaunch" => HookableOperation::PostFairLaunch,
-        "PostTerminateFairLaunch" => HookableOperation::PostTerminateFairLaunch,
-        "PostQuickLaunch" => HookableOperation::PostQuickLaunch,
-        "PostRandomLaunch" => HookableOperation::PostRandomLaunch,
-        "PostTerminateRandomLaunch" => HookableOperation::PostTerminateRandomLaunch,
-        "PostBuy" => HookableOperation::PostBuy,
-        "PostSell" => HookableOperation::PostSell,
-        "PostReturnFlashLoan" => HookableOperation::PostReturnFlashLoan,
-        "PostBuyTicket" => HookableOperation::PostBuyTicket,
-        "PostRedeemWinningTicket" => HookableOperation::PostRedeemWinningTicket,
-        "PostRedeemLosingTicket" => HookableOperation::PostRedeemLosingTicket,
-        "PostAddLiquidity" => HookableOperation::PostAddLiquidity,
-        "PostRemoveLiquidity" => HookableOperation::PostRemoveLiquidity,
+        "FairLaunch" => HookableOperation::FairLaunch,
+        "TerminateFairLaunch" => HookableOperation::TerminateFairLaunch,
+        "QuickLaunch" => HookableOperation::QuickLaunch,
+        "RandomLaunch" => HookableOperation::RandomLaunch,
+        "TerminateRandomLaunch" => HookableOperation::TerminateRandomLaunch,
+        "Buy" => HookableOperation::Buy,
+        "Sell" => HookableOperation::Sell,
+        "ReturnFlashLoan" => HookableOperation::ReturnFlashLoan,
+        "BuyTicket" => HookableOperation::BuyTicket,
+        "RedeemWinningTicket" => HookableOperation::RedeemWinningTicket,
+        "RedeemLosingTicket" => HookableOperation::RedeemLosingTicket,
+        "AddLiquidity" => HookableOperation::AddLiquidity,
+        "RemoveLiquidity" => HookableOperation::RemoveLiquidity,
         _ => Runtime::panic("Operation not found".to_string()),
     }
 }

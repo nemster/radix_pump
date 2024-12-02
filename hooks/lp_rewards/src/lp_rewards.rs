@@ -6,10 +6,10 @@ use scrypto_interface::*;
 // liquidity providers, the rewards can be any fungible.
 // Liquidity providers can withdraw rewards by calling the get_rewards method or automatically when
 // they remove liquidity.
-// For the automatical rewards withdraw to work it is needed that both the PostAddLiquidity and 
-// PostRemoveLiquidity operations are intercepted by this hook so it is advisable to enable the
-// hook for PostAddLiquidity globally as soon as possible and let coin creators enable/disable the
-// hook for PostRemoveLiquidity when they start/end campaigns.
+// For the automatical rewards withdraw to work it is needed that both the AddLiquidity and 
+// RemoveLiquidity operations are intercepted by this hook so it is advisable to enable the
+// hook for AddLiquidity globally as soon as possible and let coin creators enable/disable the
+// hook for RemoveLiquidity when they start/end campaigns.
 
 // This struct contains informations about an LP token
 #[derive(ScryptoSbor)]
@@ -42,7 +42,7 @@ struct OutOfFundsEvent {
 // event
 // This event is emitted if there are no informations about the amount of rewards to give a
 // liquidity provider that removed his liquidity; this happens if the hook did not intercept the
-// PostAddLiquidity operation
+// AddLiquidity operation
 #[derive(ScryptoSbor, ScryptoEvent)]
 struct UnknownRewardAmountEvent {
     coin_address: ResourceAddress,
@@ -312,6 +312,8 @@ mod lp_rewards_hook {
             rewards_bucket
         }
 
+        // A user can invoke this method to withdraw his rewards without removing his liquidity
+        // from a pool
         pub fn get_rewards(
             &mut self,
             lp_proof: Proof,
@@ -436,9 +438,9 @@ mod lp_rewards_hook {
 
             match argument.operation {
 
-                // In case of a PostAddLiquidity operation, just take note of the amount and mint
+                // In case of a AddLiquidity operation, just take note of the amount and mint
                 // time of the LP token
-                HookableOperation::PostAddLiquidity => {
+                HookableOperation::AddLiquidity => {
                     self.liquidity_providers.insert(
                         (argument.coin_address, argument.ids[0]),
                         LiquidityProvider {
@@ -450,8 +452,8 @@ mod lp_rewards_hook {
                     (hook_badge_bucket, None, vec![], vec![])
                 },
 
-                // In case of a PostRemoveLiquidity we have to give the rewards
-                HookableOperation::PostRemoveLiquidity => {
+                // In case of a RemoveLiquidity we have to give the rewards
+                HookableOperation::RemoveLiquidity => {
                     
                     // Is there any active campaign for this coin?
                     // If not just quit

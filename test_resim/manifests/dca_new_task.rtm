@@ -1,0 +1,33 @@
+CALL_METHOD
+    Address("${account}")
+    "lock_fee"
+    Decimal("2")
+;
+CALL_METHOD
+    Address("${account}")
+    "create_proof_of_non_fungibles"
+    Address("${timer_badge}")
+    Array<NonFungibleLocalId>(NonFungibleLocalId("${timer_badge_id}"))
+;
+POP_FROM_AUTH_ZONE
+    Proof("timer_proof")
+;
+CALL_METHOD
+    Address("${account}")
+    "withdraw"
+    Address("${coin1}")
+    Decimal("${coin1_amount}")
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("${coin1}")
+    Bucket("coin1_bucket")
+;
+CALL_METHOD
+    Address("${dca_component}")
+    "new_task"
+    Proof("timer_proof")
+    Bucket("coin1_bucket")
+    Decimal("${coin1_per_buy_operation}")
+    Decimal("${max_price}")
+    ${min_interval_buy_operations}u32
+;

@@ -73,7 +73,8 @@ The flash loan fee is fixed (not a percentage), has no uppper limit and can be i
 Hooks are external components authomatically called by RadixPump when certain operations are performed.  
 
 The component owner can make hooks available by calling the `register_hook` method, he must specify the operations this hook can be attached to.  
-The available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket`, `PostRedeemLousingTicket`, `PostAddLiquidity` and `PostRemoveLiquidity`. I avoided `Pre` hooks to prevent frontrunning and sandwitch attacks.  
+The available operations are `FairLaunch`, `TerminateFairLaunch`, `QuickLaunch`, `RandomLaunch`, `TerminateRandomLaunch`, `Buy`, `Sell`, `ReturnFlashLoan`, `BuyTicket`, `RedeemWinningTicket`, `RedeemLousingTicket`, `AddLiquidity` and `RemoveLiquidity`.  
+All hooks are executed after the completion of the operation they are hooked to; this is to prevent frontrunning and sandwitch attacks.  
 
 Once an hook is registered the component owner can attach it to one or more operation globally (i.e. for all pools) via the `owner_enable_hook` method.
 A coin owner can attach a registered hook to operations happening on his coin.
@@ -82,6 +83,7 @@ Hooks can be used to extend RadixPump features in any way; just few examples:
 - make an airdrop to the 100 first buyers on my coin  
 - authomatically buy the next 10 quick launched coins  
 - authomatically buy the dips  
+- mint an NFT when my coin reached an ATH and give it to the buyer who made it possible  
 ...  
 
 A simple hook that just emits an event and mints a token is provided as example; when developing a new hook make sure it has a `hook` method with the same arguments and return type as the provided example.
@@ -104,9 +106,13 @@ If a non existing or inactive `integrator_id` is specified (as an example `0u64`
 
 Both the component owner and the integrators can withdraw the fees by using the `get_fees` method.  
 
+## Scheduled tasks
+
+The users can schedule the execution of hooks that interact with the pools; more about this in the Timer README.  
+
 ## Transaction manifests
 
-### Instantiate (Stokenet)
+### Instantiate
 
 Use this functions to create a RadixPump and the test hook components in Stokenet
 
@@ -167,7 +173,7 @@ CALL_FUNCTION
 `<BUY_SELL_FEE_PERCENTAGE>` is the percentage (expressed as a number from 0 to 100) of base coins paid by buyers and sellers to the component owner.  
 `<FLASH_LOAN_FEE>` is the amount of base coins paid by flash borrowers to the component owner.  
 `<DAPP_DEFINITION>` is the address of the dApp definition account; this will be set as metadata on all of the components and some resources.  
-`<HOOKS_BADGE>` is the resource address of the badge created by RadixPump to authenticate towards the hooks; you can get it from `get_pool_info`.
+`<HOOKS_BADGE>` is the resource address of the badge created by RadixPump to authenticate towards the hooks; you can get it from `get_pool_info`.  
 `<BASE_COIN_AMOUNT>` is the amount of base coins to deposit in the TestHook0 component.  
 
 ### forbid_symbols
@@ -221,7 +227,6 @@ CALL_METHOD
 ### new_fair_launch
 
 A user can create a new coin and launch it using this method.  
-A Radix network transaction that calls this method adds a small royalty that goes to the package owner (about $0.05 in XRD).  
 
 ```
 CALL_METHOD
@@ -271,23 +276,22 @@ This badge allows the creator to:
 ### new_quick_launch
 
 A user can create a new coin and launch it using this method.  
-A Radix network transaction that calls this method adds a small royalty that goes to the package owner (about $0.05 in XRD).  
 
 ```
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
     "withdraw"
-    Address("<BASE_COIN_ADDRESS>")
-    Decimal("<BASE_COIN_AMOUNT>")
+    Address("<COIN1_ADDRESS>")
+    Decimal("<COIN1_AMOUNT>")
 ;
 TAKE_ALL_FROM_WORKTOP
-    Address("<BASE_COIN_ADDRESS>")
-    Bucket("base_coin_bucket")
+    Address("<COIN1_ADDRESS>")
+    Bucket("coin1_bucket")
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "new_quick_launch"
-    Bucket("base_coin_bucket")
+    Bucket("coin1_bucket")
     "<COIN_SYMBOL>"
     "<COIN_NAME>"
     "<COIN_ICON_URL>"
@@ -308,8 +312,8 @@ CALL_METHOD
 ```
 
 `<ACCOUNT_ADDRESS>` is the account of the user creating the new coin.  
-`<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).  
-`<BASE_COIN_AMOUNT>` is the base coin amount used to initialize the pool. It must be no less than the `<MINIMUM_DEPOSIT>` specifiled during the component creation. Not all of the amount goes into the pool: a percentage of `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<COIN1_ADDRESS>` is the base coin address or the address of any listed coin that will be sold to initialize the pool.  
+`<COIN1_AMOUNT>` is the coin amount used to initialize the pool. It must correspond to no less than the `<MINIMUM_DEPOSIT>` base coins.  
 `<COIN_SYMBOL>` is the symbol to assign to the new coin. This is converted to uppercase and checked against all of the previously created coins' symbols and all of the symbols forbidden by the component owner.  
 `<COIN_NAME>` is the name to assign to the new coin. This is checked against all of the previously created coins' names and all of the names forbidden by the component owner.  
 `<COIN_ICON_URL>` is the URL of the image to assign as icon to the new coin; it must be a valid URL.  
@@ -381,6 +385,8 @@ Another winning ticket equivalent is used to initialise the pool, so the total s
 
 This function creates a pool for an already existing coin, it can only be called by the component owner.  
 
+It issues a coin creator badge, just like any launch method.  
+
 ```
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
@@ -391,7 +397,7 @@ CALL_METHOD
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "new_pool"
-    "<COIN_ADDRESS>"
+    Address("<COIN_ADDRESS>")
     Decimal("<BUY_POOL_FEE_PERCENTAGE>")
     Decimal("<SELL_POOL_FEE_PERCENTAGE>")
     Decimal("<FLASH_LOAN_POOL_FEE>")
@@ -408,6 +414,37 @@ CALL_METHOD
 
 The created pool is not initialised: the `add_liquidity` method must be called to make it usable.  
 
+### new_launched_pool
+
+This method allows the owner to add an externally instantiated component as a pool; it can also replace an existing pool with the new one.  
+It can be used to add new kinds of pools or in a number of bad situations.  
+
+
+It issues a coin creator badge, just like any launch method.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "new_launched_pool"
+    Address("<COIN_ADDRESS>")
+    Address("<POOL_ADDRESS>")
+    Address("<LP_TOKEN_ADDRESS>")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<COIN_ADDRESS>` is the resource address of the existing coin.  
+`<POOL_ADDRESS>` is the address of the new pool component.  
+`<LP_TOKEN_ADDRESS>` is the resource address of the liquidity token for the new pool.  
+
 ### get_fees
 
 The component owner and the integrators can call this method to get fees collected by the platform.  
@@ -418,7 +455,6 @@ CALL_METHOD
     "create_proof_of_non_fungibles"
     Address("<INTEGRATOR_BADGE_ADDRESS>")
     Array<NonFungibleLocalId>(NonFungibleLocalId("#<INTEGRATOR_BADGE_ID>#"))
-    
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
@@ -517,7 +553,7 @@ CALL_METHOD
 ;
 ```
 
-`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<ACCOUNT_ADDRESS>` is the account containing the coin creator badge.  
 `<CREATOR_BADGE_ADDRESS>` is the badge receaved when creating the coin.  
 `<CREATOR_BADGE_ID>` is the numeric ID of the badge received when creating the coin.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
@@ -527,7 +563,6 @@ A `LiquidationEvent` containing the resource address of the liquidating coin is 
 ### get_flash_loan
 
 Get a flash loan of a coin created in RadixPump
-A Radix network transaction that calls this method adds a very small royalty that goes to the package owner (about $0.002 in XRD).  
 
 ```
 CALL_METHOD
@@ -639,6 +674,8 @@ The method returns a `PoolInfo` struct containing these information:
 - the amount of base coins in the pool.  
 - the amount of coins in the pool.  
 - the price of the last buy or sell operation.  
+- the current price based on ratio of amounts of coins in the pool.  
+- the circulating supply of the coin.  
 - total (component owner + pool) buy fee percentage.  
 - total (component owner + pool) sell fee percentage.  
 - total (component owner + pool) flash loan fee.  
@@ -816,7 +853,7 @@ CALL_METHOD
 `<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
 `<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<HOOK_NAME>` is the name that will be used to refer to this hook.  
-`<OPERATION>` is one of the operations the hooks can be attached to. Available operations are `PostFairLaunch`, `PostTerminateFairLaunch`, `PostQuickLaunch`, `PostRandomLaunch`, `PostTerminateRandomLaunch`, `PostBuy`, `PostSell`, `PostReturnFlashLoan`, `PostBuyTicket`, `PostRedeemWinningTicket`, `PostRedeemLousingTicket`, `PostAddLiquidity` and `PostRemoveLiquidity`.  
+`<OPERATION>` is one of the operations the hooks can be attached to. Available operations are `FairLaunch`, `TerminateFairLaunch`, `QuickLaunch`, `RandomLaunch`, `TerminateRandomLaunch`, `Buy`, `Sell`, `ReturnFlashLoan`, `BuyTicket`, `RedeemWinningTicket`, `RedeemLousingTicket`, `AddLiquidity` and `RemoveLiquidity`.  
 `<HOOK_ADDRESS>` is the component address of the hook.  
 
 ### unregister_hook
@@ -1002,19 +1039,19 @@ This method allows to buy one or more tickets during a random launch.
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
     "withdraw"
-    Address("<BASE_COIN_ADDRESS>")
-    Decimal("<BASE_COIN_AMOUNT>")
+    Address("<COIN1_ADDRESS>")
+    Decimal("<COIN1_AMOUNT>")
 ;
 TAKE_ALL_FROM_WORKTOP
-    Address("<BASE_COIN_ADDRESS>")
-    Bucket("base_coin_bucket")
+    Address("<COIN1_ADDRESS>")
+    Bucket("coin1_bucket")
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
     "buy_ticket"
     Address("<COIN_ADDRESS>")
     <AMOUNT>u32
-    Bucket("base_coin_bucket")
+    Bucket("coin1_bucket")
 ;
 CALL_METHOD
     Address("<ACCOUNT_ADDRESS>")
@@ -1023,12 +1060,12 @@ CALL_METHOD
 ;
 ```
 
-`<ACCOUNT_ADDRESS>` is the account of the user buying the tickets.
-`<BASE_COIN_ADDRESS>` is the base coin address specified in the component creation (probably XRD).
-`<BASE_COIN_AMOUNT>` is the base coin amount to buy the tickets.
-`<COMPONENT_ADDRESS>` is the address of the RadixPump component.
-`<COIN_ADDRESS>` is the resource address of the random launched coin the user wants to buy the tickets for.
-`<AMOUNT>` is the number of tickets the user wants to buy.
+`<ACCOUNT_ADDRESS>` is the account of the user buying the tickets.  
+`<COIN1_ADDRESS>` is the resource address of the coin that will be used to buy the tickets; it can be the base coin or any listed coin.  
+`<COIN1_AMOUNT>` is the coin1 amount to buy the tickets.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<COIN_ADDRESS>` is the resource address of the random launched coin the user wants to buy the tickets for.  
+`<AMOUNT>` is the number of tickets the user wants to buy.  
 
 This method emits a `BuyTicketEvent` event.  
 
@@ -1162,7 +1199,7 @@ CALL_METHOD
 ;
 TAKE_ALL_FROM_WORKTOP
     Address("<COIN1_ADDRESS>") 
-    Bucket("coin_bucket")
+    Bucket("coin1_bucket")
 ;
 CALL_METHOD
     Address("<COMPONENT_ADDRESS>")
@@ -1178,11 +1215,11 @@ CALL_METHOD
 ; 
 ```
 
-`<ACCOUNT_ADDRESS>` is the account of the user swapping the coins.
-`<COIN1_ADDRESS>` is the coin the user wants to sell.
-`<COIN1_AMOUNT>` is the coin amount the user wants to sell.
-`<COMPONENT_ADDRESS>` is the address of the RadixPump component.
-`<COIN2_ADDRESS>` is the coin the user wants to buy.
+`<ACCOUNT_ADDRESS>` is the account of the user swapping the coins.  
+`<COIN1_ADDRESS>` is the coin the user wants to sell.  
+`<COIN1_AMOUNT>` is the coin amount the user wants to sell.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
+`<COIN2_ADDRESS>` is the coin the user wants to buy.  
 `<INTEGRATOR_ID>` is 0 or the id of the badge of the integrator that will receive the platform fees.  
 
 Depending on the coins, a `BuyEvent` and/or a `SellEvent`event is issued. It contains the resource address of the bought coin, the pool mode, the bought or sold amount, the new price, the number of coins currently in the pool and the fees paid to the pool.  
@@ -1210,9 +1247,9 @@ CALL_METHOD
 ;
 ```
 
-`<ACCOUNT_ADDRESS>` is the account containing the owner badge.
-`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.
-`<COMPONENT_ADDRESS>` is the address of the RadixPump component.
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<NAME>` is the name assigned to the integrator. It has no real use: it's just a reminder for the owner of the badges he created.  
 
 ### update_dapp_definition
@@ -1233,7 +1270,37 @@ CALL_METHOD
 ;
 ```
 
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 `<DAPP_DEFINITION>` is the address of the new dApp definition account; this will be set as metadata on all of the components and some resources.  
+
+### get_badges
+
+The component owner can call this method to get a proxy badge and an hook badge.  
+It can be useful to set up a Timer component or to replace the RadixPump component with a new one.  
+
+```
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "create_proof_of_amount"
+    Address("<OWNER_BADGE_ADDRESS>")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("<COMPONENT_ADDRESS>")
+    "get_badges"
+;
+CALL_METHOD
+    Address("<ACCOUNT_ADDRESS>")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+```
+
+`<ACCOUNT_ADDRESS>` is the account containing the owner badge.  
+`<OWNER_BADGE_ADDRESS>` is the resource address of a badge that was specified when creating the component.  
+`<COMPONENT_ADDRESS>` is the address of the RadixPump component.  
 
 ## Special thanks to:
 

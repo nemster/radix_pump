@@ -64,16 +64,16 @@ grep 'Transaction Cost: ' $OUTPUTFILE
 echo
 export hook_name=ApeIn
 export test_hook_component=${ape_in_hook_component}
-export operations='"PostQuickLaunch"'
-echo resim run register_hook.rtm
-resim run register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export operations='"QuickLaunch"'
+echo resim run manifests/register_hook.rtm
+resim run manifests/register_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Registered hook ${hook_name} for operation ${operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
 echo
-export globally_enabled_operations='"PostQuickLaunch"'
-echo resim run owner_enable_hook.rtm
-resim run owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+export globally_enabled_operations='"QuickLaunch"'
+echo resim run manifests/owner_enable_hook.rtm
+resim run manifests/owner_enable_hook.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
 echo Globally enabled hook ${hook_name} for operation ${globally_enabled_operations}
 grep 'Transaction Cost: ' $OUTPUTFILE
 
@@ -94,8 +94,8 @@ do
     echo
     export symbol=QL${I}
     export name=QuickLaunchedCoin${I}
-    echo run new_quick_launch.rtm
-    resim run new_quick_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
+    echo run manifests/new_quick_launch.rtm
+    resim run manifests/new_quick_launch.rtm >$OUTPUTFILE || ( cat $OUTPUTFILE ; exit 1 )
     export quick_launched_coin=$(grep 'Resource:' $OUTPUTFILE | head -n 1 | cut -d ' ' -f 3)
     export bought=$(grep -A 8 BuyEvent $OUTPUTFILE | grep amount: | cut -d '"' -f 2)
     if [ -n "$bought" ]

@@ -15,7 +15,7 @@ use scrypto::prelude::*;
 
 #[derive(ScryptoSbor)]
 pub struct LoanSafeVault {
-    vault: Vault,
+    vault: FungibleVault,
     ongoing_loan: Decimal,
 }
 
@@ -24,15 +24,15 @@ impl LoanSafeVault {
     // Instatiate empty Vault
     pub fn new(resource_address: ResourceAddress) -> LoanSafeVault {
         Self {
-            vault: Vault::new(resource_address),
+            vault: FungibleVault::new(resource_address),
             ongoing_loan: Decimal::ZERO,
         }
     }
 
     // Instatiate Vault containing some coins
-    pub fn with_bucket(bucket: Bucket) -> LoanSafeVault {
+    pub fn with_bucket(bucket: FungibleBucket) -> LoanSafeVault {
         Self {
-            vault: Vault::with_bucket(bucket),
+            vault: FungibleVault::with_bucket(bucket),
             ongoing_loan: Decimal::ZERO,
         }
     }
@@ -48,17 +48,20 @@ impl LoanSafeVault {
     }
 
     // Put coins in the Vault
-    pub fn put(&mut self, bucket: Bucket) {
+    pub fn put(&mut self, bucket: FungibleBucket) {
         self.vault.put(bucket);
     }
 
     // Take coins from the Vault
-    pub fn take(&mut self, amount: Decimal) -> Bucket {
-        self.vault.take(amount)
+    pub fn take(&mut self, amount: Decimal) -> FungibleBucket {
+        self.vault.take_advanced(
+            amount,
+            WithdrawStrategy::Rounded(RoundingMode::ToZero),
+        )
     }
 
     // Take coins from the Vault and take note of the taken amount
-    pub fn get_loan(&mut self, amount: Decimal) -> Bucket {
+    pub fn get_loan(&mut self, amount: Decimal) -> FungibleBucket {
 
         // Multiple loans not allowed
         assert!(
@@ -68,11 +71,14 @@ impl LoanSafeVault {
 
         self.ongoing_loan = amount;
 
-        self.vault.take(amount)
+        self.vault.take_advanced(
+            amount,
+            WithdrawStrategy::Rounded(RoundingMode::ToZero),
+        )
     }
 
     // Take put coins in the Vault and make sure they match the ongoing loan (more is ok)
-    pub fn return_loan(&mut self, bucket: Bucket) {
+    pub fn return_loan(&mut self, bucket: FungibleBucket) {
         assert!(
             self.ongoing_loan != Decimal::ZERO,
             "There's no ongoing loan",

@@ -1,5 +1,5 @@
 [package]
-name = "test_hooks"
+name = "timer"
 version = "1.0.0"
 edition = "2021"
 
@@ -7,7 +7,7 @@ edition = "2021"
 scrypto = { workspace = true }
 radix-common = { workspace = true }
 radix-engine-interface = { workspace = true }
-scrypto-interface = { path = "../../scrypto-interface" }
+scrypto-interface = { path = "../scrypto-interface" }
 
 [features]
 default = []

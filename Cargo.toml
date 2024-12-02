@@ -24,13 +24,11 @@ overflow-checks = true # Panic in the case of an overflow.
 resolver = "2"
 members= [
 	"radix_pump",
-	"hooks/test_hooks",
 	"hooks/ape_in",
 	"hooks/lp_rewards",
 	"hooks/limit_buy",
 	"hooks/dca",
 	"hooks/ath_club",
-	"random_component",
 	"timer"
 ]
 

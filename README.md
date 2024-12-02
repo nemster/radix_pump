@@ -118,7 +118,7 @@ Use this functions to create a RadixPump and the test hook components in Stokene
 
 ```
 CALL_FUNCTION
-    Address("package_tdx_2_1p4c0cj7ygzg3v92jeharl724slnguxa0zzgyatz8vk9th7pmgllkka")
+    Address("package_tdx_2_1p47m22gtagmwhc3qkydwgyrzhtcw2yhp94mwshxupg7amx6tshgsky")
     "RadixPump"
     "new"
     Address("<OWNER_BADGE_ADDRESS>")
@@ -128,41 +128,6 @@ CALL_FUNCTION
     Decimal("<BUY_SELL_FEE_PERCENTAGE>")
     Decimal("<FLASH_LOAN_FEE>")
     Address("<DAPP_DEFINITION>")
-;
-
-CALL_METHOD
-    Address("<ACCOUNT_ADDRESS>")
-    "withdraw"
-    Address("<BASE_COIN_ADDRESS>")
-    Decimal("<BASE_COIN_AMOUNT>")
-;   
-TAKE_ALL_FROM_WORKTOP
-    Address("<BASE_COIN_ADDRESS>")
-    Bucket("base_coin_bucket")
-;
-CALL_FUNCTION
-    Address("package_tdx_2_1p56yknv5xjh794mjl6qtchg2f2mesq22gdt4f0s5k2nwjshs2may75")
-    "TestHook0"
-    "new"
-    Address("<OWNER_BADGE_ADDRESS>")
-    Address("<HOOKS_BADGE>")
-    Bucket("base_coin_bucket")
-;
-
-CALL_FUNCTION
-    Address("package_tdx_2_1p56yknv5xjh794mjl6qtchg2f2mesq22gdt4f0s5k2nwjshs2may75")
-    "TestHook1"
-    "new"
-    Address("<OWNER_BADGE_ADDRESS>")
-    Address("<HOOKS_BADGE>")
-;
-
-CALL_FUNCTION
-    Address("package_tdx_2_1p56yknv5xjh794mjl6qtchg2f2mesq22gdt4f0s5k2nwjshs2may75")
-    "TestHook2"
-    "new"
-    Address("<OWNER_BADGE_ADDRESS>")
-    Address("<HOOKS_BADGE>")
 ;
 ```
 

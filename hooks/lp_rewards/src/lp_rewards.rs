@@ -55,6 +55,7 @@ struct LiquidityCampaignCreationEvent {
     coin_address: ResourceAddress,
     start_time: i64,
     end_time: i64,
+    reward_coin_address: ResourceAddress,
     daily_reward_per_coin: Decimal,
     rewards_amount: Decimal,
 }
@@ -189,6 +190,7 @@ mod lp_rewards_hook {
             );
 
             let rewards_amount = rewards_bucket.amount();
+            let reward_coin_address = rewards_bucket.resource_address();
 
             // Create the campaign and set it as active
             self.last_liquidity_campaign_id += 1;
@@ -210,6 +212,7 @@ mod lp_rewards_hook {
                     coin_address: coin_address,
                     start_time: start_time,
                     end_time: end_time,
+                    reward_coin_address: reward_coin_address,
                     daily_reward_per_coin: daily_reward_per_coin,
                     rewards_amount: rewards_amount,
                 }
@@ -274,6 +277,7 @@ mod lp_rewards_hook {
                     coin_address: coin_address,
                     start_time: campaign.start_time,
                     end_time: campaign.end_time,
+                    reward_coin_address: campaign.rewards_vault.resource_address(),
                     daily_reward_per_coin: campaign.daily_reward_per_coin,
                     rewards_amount: campaign.rewards_vault.amount(),
                 }
